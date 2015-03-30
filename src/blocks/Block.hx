@@ -16,12 +16,12 @@ class Block extends Sprite
 		
 		graphics.beginFill(0xFF0000);
         graphics.drawRect(0, 0, Global.elementSize, Global.elementSize);
-		/*blockWidth = width;
-		blockHeight = height;
+		blockWidth = Global.elementSize;
+		blockHeight = Global.elementSize;
 		//back
 		//addChild(new SideWall(0, 0, 0xFF0000));
 		//left side
-		addChild(new SideWall(0, 90, 0x000000));
+		/*addChild(new SideWall(0, 90, 0x000000));
 		//right side
 		addChild(new SideWall(0, 90, 0x000000, Global.elementSize));
 		//top

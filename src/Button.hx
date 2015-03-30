@@ -4,7 +4,8 @@ import openfl.display.Sprite;
 import openfl.events.MouseEvent;
 import openfl.system.System;
 
-import levels.Level1;
+import platform.Platform1;
+import delegating.Delegation;
 
 /**
  * ...
@@ -22,10 +23,12 @@ class Button extends Sprite
 	}
 	
 	public function newGame(e:MouseEvent):Void {
-		Global.main.level = new Level1();
+		Global.main.level = new Delegation();
+		//Global.main.level = new Platform1();
 		Global.main.addChild(Global.main.level);
 		Global.level = Global.main.level;
 		Global.main.removeChild(Global.main.menu);
+		
 	}
 	
 	public function closeGame(e:MouseEvent):Void {

@@ -15,7 +15,7 @@ import openfl.display.FPS;
 
 class Main extends Sprite 
 {
-	var inited:Bool;
+	private var inited:Bool;
 	public var level:Dynamic;
 	public var menu:Menu;
 

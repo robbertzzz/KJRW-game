@@ -1,4 +1,4 @@
-package levels;
+package platform ;
 
 import npcs.Darkling;
 import openfl.display.Sprite;
@@ -23,7 +23,7 @@ import blocks.Obstacle;
  * ...
  * @author Robert-Jan Zandvoort
  */
-class Level extends Sprite
+class Platform extends Sprite
 {
 	public var player:Player;
 	public var level:Array<Array<Int>> = new Array();
@@ -77,7 +77,7 @@ class Level extends Sprite
 						temp = new Obstacle();
 						temp.x = ii * Global.elementSize;
 						temp.y = i * Global.elementSize;
-						//temp.z = -Global.elementSize;
+						//temp.z = 0/*Global.elementSize*/;
 						blocks.push(temp);
 						addChild(temp);
 					case 4, 104:
@@ -106,7 +106,7 @@ class Level extends Sprite
 					temp = new Fog();
 					temp.x = ii * Global.elementSize;
 					temp.y = i * Global.elementSize;
-					//temp.z = -Global.elementSize;
+					temp.z = 0/*Global.elementSize*/;
 					addChild(temp);
 					fogMap[i][ii] = temp;
 					
@@ -123,7 +123,7 @@ class Level extends Sprite
 		player = new Player();
 		player.x = Global.elementSize + 30;
 		player.y = Global.levelHeight - Global.elementSize - player.height - 30;
-		//player.z = - 0.5 * Global.elementSize;
+		//player.z = -0.5 * Global.elementSize;
 		addChild(player);
 	}
 }

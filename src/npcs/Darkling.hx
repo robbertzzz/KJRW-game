@@ -60,9 +60,9 @@ class Darkling extends Sprite
 		canSeePlayer = true;
 		
 		if (playerDistanceXabs > playerDistanceYabs) {
-			for (i in 0...(Math.floor(playerDistanceXabs / 16) * 16)) { //x = i
+			for (i in 0...(Math.floor(playerDistanceXabs / 16) * 16)) { //Math.abs(x) = i
 				ii = (playerDistanceY / playerDistanceX) * i; //y = ii
-				if (playerDistanceX * playerDistanceY < 0) {
+				if (playerDistanceX < 0) {
 					ii *= -1;
 				}
 				levelY = Math.floor(ii / 16) + Math.floor(y / 16);
@@ -76,9 +76,9 @@ class Darkling extends Sprite
 				}
 			}
 		} else {
-			for (i in 0...(Math.floor(playerDistanceYabs / 16) * 16)) { //y = i
+			for (i in 0...(Math.floor(playerDistanceYabs / 16) * 16)) { //Math.abs(y) = i
 				ii = (playerDistanceX / playerDistanceY) * i; //x = ii
-				if (playerDistanceX * playerDistanceY < 0) {
+				if (playerDistanceY < 0) {
 					ii *= -1;
 				}
 				levelX = Math.floor(ii / 16) + Math.floor(x / 16);
