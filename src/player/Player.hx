@@ -174,11 +174,6 @@ class Player extends Sprite
 			jumpController();
 		}
 		
-		//move slower when shift is pressed
-		if (Global.shift) {
-			xSpeed *= 0.4;
-		}
-		
 		//y += ySpeed;
 		
 		//walk up or down the stairs
@@ -337,14 +332,14 @@ class Player extends Sprite
 		AssetStorage.playerWalk.drawTiles(this.graphics, [ -10, 0, Math.floor(frame) % 8]);
 		if(Global.right && !Global.left) {
 			frame += 0.25;
-			if (frame == 8) {
-				frame = 0;
+			if (frame >= 8) {
+				frame -= 8;
 			}
 		}
 		if (Global.left && !Global.right) {
 			frame -= 0.25;
-			if (frame == 0) {
-				frame = 8;
+			if (frame <= 0) {
+				frame += 8;
 			}
 		}
 	}

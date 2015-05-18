@@ -33,8 +33,8 @@ class Arm extends Sprite
 		AssetStorage.playerArm.drawTiles (this.graphics, [0, -2, 0]);
 		
 		if (leftRight) {
-			weapon = new ProjectileWeapon();
-			addChild(weapon);
+			/*weapon = new ProjectileWeapon();
+			addChild(weapon);*/
 		}
 		
 		addEventListener(Event.ENTER_FRAME, update);
@@ -54,9 +54,9 @@ class Arm extends Sprite
 			weapon.remove();
 			switch(Global.weaponIndex) {
 				case 1:
-					weapon = new ProjectileWeapon();
+					/*weapon = new ProjectileWeapon();
 					addChild(weapon);
-					trace("ProjectileWeapon");
+					trace("ProjectileWeapon");*/
 				case 2:
 					weapon = new Phone();
 					addChild(weapon);
