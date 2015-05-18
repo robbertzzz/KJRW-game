@@ -2,11 +2,7 @@ package ;
 import weapons.Bullet;
 import weapons.PhoneHorn;
 
-import blocks.Block;
-import blocks.Coin;
-import blocks.Fog;
-import blocks.HangBlock;
-import blocks.Obstacle;
+import blocks.*;
 
 /**
  * ...
@@ -20,6 +16,7 @@ class Global
 	public static var right:Bool;
 	public static var up:Bool;
 	public static var down:Bool;
+	public static var jump:Bool;
 	public static var shift:Bool;
 	public static var weaponIndex:Int = 1;
 	

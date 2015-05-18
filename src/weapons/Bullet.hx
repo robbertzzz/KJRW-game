@@ -3,11 +3,7 @@ package weapons;
 import openfl.display.Sprite;
 import openfl.events.Event;
 
-import blocks.Block;
-import blocks.Coin;
-import blocks.Fog;
-import blocks.HangBlock;
-import blocks.Obstacle;
+import blocks.*;
 
 /**
  * ...
@@ -44,7 +40,7 @@ class Bullet extends Sprite
 	}
 
 	private function startMoving():Void {
-		speed = 0.5 * Global.elementSize;
+		speed = 1 * Global.elementSize;
 		absX = Global.level.returnXY()[0] + x;
 		absY = Global.level.returnXY()[1] + y;
 		mouseDistance = Math.sqrt((Global.mouseX - absX) * (Global.mouseX - absX) + (Global.mouseY - absY) * (Global.mouseY - absY));
@@ -66,9 +62,9 @@ class Bullet extends Sprite
 		collision = checkCollision(xSpeed, ySpeed);
 		
 		// perform a collision check, DIE
-		if (collision > 0 && collision != 100 && collision != 2 && collision != 102 && collision != 4 && collision != 104) {
+		if (collision > 0 && collision != 100 && collision != 2 && collision != 102 && collision != 4 && collision != 104 && collision != 6 && collision!= 106 && collision != 7 && collision!= 107) {
 			if (collision == 3 || collision == 103) {
-				Global.level.level[Math.floor(((y + ySpeed) / Global.elementSize))][Math.floor(((x + xSpeed) / Global.elementSize))] = 0;
+				//Global.level.level[Math.floor(((y + ySpeed) / Global.elementSize))][Math.floor(((x + xSpeed) / Global.elementSize))] = 0;
 				i = 0;
 				while (Global.blocks[i].x != (Math.floor(((x + xSpeed) / Global.elementSize))) * Global.elementSize || Global.blocks[i].y != (Math.floor(((y + ySpeed) / Global.elementSize))) * Global.elementSize) {
 					i++;

@@ -30,10 +30,10 @@ class Fog extends Sprite
 		if (Global.fogMap[Math.floor(y / Global.elementSize) - 1][Math.floor(x / Global.elementSize)] != null && Global.fogMap[Math.floor(y / Global.elementSize) - 1][Math.floor(x / Global.elementSize)] != instancePrev) {
 			Global.fogMap[Math.floor(y / Global.elementSize) - 1][Math.floor(x / Global.elementSize)].remove(this);
 		}
-		if (Global.fogMap[Math.floor(y / Global.elementSize)][Math.floor(x / Global.elementSize) + 1] != null && Global.fogMap[Math.floor(y / Global.elementSize) - 1][Math.floor(x / Global.elementSize)] != instancePrev) {
+		if (Global.fogMap[Math.floor(y / Global.elementSize)][Math.floor(x / Global.elementSize) + 1] != null && Global.fogMap[Math.floor(y / Global.elementSize)][Math.floor(x / Global.elementSize) + 1] != instancePrev) {
 			Global.fogMap[Math.floor(y / Global.elementSize)][Math.floor(x / Global.elementSize) + 1].remove(this);
 		}
-		if (Global.fogMap[Math.floor(y / Global.elementSize)][Math.floor(x / Global.elementSize) - 1] != null && Global.fogMap[Math.floor(y / Global.elementSize) - 1][Math.floor(x / Global.elementSize)] != instancePrev) {
+		if (Global.fogMap[Math.floor(y / Global.elementSize)][Math.floor(x / Global.elementSize) - 1] != null && Global.fogMap[Math.floor(y / Global.elementSize)][Math.floor(x / Global.elementSize) - 1] != instancePrev) {
 			Global.fogMap[Math.floor(y / Global.elementSize)][Math.floor(x / Global.elementSize) - 1].remove(this);
 		}
 		

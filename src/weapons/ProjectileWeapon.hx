@@ -16,7 +16,7 @@ class ProjectileWeapon extends Sprite
 	{
 		super();
 		
-		y = Global.elementSize * 2;
+		y = 20;
 		graphics.beginFill(0x000000);
         graphics.drawRect(0, 0, 0.8 * Global.elementSize, 0.8 * Global.elementSize);
 		
@@ -43,7 +43,7 @@ class ProjectileWeapon extends Sprite
 			xySpeed[1] = Global.elementSize * bullet.ySpeed / bullet.speed;
 			for (i in 0...25) {
 				collision = bullet.checkCollision( -0.1 * i * xySpeed[0], -0.1 * i * xySpeed[1]);
-				if (collision > 0 && collision < 100 && collision != 2 && collision != 102) {
+				if (collision > 0 && collision < 100 && collision != 2 && collision != 102 && collision != 7 && collision != 107) {
 					Global.bullets.remove(bullet);
 					bullet.parent.removeChild(bullet);
 					break;

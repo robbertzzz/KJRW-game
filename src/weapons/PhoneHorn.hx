@@ -3,11 +3,7 @@ package weapons;
 import openfl.display.Sprite;
 import openfl.events.Event;
 
-import blocks.Block;
-import blocks.Coin;
-import blocks.Fog;
-import blocks.HangBlock;
-import blocks.Obstacle;
+import blocks.*;
 
 /**
  * ...
@@ -71,12 +67,15 @@ class PhoneHorn extends Sprite
 	private var i:Int;
 	private var obstacle:Obstacle;
 	private var collision:Int;
+	private var playerX:Float;
+	private var playerY:Float;
+	private var playerDistance:Float;
 	private function update(e:Event):Void {
 		x += xSpeed;
 		y += ySpeed;
 		collision = checkCollision(xSpeed, ySpeed);
 		
-		// perform a collision check, DIE
+		/*// perform a collision check, DIE
 		if (collision > 0 && collision != 100 && collision != 2 && collision != 102 && collision != 4 && collision != 104) {
 			if (collision == 3 || collision == 103) {
 				Global.level.level[Math.floor(((y + ySpeed + 0.5 * hornHeight) / Global.elementSize))][Math.floor(((x + xSpeed + 0.5 * hornWidth) / Global.elementSize))] = 0;
@@ -96,51 +95,41 @@ class PhoneHorn extends Sprite
 			}
 			this.parent.removeChild(this);
 			return;
+		}*/
+		
+		//check the distance, if too far, DIE
+		playerX = Global.level.player.returnXY[0];
+		playerY = Global.level.player.returnXY[1];
+		playerDistance = Math.sqrt((x - playerX) * (x - playerX) + (y - playerY) * (y - playerY));
+		
+		trace(playerDistance);
+		
+		if(playerDistance > Global.elementSize) {
+			this.removeEventListener(Event.ENTER_FRAME, update);
+			
+			if (Global.weaponIndex == 2 && Global.level.player.arms[1].weapon.phoneHorn==this) {
+				Global.level.player.arms[1].weapon.youMayShoot = true;
+				Global.level.player.arms[1].weapon.phoneHorn = null;
+			}
+			this.parent.removeChild(this);
+			return;
+		}
+		
+		if (collision == 4 || collision == 104) {
+			startHanging();
 		}
 		
 		cable.update(x + 0.5 * hornWidth, y + 0.5 * hornHeight);
-		/*graphics.clear();
-		
-		graphics.beginFill(0x000000);
-        graphics.drawRect(0, 0, Global.elementSize, Global.elementSize);
-		
-		drawCable();*/
 	}
 	
 	public function checkCollision(xSpeed:Float, ySpeed:Float):Int {
 		return Global.level.level[Math.floor(((y + ySpeed + 0.5 * hornHeight) / Global.elementSize))][Math.floor(((x + xSpeed + 0.5 * hornWidth) / Global.elementSize))];
 	}
 	
-	/*private var partSize:Float = 0.3 * Global.elementSize;
-	
-	private var distance:Float;
-	private var distanceX:Float;
-	private var distanceY:Float;
-	
-	private var phoneHornX:Float;
-	private var phoneHornY:Float;
-	
-	private var armX:Float;
-	private var armY:Float;
-	
-	private var forLoopMax:Int;
-	
-	private function drawCable() {
-		phoneHornX = x + 0.5 * width;
-		phoneHornY = y + 0.5 * height;
-		armX = Global.level.player.returnXY()[0] + 0.6 * Global.elementSize;
-		armY = Global.level.player.returnXY()[1] + 1.5 * Global.elementSize;
-		
-		distance = Math.sqrt((phoneHornX - armX) * (phoneHornX - armX) + (phoneHornY - armY) * (phoneHornY - armY));
-		distanceX = phoneHornX - armX;
-		distanceY = phoneHornY - armY;
-		
-		
-		//trace(Math.floor(distance / partSize));
-		forLoopMax = Math.floor(distance / partSize);
-		for (i in 0...forLoopMax) {
-			graphics.beginFill(0x000000);
-			graphics.drawRect((-distanceX / distance) * i * partSize, (-distanceY / distance) * i * partSize, partSize, partSize);
-		}
-	}*/
+	private function startHanging():Void {
+		x = Math.floor(((x + xSpeed + 0.5 * hornHeight) / Global.elementSize)) * Global.elementSize;
+		y = Math.floor(((y + ySpeed + 0.5 * hornHeight) / Global.elementSize)) * Global.elementSize;
+		xSpeed = 0;
+		ySpeed = 0;
+	}
 }

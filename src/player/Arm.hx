@@ -25,13 +25,12 @@ class Arm extends Sprite
 		
 		this.leftRight = leftRight;
 		
-		x = 0.6 * Global.elementSize;
-		y = 1.5 * Global.elementSize;
+		x = 8;
+		y = 21;
 		startX = x;
 		startY = y;
-		graphics.beginFill(0xFF0000);
-        graphics.drawRect(0, 0, 0.8 * Global.elementSize, 2 * Global.elementSize);
 		
+		AssetStorage.playerArm.drawTiles (this.graphics, [0, -2, 0]);
 		
 		if (leftRight) {
 			weapon = new ProjectileWeapon();
@@ -92,7 +91,14 @@ class Arm extends Sprite
 			//rotation --;
 			rotationRad = (rotation / 360) * 2 * Math.PI;
 		}
-		x = startX + 0.4 * Global.elementSize - 0.4 * Global.elementSize * Math.cos(rotationRad);
-		y = startY - 0.4 * Global.elementSize * Math.sin(rotationRad);
+		
+		x = startX + 3.5 - 3.5 * Math.cos(rotationRad);
+		
+		if (Math.floor(Global.level.player.frame) % 8 == 2 || Math.floor(Global.level.player.frame) % 8 == 3 || Math.floor(Global.level.player.frame) % 8 == 6 || Math.floor(Global.level.player.frame) % 8 == 7) {
+			y = startY - 3 - 3.5 * Math.sin(rotationRad);
+		} else {
+			y = startY - 3.5 * Math.sin(rotationRad);
+		}
+		
 	}
 }

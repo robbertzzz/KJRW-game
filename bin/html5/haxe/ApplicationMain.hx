@@ -1,5 +1,7 @@
-import lime.Assets;
 #if !macro
+
+
+@:access(lime.Assets)
 
 
 class ApplicationMain {
@@ -11,8 +13,15 @@ class ApplicationMain {
 	
 	public static function create ():Void {
 		
-		var app = new openfl.display.Application ();
+		var app = new lime.app.Application ();
 		app.create (config);
+		openfl.Lib.application = app;
+		
+		#if !flash
+		var stage = new openfl.display.Stage (app.window.width, app.window.height, config.background);
+		stage.addChild (openfl.Lib.current);
+		app.addModule (stage);
+		#end
 		
 		var display = new NMEPreloader ();
 		
@@ -30,7 +39,7 @@ class ApplicationMain {
 			
 			for (i in 0...urls.length) {
 				
-				if (types[i] != AssetType.FONT) {
+				if (types[i] != lime.Assets.AssetType.FONT) {
 					
 					urls[i] = config.assetsPrefix + urls[i];
 					
@@ -45,7 +54,7 @@ class ApplicationMain {
 		
 		var result = app.exec ();
 		
-		#if (sys && !emscripten)
+		#if (sys && !nodejs && !emscripten)
 		Sys.exit (result);
 		#end
 		
@@ -88,22 +97,26 @@ class ApplicationMain {
 			antialiasing: Std.int (0),
 			background: Std.int (16777215),
 			borderless: false,
+			company: "Robert-Jan Zandvoort",
 			depthBuffer: false,
+			file: "PlatformEngine",
 			fps: Std.int (60),
 			fullscreen: false,
-			height: Std.int (320),
+			height: Std.int (375),
 			orientation: "",
+			packageName: "PlatformEngine",
 			resizable: true,
-			stencilBuffer: false,
+			stencilBuffer: true,
 			title: "Platform Engine",
+			version: "1.0.0",
 			vsync: false,
-			width: Std.int (480),
+			width: Std.int (500),
 			
 		}
 		
-		#if js
+		#if (js && html5)
 		#if (munit || utest)
-		flash.Lib.embed (null, 480, 320, "FFFFFF");
+		openfl.Lib.embed (null, 500, 375, "FFFFFF");
 		#end
 		#else
 		create ();
@@ -127,6 +140,8 @@ class ApplicationMain {
 			}
 			
 		}
+		
+		lime.Assets.initialize ();
 		
 		if (hasMain) {
 			

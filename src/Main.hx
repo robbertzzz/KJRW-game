@@ -31,6 +31,7 @@ class Main extends Sprite
 	{
 		if (inited) return;
 		inited = true;
+		trace("HI!");
 
 		// (your code here)
 		
@@ -43,13 +44,15 @@ class Main extends Sprite
 		/*level = new Level1();
 		addChild(level);*/
 		
+		addChild(new LoadAssets());
+		
 		addChild(new FPS(stage.stageWidth - 100, 10, 0x000000));
 		
 		menu = new Menu();
 		addChild(menu);
 		
 		Global.main = this;
-		Global.elementSize = 16;
+		Global.elementSize = 12;
 		
 		Lib.current.stage.addEventListener(KeyboardEvent.KEY_DOWN, keyPressed);
 		Lib.current.stage.addEventListener(KeyboardEvent.KEY_UP, keyReleased);
@@ -79,6 +82,10 @@ class Main extends Sprite
 				Global.left = true;
 			case 38, 87:
 				Global.up = true;
+			case 40, 83:
+				Global.down = true;
+			case 32:
+				Global.jump = true;
 			case 16:
 				Global.shift = true;
 			case 27:
@@ -97,6 +104,10 @@ class Main extends Sprite
 				Global.left = false;
 			case 38, 87:
 				Global.up = false;
+			case 40, 83:
+				Global.down = false;
+			case 32:
+				Global.jump = false;
 			case 16:
 				Global.shift = false;
 		}

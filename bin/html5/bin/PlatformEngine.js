@@ -14,8 +14,12 @@ ApplicationMain.__name__ = ["ApplicationMain"];
 ApplicationMain.config = null;
 ApplicationMain.preloader = null;
 ApplicationMain.create = function() {
-	var app = new openfl.display.Application();
+	var app = new lime.app.Application();
 	app.create(ApplicationMain.config);
+	openfl.Lib.application = app;
+	var stage = new openfl.display.Stage(app.windows[0].__width,app.windows[0].__height,ApplicationMain.config.background);
+	stage.addChild(openfl.Lib.current);
+	app.addModule(stage);
 	var display = new NMEPreloader();
 	ApplicationMain.preloader = new openfl.display.Preloader(display);
 	ApplicationMain.preloader.onComplete = ApplicationMain.init;
@@ -44,7 +48,7 @@ ApplicationMain.init = function() {
 	if(loaded == total) ApplicationMain.start();
 };
 ApplicationMain.main = function() {
-	ApplicationMain.config = { antialiasing : 0, background : 16777215, borderless : false, depthBuffer : false, fps : 60, fullscreen : false, height : 320, orientation : "", resizable : true, stencilBuffer : false, title : "Platform Engine", vsync : false, width : 480};
+	ApplicationMain.config = { antialiasing : 0, background : 16777215, borderless : false, company : "Robert-Jan Zandvoort", depthBuffer : false, file : "PlatformEngine", fps : 60, fullscreen : false, height : 375, orientation : "", packageName : "PlatformEngine", resizable : true, stencilBuffer : true, title : "Platform Engine", version : "1.0.0", vsync : false, width : 500};
 };
 ApplicationMain.start = function() {
 	var hasMain = false;
@@ -59,6 +63,7 @@ ApplicationMain.start = function() {
 			break;
 		}
 	}
+	lime.Assets.initialize();
 	if(hasMain) Reflect.callMethod(entryPoint,Reflect.field(entryPoint,"main"),[]); else {
 		var instance = Type.createInstance(DocumentClass,[]);
 	}
@@ -163,6 +168,7 @@ openfl.display.IBitmapDrawable.prototype = {
 	__class__: openfl.display.IBitmapDrawable
 };
 openfl.display.DisplayObject = function() {
+	this.__maskCached = false;
 	openfl.events.EventDispatcher.call(this);
 	this.__alpha = 1;
 	this.__rotation = 0;
@@ -176,6 +182,7 @@ openfl.display.DisplayObject = function() {
 	this.__rotationCache = 0;
 	this.__rotationSine = 0;
 	this.__rotationCosine = 1;
+	this.__worldColorTransform = new openfl.geom.ColorTransform();
 	this.set_name("instance" + ++openfl.display.DisplayObject.__instanceCount);
 };
 $hxClasses["openfl.display.DisplayObject"] = openfl.display.DisplayObject;
@@ -219,8 +226,9 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 	,hitTestPoint: function(x,y,shapeFlag) {
 		if(shapeFlag == null) shapeFlag = false;
 		if(this.parent != null) {
-			var currentBounds = this.getBounds(this);
-			return currentBounds.containsPoint(new openfl.geom.Point(x,y));
+			var bounds = new openfl.geom.Rectangle();
+			this.__getBounds(bounds,null);
+			return bounds.containsPoint(new openfl.geom.Point(x,y));
 		}
 		return false;
 	}
@@ -236,8 +244,13 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 		return false;
 	}
 	,__getBounds: function(rect,matrix) {
+		if(this.__graphics != null) this.__graphics.__getBounds(rect,matrix != null?matrix:this.__worldTransform);
+	}
+	,__getCursor: function() {
+		return null;
 	}
 	,__getInteractive: function(stack) {
+		return false;
 	}
 	,__getLocalBounds: function(rect) {
 		this.__getTransform();
@@ -263,15 +276,26 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 		return this.__worldTransform;
 	}
 	,__hitTest: function(x,y,shapeFlag,stack,interactiveOnly) {
+		if(this.__graphics != null) {
+			if(this.get_visible() && this.__graphics.__hitTest(x,y,shapeFlag,this.__getTransform())) {
+				if(!interactiveOnly) stack.push(this);
+				return true;
+			}
+		}
 		return false;
 	}
 	,__renderCanvas: function(renderSession) {
+		if(this.__graphics != null) openfl._internal.renderer.canvas.CanvasShape.render(this,renderSession);
 	}
 	,__renderDOM: function(renderSession) {
+		if(this.__graphics != null) openfl._internal.renderer.dom.DOMShape.render(this,renderSession);
 	}
 	,__renderGL: function(renderSession) {
+		if(!this.__renderable || this.__worldAlpha <= 0) return;
+		if(this.__graphics != null) openfl._internal.renderer.opengl.utils.GraphicsRenderer.render(this,renderSession);
 	}
 	,__renderMask: function(renderSession) {
+		if(this.__graphics != null) openfl._internal.renderer.canvas.CanvasGraphics.renderMask(this.__graphics,renderSession);
 	}
 	,__setStageReference: function(stage) {
 		if(this.stage != stage) {
@@ -292,7 +316,7 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 			openfl.display.DisplayObject.__worldTransformDirty++;
 		}
 	}
-	,__update: function(transformOnly,updateChildren) {
+	,__update: function(transformOnly,updateChildren,maskGraphics) {
 		this.__renderable = this.get_visible() && this.get_scaleX() != 0 && this.get_scaleY() != 0 && !this.__isMask;
 		if(this.get_rotation() != this.__rotationCache) {
 			this.__rotationCache = this.get_rotation();
@@ -322,6 +346,7 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 				this.__worldTransform.tx = (this.get_x() - this.get_scrollRect().x) * b00 + (this.get_y() - this.get_scrollRect().y) * b10 + parentTransform.tx;
 				this.__worldTransform.ty = (this.get_x() - this.get_scrollRect().x) * b01 + (this.get_y() - this.get_scrollRect().y) * b11 + parentTransform.ty;
 			}
+			if(this.__isMask) this.__maskCached = false;
 		} else {
 			this.__worldTransform.a = this.__rotationCosine * this.get_scaleX();
 			this.__worldTransform.c = -this.__rotationSine * this.get_scaleY();
@@ -339,8 +364,19 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 			this.__transformDirty = false;
 			openfl.display.DisplayObject.__worldTransformDirty--;
 		}
+		if(!transformOnly && this.__mask != null && !this.__mask.__maskCached) {
+			if(this.__maskGraphics == null) this.__maskGraphics = new openfl.display.Graphics();
+			this.__maskGraphics.clear();
+			this.__mask.__update(true,true,this.__maskGraphics);
+			this.__mask.__maskCached = true;
+		}
+		if(maskGraphics != null) this.__updateMask(maskGraphics);
 		if(!transformOnly) {
-			if(this.parent != null) this.__worldAlpha = this.get_alpha() * this.parent.__worldAlpha; else this.__worldAlpha = this.get_alpha();
+			if(!this.__worldColorTransform.__equals(this.get_transform().get_colorTransform())) this.__worldColorTransform = this.get_transform().get_colorTransform().__clone();
+			if(this.parent != null) {
+				this.__worldAlpha = this.get_alpha() * this.parent.__worldAlpha;
+				this.__worldColorTransform.__combine(this.parent.__worldColorTransform);
+			} else this.__worldAlpha = this.get_alpha();
 			if(updateChildren && this.__renderDirty) this.__renderDirty = false;
 		}
 	}
@@ -351,6 +387,16 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 		if(this.__transformDirty) {
 			this.__transformDirty = false;
 			openfl.display.DisplayObject.__worldTransformDirty--;
+		}
+	}
+	,__updateMask: function(maskGraphics) {
+		if(this.__graphics != null) {
+			maskGraphics.__commands.push(openfl.display.DrawCommand.OverrideMatrix(this.__worldTransform));
+			maskGraphics.__commands = maskGraphics.__commands.concat(this.__graphics.__commands);
+			maskGraphics.set___dirty(true);
+			maskGraphics.__visible = true;
+			if(maskGraphics.__bounds == null) maskGraphics.__bounds = new openfl.geom.Rectangle();
+			this.__graphics.__getBounds(maskGraphics.__bounds,openfl.geom.Matrix.__identity);
 		}
 	}
 	,get_alpha: function() {
@@ -389,12 +435,22 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 	}
 	,set_mask: function(value) {
 		if(value != this.__mask) {
+			if(!this.__transformDirty) {
+				this.__transformDirty = true;
+				openfl.display.DisplayObject.__worldTransformDirty++;
+			}
 			if(!this.__renderDirty) {
 				this.__renderDirty = true;
 				openfl.display.DisplayObject.__worldRenderDirty++;
 			}
 		}
-		if(this.__mask != null) this.__mask.__isMask = false;
+		if(this.__mask != null) {
+			this.__mask.__isMask = false;
+			this.__mask.__maskCached = false;
+			this.__mask.__setTransformDirty();
+			this.__mask.__setRenderDirty();
+			this.__maskGraphics = null;
+		}
 		if(value != null) value.__isMask = true;
 		return this.__mask = value;
 	}
@@ -476,7 +532,7 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 			openfl.display.DisplayObject.__worldTransformDirty++;
 		}
 		this.__transform.set_matrix(value.get_matrix().clone());
-		this.__transform.set_colorTransform(new openfl.geom.ColorTransform(value.get_colorTransform().redMultiplier,value.get_colorTransform().greenMultiplier,value.get_colorTransform().blueMultiplier,value.get_colorTransform().alphaMultiplier,value.get_colorTransform().redOffset,value.get_colorTransform().greenOffset,value.get_colorTransform().blueOffset,value.get_colorTransform().alphaOffset));
+		this.__transform.set_colorTransform(value.get_colorTransform().__clone());
 		return this.__transform;
 	}
 	,get_visible: function() {
@@ -529,6 +585,7 @@ openfl.display.DisplayObject.prototype = $extend(openfl.events.EventDispatcher.p
 		return this.__y = value;
 	}
 	,__class__: openfl.display.DisplayObject
+	,__properties__: {set_y:"set_y",get_y:"get_y",set_x:"set_x",get_x:"get_x",set_width:"set_width",get_width:"get_width",set_visible:"set_visible",get_visible:"get_visible",set_transform:"set_transform",get_transform:"get_transform",set_scrollRect:"set_scrollRect",get_scrollRect:"get_scrollRect",set_scaleY:"set_scaleY",get_scaleY:"get_scaleY",set_scaleX:"set_scaleX",get_scaleX:"get_scaleX",set_rotation:"set_rotation",get_rotation:"get_rotation",get_root:"get_root",set_name:"set_name",get_name:"get_name",get_mouseY:"get_mouseY",get_mouseX:"get_mouseX",set_mask:"set_mask",get_mask:"get_mask",set_height:"set_height",get_height:"get_height",set_filters:"set_filters",get_filters:"get_filters",set_alpha:"set_alpha",get_alpha:"get_alpha"}
 });
 openfl.display.InteractiveObject = function() {
 	openfl.display.DisplayObject.call(this);
@@ -547,8 +604,11 @@ openfl.display.InteractiveObject.prototype = $extend(openfl.display.DisplayObjec
 		return false;
 	}
 	,__getInteractive: function(stack) {
-		stack.push(this);
-		if(this.parent != null) this.parent.__getInteractive(stack);
+		if(stack != null) {
+			stack.push(this);
+			if(this.parent != null) this.parent.__getInteractive(stack);
+		}
+		return true;
 	}
 	,__class__: openfl.display.InteractiveObject
 });
@@ -607,7 +667,8 @@ openfl.display.DisplayObjectContainer.prototype = $extend(openfl.display.Interac
 		return false;
 	}
 	,contains: function(child) {
-		return HxOverrides.indexOf(this.__children,child,0) > -1;
+		while(child != this && child != null) child = child.parent;
+		return child == this;
 	}
 	,getChildAt: function(index) {
 		if(index >= 0 && index < this.__children.length) return this.__children[index];
@@ -710,6 +771,7 @@ openfl.display.DisplayObjectContainer.prototype = $extend(openfl.display.Interac
 		return openfl.display.InteractiveObject.prototype.__broadcast.call(this,event,notifyChilden);
 	}
 	,__getBounds: function(rect,matrix) {
+		openfl.display.InteractiveObject.prototype.__getBounds.call(this,rect,matrix);
 		if(this.__children.length == 0) return;
 		var matrixCache = null;
 		if(matrix != null) {
@@ -741,7 +803,18 @@ openfl.display.DisplayObjectContainer.prototype = $extend(openfl.display.Interac
 				}
 			} else if(stack != null) {
 				var length = stack.length;
-				while(--i >= 0) if(this.__children[i].__hitTest(x,y,shapeFlag,stack,interactiveOnly)) {
+				var interactive = false;
+				var hitTest = false;
+				while(--i >= 0) {
+					interactive = this.__children[i].__getInteractive(null);
+					if(interactive || !hitTest) {
+						if(this.__children[i].__hitTest(x,y,shapeFlag,stack,true)) {
+							hitTest = true;
+							if(interactive) break;
+						}
+					}
+				}
+				if(hitTest) {
 					stack.splice(length,0,this);
 					return true;
 				}
@@ -751,6 +824,7 @@ openfl.display.DisplayObjectContainer.prototype = $extend(openfl.display.Interac
 	}
 	,__renderCanvas: function(renderSession) {
 		if(!this.__renderable || this.__worldAlpha <= 0) return;
+		openfl.display.InteractiveObject.prototype.__renderCanvas.call(this,renderSession);
 		if(this.get_scrollRect() != null) {
 		}
 		if(this.__mask != null) renderSession.maskManager.pushMask(this.__mask);
@@ -767,6 +841,7 @@ openfl.display.DisplayObjectContainer.prototype = $extend(openfl.display.Interac
 		}
 	}
 	,__renderDOM: function(renderSession) {
+		openfl.display.InteractiveObject.prototype.__renderDOM.call(this,renderSession);
 		if(this.__mask != null) renderSession.maskManager.pushMask(this.__mask);
 		var _g = 0;
 		var _g1 = this.__children;
@@ -787,6 +862,13 @@ openfl.display.DisplayObjectContainer.prototype = $extend(openfl.display.Interac
 	}
 	,__renderGL: function(renderSession) {
 		if(!this.__renderable || this.__worldAlpha <= 0) return;
+		var masked = this.__mask != null && this.__maskGraphics != null && this.__maskGraphics.__commands.length > 0;
+		if(masked) {
+			renderSession.spriteBatch.stop();
+			renderSession.maskManager.pushMask(this,renderSession);
+			renderSession.spriteBatch.start();
+		}
+		openfl.display.InteractiveObject.prototype.__renderGL.call(this,renderSession);
 		var _g = 0;
 		var _g1 = this.__children;
 		while(_g < _g1.length) {
@@ -794,9 +876,15 @@ openfl.display.DisplayObjectContainer.prototype = $extend(openfl.display.Interac
 			++_g;
 			child.__renderGL(renderSession);
 		}
+		if(masked) {
+			renderSession.spriteBatch.stop();
+			renderSession.maskManager.popMask(this,renderSession);
+			renderSession.spriteBatch.start();
+		}
 		this.__removedChildren = [];
 	}
 	,__renderMask: function(renderSession) {
+		if(this.__graphics != null) openfl._internal.renderer.canvas.CanvasGraphics.renderMask(this.__graphics,renderSession);
 		var bounds = new openfl.geom.Rectangle();
 		this.__getTransform();
 		this.__getBounds(bounds,new openfl.geom.Matrix());
@@ -818,16 +906,16 @@ openfl.display.DisplayObjectContainer.prototype = $extend(openfl.display.Interac
 			}
 		}
 	}
-	,__update: function(transformOnly,updateChildren) {
-		openfl.display.InteractiveObject.prototype.__update.call(this,transformOnly,updateChildren);
-		if(!this.__renderable) return;
+	,__update: function(transformOnly,updateChildren,maskGraphics) {
+		openfl.display.InteractiveObject.prototype.__update.call(this,transformOnly,updateChildren,maskGraphics);
+		if(!this.__renderable && !this.__isMask) return;
 		if(updateChildren) {
 			var _g = 0;
 			var _g1 = this.__children;
 			while(_g < _g1.length) {
 				var child = _g1[_g];
 				++_g;
-				child.__update(transformOnly,true);
+				child.__update(transformOnly,true,maskGraphics);
 			}
 		}
 	}
@@ -845,6 +933,7 @@ openfl.display.DisplayObjectContainer.prototype = $extend(openfl.display.Interac
 		return this.__children.length;
 	}
 	,__class__: openfl.display.DisplayObjectContainer
+	,__properties__: $extend(openfl.display.InteractiveObject.prototype.__properties__,{get_numChildren:"get_numChildren"})
 });
 openfl.display.Sprite = function() {
 	openfl.display.DisplayObjectContainer.call(this);
@@ -863,9 +952,8 @@ openfl.display.Sprite.prototype = $extend(openfl.display.DisplayObjectContainer.
 	,stopDrag: function() {
 		if(this.stage != null) this.stage.__stopDrag(this);
 	}
-	,__getBounds: function(rect,matrix) {
-		openfl.display.DisplayObjectContainer.prototype.__getBounds.call(this,rect,matrix);
-		if(this.__graphics != null) this.__graphics.__getBounds(rect,matrix != null?matrix:this.__worldTransform);
+	,__getCursor: function() {
+		if(this.buttonMode && this.useHandCursor) return lime.ui.MouseCursor.POINTER; else return null;
 	}
 	,__hitTest: function(x,y,shapeFlag,stack,interactiveOnly) {
 		if(!this.get_visible() || interactiveOnly && !this.mouseEnabled) return false;
@@ -877,27 +965,15 @@ openfl.display.Sprite.prototype = $extend(openfl.display.DisplayObjectContainer.
 		}
 		return false;
 	}
-	,__renderCanvas: function(renderSession) {
-		openfl._internal.renderer.canvas.CanvasShape.render(this,renderSession);
-		openfl.display.DisplayObjectContainer.prototype.__renderCanvas.call(this,renderSession);
-	}
-	,__renderDOM: function(renderSession) {
-		openfl._internal.renderer.dom.DOMShape.render(this,renderSession);
-		openfl.display.DisplayObjectContainer.prototype.__renderDOM.call(this,renderSession);
-	}
-	,__renderGL: function(renderSession) {
-		if(!this.__renderable || this.__worldAlpha <= 0) return;
-		if(this.__graphics != null) openfl._internal.renderer.opengl.utils.GraphicsRenderer.render(this,renderSession);
-		openfl.display.DisplayObjectContainer.prototype.__renderGL.call(this,renderSession);
-	}
-	,__renderMask: function(renderSession) {
-		if(this.__graphics != null) openfl._internal.renderer.canvas.CanvasGraphics.renderMask(this.__graphics,renderSession); else openfl.display.DisplayObjectContainer.prototype.__renderMask.call(this,renderSession);
-	}
 	,get_graphics: function() {
-		if(this.__graphics == null) this.__graphics = new openfl.display.Graphics();
+		if(this.__graphics == null) {
+			this.__graphics = new openfl.display.Graphics();
+			this.__graphics.__owner = this;
+		}
 		return this.__graphics;
 	}
 	,__class__: openfl.display.Sprite
+	,__properties__: $extend(openfl.display.DisplayObjectContainer.prototype.__properties__,{get_graphics:"get_graphics"})
 });
 var Main = function() {
 	openfl.display.Sprite.call(this);
@@ -918,10 +994,11 @@ Main.prototype = $extend(openfl.display.Sprite.prototype,{
 	,init: function() {
 		if(this.inited) return;
 		this.inited = true;
+		this.addChild(new openfl.display.FPS(this.stage.stageWidth - 100,10,0));
 		this.menu = new Menu();
 		this.addChild(this.menu);
 		Global.main = this;
-		Global.elementSize = 25;
+		Global.elementSize = 12;
 		openfl.Lib.current.stage.addEventListener(openfl.events.KeyboardEvent.KEY_DOWN,$bind(this,this.keyPressed));
 		openfl.Lib.current.stage.addEventListener(openfl.events.KeyboardEvent.KEY_UP,$bind(this,this.keyReleased));
 		openfl.Lib.current.stage.addEventListener(openfl.events.MouseEvent.MOUSE_MOVE,$bind(this,this.mouseMove));
@@ -950,6 +1027,9 @@ Main.prototype = $extend(openfl.display.Sprite.prototype,{
 		case 38:case 87:
 			Global.up = true;
 			break;
+		case 32:
+			Global.jump = true;
+			break;
 		case 16:
 			Global.shift = true;
 			break;
@@ -958,7 +1038,6 @@ Main.prototype = $extend(openfl.display.Sprite.prototype,{
 			break;
 		case 48:case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 56:case 57:case 58:case 59:
 			Global.weaponIndex = e.keyCode - 48;
-			haxe.Log.trace("Main: " + Global.weaponIndex,{ fileName : "Main.hx", lineNumber : 85, className : "Main", methodName : "keyPressed"});
 			break;
 		}
 	}
@@ -973,6 +1052,9 @@ Main.prototype = $extend(openfl.display.Sprite.prototype,{
 			break;
 		case 38:case 87:
 			Global.up = false;
+			break;
+		case 32:
+			Global.jump = false;
 			break;
 		case 16:
 			Global.shift = false;
@@ -997,17 +1079,6 @@ DocumentClass.__super__ = Main;
 DocumentClass.prototype = $extend(Main.prototype,{
 	__class__: DocumentClass
 });
-var Block = function() {
-	openfl.display.Sprite.call(this);
-	this.get_graphics().beginFill(16711680);
-	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
-};
-$hxClasses["Block"] = Block;
-Block.__name__ = ["Block"];
-Block.__super__ = openfl.display.Sprite;
-Block.prototype = $extend(openfl.display.Sprite.prototype,{
-	__class__: Block
-});
 var Button = function(color) {
 	openfl.display.Sprite.call(this);
 	this.get_graphics().beginFill(color);
@@ -1018,7 +1089,7 @@ Button.__name__ = ["Button"];
 Button.__super__ = openfl.display.Sprite;
 Button.prototype = $extend(openfl.display.Sprite.prototype,{
 	newGame: function(e) {
-		Global.main.level = new Level1();
+		Global.main.level = new platform.Platform2();
 		Global.main.addChild(Global.main.level);
 		Global.level = Global.main.level;
 		Global.main.removeChild(Global.main.menu);
@@ -1027,17 +1098,6 @@ Button.prototype = $extend(openfl.display.Sprite.prototype,{
 		openfl.system.System.exit(0);
 	}
 	,__class__: Button
-});
-var Coin = function() {
-	openfl.display.Sprite.call(this);
-	this.get_graphics().beginFill(16768290);
-	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
-};
-$hxClasses["Coin"] = Coin;
-Coin.__name__ = ["Coin"];
-Coin.__super__ = openfl.display.Sprite;
-Coin.prototype = $extend(openfl.display.Sprite.prototype,{
-	__class__: Coin
 });
 var lime = {};
 lime.AssetLibrary = function() {
@@ -1147,8 +1207,7 @@ DefaultAssetLibrary.prototype = $extend(lime.AssetLibrary.prototype,{
 		} else return null;
 	}
 	,getFont: function(id) {
-		return js.Boot.__cast(Type.createInstance(this.className.get(id),[]) , openfl.text.Font);
-		return null;
+		return js.Boot.__cast(Type.createInstance(this.className.get(id),[]) , lime.text.Font);
 	}
 	,getImage: function(id) {
 		return lime.graphics.Image.fromImageElement((function($this) {
@@ -1215,31 +1274,20 @@ var EReg = function(r,opt) {
 $hxClasses["EReg"] = EReg;
 EReg.__name__ = ["EReg"];
 EReg.prototype = {
-	replace: function(s,by) {
+	match: function(s) {
+		if(this.r.global) this.r.lastIndex = 0;
+		this.r.m = this.r.exec(s);
+		this.r.s = s;
+		return this.r.m != null;
+	}
+	,matched: function(n) {
+		if(this.r.m != null && n >= 0 && n < this.r.m.length) return this.r.m[n]; else throw "EReg::matched";
+	}
+	,replace: function(s,by) {
 		return s.replace(this.r,by);
 	}
 	,__class__: EReg
 };
-var Fog = function() {
-	openfl.display.Sprite.call(this);
-	this.get_graphics().beginFill(0);
-	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
-};
-$hxClasses["Fog"] = Fog;
-Fog.__name__ = ["Fog"];
-Fog.__super__ = openfl.display.Sprite;
-Fog.prototype = $extend(openfl.display.Sprite.prototype,{
-	remove: function(instancePrev) {
-		this.instancePrev = instancePrev;
-		Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize)] = null;
-		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)] != null && Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)] != instancePrev) Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)].remove(this);
-		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)] != null && Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)] != instancePrev) Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)].remove(this);
-		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) + 1] != null && Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)] != instancePrev) Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) + 1].remove(this);
-		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) - 1] != null && Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)] != instancePrev) Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) - 1].remove(this);
-		Global.level.removeChild(this);
-	}
-	,__class__: Fog
-});
 var Global = function() { };
 $hxClasses["Global"] = Global;
 Global.__name__ = ["Global"];
@@ -1248,6 +1296,7 @@ Global.left = null;
 Global.right = null;
 Global.up = null;
 Global.down = null;
+Global.jump = null;
 Global.shift = null;
 Global.mouseDown = null;
 Global.mouseX = null;
@@ -1298,96 +1347,12 @@ HxOverrides.iter = function(a) {
 		return this.arr[this.cur++];
 	}};
 };
-var Level1 = function() {
-	this.fogMap = new Array();
-	this.obstacles = new Array();
-	this.coins = new Array();
-	this.blocks = new Array();
-	this.level = new Array();
-	openfl.display.Sprite.call(this);
-	this.level = [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,3,3,3,3,3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,101,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,102,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,101,100,100,100,100,100,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,101,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,101,101,100,100,100,100,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,3,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,3,100,100,100,100,101,101,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,3,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,3,100,100,100,100,100,100,1,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,3,100,100,100,100,100,100,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,2,0,1,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]];
-	this.init();
-};
-$hxClasses["Level1"] = Level1;
-Level1.__name__ = ["Level1"];
-Level1.__super__ = openfl.display.Sprite;
-Level1.prototype = $extend(openfl.display.Sprite.prototype,{
-	move: function(x,y) {
-		this.set_x(x);
-		this.set_y(y);
-	}
-	,returnXY: function() {
-		return [this.get_x(),this.get_y()];
-	}
-	,init: function() {
-		Global.levelWidth = this.level[0].length * Global.elementSize;
-		Global.levelHeight = this.level.length * Global.elementSize;
-		var _g1 = 0;
-		var _g = this.level.length;
-		while(_g1 < _g) {
-			var i = _g1++;
-			var _g3 = 0;
-			var _g2 = this.level[i].length;
-			while(_g3 < _g2) {
-				var ii = _g3++;
-				var _g4 = this.level[i][ii];
-				switch(_g4) {
-				case 1:case 101:
-					this.temp = new Block();
-					this.temp.x = ii * Global.elementSize;
-					this.temp.y = i * Global.elementSize;
-					this.blocks.push(this.temp);
-					this.addChild(this.temp);
-					break;
-				case 2:case 102:
-					this.temp = new Coin();
-					this.temp.x = ii * Global.elementSize;
-					this.temp.y = i * Global.elementSize;
-					this.coins.push(this.temp);
-					this.addChild(this.temp);
-					break;
-				case 3:case 103:
-					this.temp = new Obstacle();
-					this.temp.x = ii * Global.elementSize;
-					this.temp.y = i * Global.elementSize;
-					this.blocks.push(this.temp);
-					this.addChild(this.temp);
-					break;
-				}
-			}
-		}
-		var _g11 = 0;
-		var _g5 = this.level.length;
-		while(_g11 < _g5) {
-			var i1 = _g11++;
-			this.fogMap[i1] = new Array();
-			var _g31 = 0;
-			var _g21 = this.level[i1].length;
-			while(_g31 < _g21) {
-				var ii1 = _g31++;
-				this.fogMap[i1][ii1] = null;
-				if(this.level[i1][ii1] >= 100) {
-					this.temp = new Fog();
-					this.temp.x = ii1 * Global.elementSize;
-					this.temp.y = i1 * Global.elementSize;
-					this.addChild(this.temp);
-					this.fogMap[i1][ii1] = this.temp;
-				}
-			}
-		}
-		Global.blocks = this.blocks;
-		Global.coins = this.coins;
-		Global.fogMap = this.fogMap;
-		this.player = new Player();
-		this.player.set_x(Global.elementSize);
-		this.player.set_y(Global.levelHeight - Global.elementSize - this.player.get_height());
-		this.addChild(this.player);
-	}
-	,__class__: Level1
-});
 var IMap = function() { };
 $hxClasses["IMap"] = IMap;
 IMap.__name__ = ["IMap"];
+IMap.prototype = {
+	__class__: IMap
+};
 Math.__name__ = ["Math"];
 var Menu = function() {
 	this.buttons = new Array();
@@ -1453,11 +1418,11 @@ NMEPreloader.prototype = $extend(openfl.display.Sprite.prototype,{
 		return 16777215;
 	}
 	,getHeight: function() {
-		var height = 320;
+		var height = 375;
 		if(height > 0) return height; else return openfl.Lib.current.stage.stageHeight;
 	}
 	,getWidth: function() {
-		var width = 480;
+		var width = 500;
 		if(width > 0) return width; else return openfl.Lib.current.stage.stageWidth;
 	}
 	,onInit: function() {
@@ -1471,167 +1436,6 @@ NMEPreloader.prototype = $extend(openfl.display.Sprite.prototype,{
 		this.progress.set_scaleX(percentLoaded);
 	}
 	,__class__: NMEPreloader
-});
-var Obstacle = function() {
-	openfl.display.Sprite.call(this);
-	this.get_graphics().beginFill(255);
-	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
-};
-$hxClasses["Obstacle"] = Obstacle;
-Obstacle.__name__ = ["Obstacle"];
-Obstacle.__super__ = openfl.display.Sprite;
-Obstacle.prototype = $extend(openfl.display.Sprite.prototype,{
-	remove: function() {
-		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)] != null) Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)].remove(this);
-		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)] != null) Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)].remove(this);
-		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) + 1] != null) Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) + 1].remove(this);
-		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) - 1] != null) Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) - 1].remove(this);
-		HxOverrides.remove(Global.blocks,this);
-		Global.level.removeChild(this);
-	}
-	,__class__: Obstacle
-});
-var Player = function() {
-	this.moveViewY = 0;
-	this.moveViewX = 0;
-	this.arms = new Array();
-	this.legs = new Array();
-	this.playerHeight = 5 * Global.elementSize;
-	this.playerWidth = 2 * Global.elementSize;
-	this.isStanding = false;
-	this.gravity = 0.046875 * Global.elementSize;
-	this.maxFallSpeed = 1.25 * Global.elementSize;
-	this.maxYSpeed = 0.6875 * Global.elementSize;
-	this.maxXSpeed = 0.3125 * Global.elementSize;
-	this.ySpeed = 0;
-	this.xSpeed = 0;
-	openfl.display.Sprite.call(this);
-	this.get_graphics().beginFill(16777215);
-	this.get_graphics().drawRect(0,0,Global.elementSize,2.5 * Global.elementSize);
-	this.frankenstein();
-	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
-};
-$hxClasses["Player"] = Player;
-Player.__name__ = ["Player"];
-Player.__super__ = openfl.display.Sprite;
-Player.prototype = $extend(openfl.display.Sprite.prototype,{
-	returnXY: function() {
-		return [this.get_x(),this.get_y()];
-	}
-	,frankenstein: function() {
-		this.arms[0] = new player.Arm(false);
-		this.addChild(this.arms[0]);
-		this.legs[0] = new player.Leg(false);
-		this.addChild(this.legs[0]);
-		this.body = new player.Body();
-		this.addChild(this.body);
-		this.head = new player.Head();
-		this.addChild(this.head);
-		this.legs[1] = new player.Leg(true);
-		this.addChild(this.legs[1]);
-		this.arms[1] = new player.Arm(true);
-		this.addChild(this.arms[1]);
-	}
-	,update: function(e) {
-		this.move();
-		this.moveView();
-	}
-	,moveView: function() {
-		if(openfl.Lib.current.stage.stageWidth < Global.levelWidth) {
-			if(this.get_x() + this.playerWidth * 0.5 > openfl.Lib.current.stage.stageWidth * 0.5 && this.get_x() + this.playerWidth * 0.5 < Global.levelWidth - openfl.Lib.current.stage.stageWidth * 0.5) this.moveViewX = openfl.Lib.current.stage.stageWidth * 0.5 - this.get_x() - this.playerWidth * 0.5; else if(this.get_x() - this.playerWidth * 0.5 > openfl.Lib.current.stage.stageWidth * 0.5) this.moveViewX = openfl.Lib.current.stage.stageWidth - Global.levelWidth; else if(this.get_x() - this.playerWidth * 0.5 < Global.levelWidth - openfl.Lib.current.stage.stageWidth * 0.5) this.moveViewX = 0;
-		}
-		if(openfl.Lib.current.stage.stageHeight < Global.levelHeight) {
-			if(this.get_y() + this.playerHeight * 0.5 > openfl.Lib.current.stage.stageHeight * 0.5 && this.get_y() + this.playerHeight * 0.5 < Global.levelHeight - openfl.Lib.current.stage.stageHeight * 0.5) this.moveViewY = openfl.Lib.current.stage.stageHeight * 0.5 - this.get_y() - this.playerHeight * 0.5; else if(this.get_y() - this.playerHeight * 0.5 > openfl.Lib.current.stage.stageHeight * 0.5) this.moveViewY = openfl.Lib.current.stage.stageHeight - Global.levelHeight; else if(this.get_y() - this.playerHeight * 0.5 < Global.levelHeight - openfl.Lib.current.stage.stageHeight * 0.5) this.moveViewY = 0;
-		}
-		Global.level.move(this.moveViewX,this.moveViewY);
-	}
-	,move: function() {
-		this.xSpeed = 0;
-		if(Global.up) {
-			if(this.isStanding) this.startJumping();
-		}
-		this.checkCollision();
-		if(Global.left) {
-			if(this.againstWallLeft) {
-				this.xSpeed = 0;
-				this.set_x(Global.blocks[this.wallBlockLeft].x + Global.blocks[this.wallBlockLeft].width);
-			} else this.xSpeed -= this.maxXSpeed;
-		}
-		if(Global.right) {
-			if(this.againstWallRight) {
-				this.xSpeed = 0;
-				this.set_x(Global.blocks[this.wallBlockRight].x - this.playerWidth);
-			} else this.xSpeed += this.maxXSpeed;
-		}
-		if(Global.left && Global.right) this.xSpeed = 0;
-		this.jumpController();
-		if(Global.shift) this.xSpeed *= 0.4;
-		var _g = this;
-		_g.set_x(_g.get_x() + this.xSpeed);
-		var _g1 = this;
-		_g1.set_y(_g1.get_y() + this.ySpeed);
-		this.checkCoin();
-	}
-	,checkCollision: function() {
-		this.againstWallLeft = this.againstWallRight = this.againstTheCeiling = this.onTheGround = false;
-		var _g1 = 0;
-		var _g = Global.blocks.length;
-		while(_g1 < _g) {
-			var i = _g1++;
-			if(Global.blocks[i].y < this.get_y() + this.playerHeight && Global.blocks[i].y > this.get_y() - Global.blocks[i].height && Global.blocks[i].x + Global.blocks[i].width >= this.get_x() - this.maxXSpeed && Global.blocks[i].x < this.get_x() - this.maxXSpeed) {
-				this.againstWallLeft = true;
-				this.wallBlockLeft = i;
-			}
-			if(Global.blocks[i].y < this.get_y() + this.playerHeight && Global.blocks[i].y > this.get_y() - Global.blocks[i].height && Global.blocks[i].x + Global.blocks[i].width > this.get_x() + this.maxXSpeed && Global.blocks[i].x <= this.get_x() + this.playerWidth + this.maxXSpeed) {
-				this.againstWallRight = true;
-				this.wallBlockRight = i;
-			}
-			if(Global.blocks[i].y + Global.blocks[i].height >= this.get_y() + this.ySpeed + this.gravity && Global.blocks[i].y < this.get_y() && Global.blocks[i].x + Global.blocks[i].width > this.get_x() && Global.blocks[i].x < this.get_x() + this.playerWidth) {
-				this.againstTheCeiling = true;
-				this.ceilingBlock = i;
-			}
-			if(Global.blocks[i].y <= this.get_y() + this.ySpeed + this.gravity + this.playerHeight && Global.blocks[i].y > this.get_y() && Global.blocks[i].x > this.get_x() - Global.blocks[i].width && Global.blocks[i].x < this.get_x() + this.playerWidth) {
-				this.onTheGround = true;
-				this.groundBlock = i;
-			}
-		}
-	}
-	,startJumping: function() {
-		this.ySpeed = -this.maxYSpeed;
-		this.isStanding = false;
-	}
-	,jumpController: function() {
-		if(!this.onTheGround) this.isStanding = false;
-		if(this.onTheGround || this.againstTheCeiling) {
-			if(this.onTheGround) {
-				this.ySpeed = 0;
-				this.set_y(Global.blocks[this.groundBlock].y - this.playerHeight);
-				this.isStanding = true;
-			}
-			if(this.againstTheCeiling) {
-				this.ySpeed = 0;
-				this.set_y(Global.blocks[this.ceilingBlock].y + Global.blocks[this.ceilingBlock].height);
-			}
-		} else {
-			this.ySpeed += this.gravity;
-			if(this.ySpeed > this.maxFallSpeed) this.ySpeed = this.maxFallSpeed;
-		}
-	}
-	,checkCoin: function() {
-		this.i = 0;
-		while(this.i < Global.coins.length) {
-			this.tempCoin = Global.coins[this.i];
-			if(this.get_x() < this.tempCoin.get_x() + this.tempCoin.get_width() && this.get_x() > this.tempCoin.get_x() - this.playerWidth && this.get_y() < this.tempCoin.get_y() + this.tempCoin.get_height() && this.get_y() > this.tempCoin.get_y() - this.playerHeight) {
-				haxe.Log.trace("You ate a coin!!",{ fileName : "Player.hx", lineNumber : 258, className : "Player", methodName : "checkCoin"});
-				Global.level.level[Math.floor(this.tempCoin.get_y() / Global.elementSize)][Math.floor(this.tempCoin.get_x() / Global.elementSize)] -= 2;
-				HxOverrides.remove(Global.coins,this.tempCoin);
-				this.tempCoin.parent.removeChild(this.tempCoin);
-				this.i--;
-			}
-			this.i++;
-		}
-	}
-	,__class__: Player
 });
 var Reflect = function() { };
 $hxClasses["Reflect"] = Reflect;
@@ -1648,6 +1452,14 @@ Reflect.field = function(o,field) {
 };
 Reflect.setField = function(o,field,value) {
 	o[field] = value;
+};
+Reflect.getProperty = function(o,field) {
+	var tmp;
+	if(o == null) return null; else if(o.__properties__ && (tmp = o.__properties__["get_" + field])) return o[tmp](); else return o[field];
+};
+Reflect.setProperty = function(o,field,value) {
+	var tmp;
+	if(o.__properties__ && (tmp = o.__properties__["set_" + field])) o[tmp](value); else o[field] = value;
 };
 Reflect.callMethod = function(o,func,args) {
 	return func.apply(o,args);
@@ -1811,6 +1623,245 @@ Type.enumEq = function(a,b) {
 	}
 	return true;
 };
+var blocks = {};
+blocks.Block = function() {
+	this.type = null;
+	openfl.display.Sprite.call(this);
+	this.get_graphics().beginFill(16711680);
+	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
+	this.blockWidth = Global.elementSize;
+	this.blockHeight = Global.elementSize;
+};
+$hxClasses["blocks.Block"] = blocks.Block;
+blocks.Block.__name__ = ["blocks","Block"];
+blocks.Block.__super__ = openfl.display.Sprite;
+blocks.Block.prototype = $extend(openfl.display.Sprite.prototype,{
+	__class__: blocks.Block
+});
+blocks.Coin = function() {
+	openfl.display.Sprite.call(this);
+	this.get_graphics().beginFill(16768290);
+	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
+};
+$hxClasses["blocks.Coin"] = blocks.Coin;
+blocks.Coin.__name__ = ["blocks","Coin"];
+blocks.Coin.__super__ = openfl.display.Sprite;
+blocks.Coin.prototype = $extend(openfl.display.Sprite.prototype,{
+	__class__: blocks.Coin
+});
+blocks.Fog = function() {
+	openfl.display.Sprite.call(this);
+	this.get_graphics().beginFill(0);
+	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
+};
+$hxClasses["blocks.Fog"] = blocks.Fog;
+blocks.Fog.__name__ = ["blocks","Fog"];
+blocks.Fog.__super__ = openfl.display.Sprite;
+blocks.Fog.prototype = $extend(openfl.display.Sprite.prototype,{
+	remove: function(instancePrev) {
+		this.instancePrev = instancePrev;
+		Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize)] = null;
+		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)] != null && Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)] != instancePrev) Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)].remove(this);
+		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)] != null && Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)] != instancePrev) Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)].remove(this);
+		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) + 1] != null && Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) + 1] != instancePrev) Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) + 1].remove(this);
+		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) - 1] != null && Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) - 1] != instancePrev) Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) - 1].remove(this);
+		Global.level.removeChild(this);
+	}
+	,__class__: blocks.Fog
+});
+blocks.Lamp = function() {
+	openfl.display.Sprite.call(this);
+	this.get_graphics().beginFill(16711935);
+	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
+};
+$hxClasses["blocks.Lamp"] = blocks.Lamp;
+blocks.Lamp.__name__ = ["blocks","Lamp"];
+blocks.Lamp.__super__ = openfl.display.Sprite;
+blocks.Lamp.prototype = $extend(openfl.display.Sprite.prototype,{
+	__class__: blocks.Lamp
+});
+blocks.Obstacle = function() {
+	openfl.display.Sprite.call(this);
+	this.get_graphics().beginFill(255);
+	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
+};
+$hxClasses["blocks.Obstacle"] = blocks.Obstacle;
+blocks.Obstacle.__name__ = ["blocks","Obstacle"];
+blocks.Obstacle.__super__ = openfl.display.Sprite;
+blocks.Obstacle.prototype = $extend(openfl.display.Sprite.prototype,{
+	remove: function(instancePrev) {
+		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)] != null) Global.fogMap[Math.floor(this.get_y() / Global.elementSize) + 1][Math.floor(this.get_x() / Global.elementSize)].remove(this);
+		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)] != null) Global.fogMap[Math.floor(this.get_y() / Global.elementSize) - 1][Math.floor(this.get_x() / Global.elementSize)].remove(this);
+		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) + 1] != null) Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) + 1].remove(this);
+		if(Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) - 1] != null) Global.fogMap[Math.floor(this.get_y() / Global.elementSize)][Math.floor(this.get_x() / Global.elementSize) - 1].remove(this);
+		HxOverrides.remove(Global.blocks,this);
+		Global.level.removeChild(this);
+	}
+	,__class__: blocks.Obstacle
+});
+blocks.OpenCeiling = function() {
+	this.type = "OpenCeiling";
+	openfl.display.Sprite.call(this);
+	this.get_graphics().beginFill(0);
+	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
+};
+$hxClasses["blocks.OpenCeiling"] = blocks.OpenCeiling;
+blocks.OpenCeiling.__name__ = ["blocks","OpenCeiling"];
+blocks.OpenCeiling.__super__ = openfl.display.Sprite;
+blocks.OpenCeiling.prototype = $extend(openfl.display.Sprite.prototype,{
+	__class__: blocks.OpenCeiling
+});
+blocks.Stairs = function() {
+	openfl.display.Sprite.call(this);
+	this.get_graphics().beginFill(102);
+	this.get_graphics().drawRect(0,0,Global.elementSize,Global.elementSize);
+	this.blockWidth = Global.elementSize;
+	this.blockHeight = Global.elementSize;
+};
+$hxClasses["blocks.Stairs"] = blocks.Stairs;
+blocks.Stairs.__name__ = ["blocks","Stairs"];
+blocks.Stairs.__super__ = openfl.display.Sprite;
+blocks.Stairs.prototype = $extend(openfl.display.Sprite.prototype,{
+	__class__: blocks.Stairs
+});
+var delegating = {};
+delegating.Case = function(x,y) {
+	this.opacity = 1;
+	this.zoom = 1;
+	openfl.display.Sprite.call(this);
+	this.set_x(this.startX = x);
+	this.set_y(this.startY = y);
+	this.addEventListener(openfl.events.MouseEvent.MOUSE_DOWN,$bind(this,this.startMove));
+	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+};
+$hxClasses["delegating.Case"] = delegating.Case;
+delegating.Case.__name__ = ["delegating","Case"];
+delegating.Case.__super__ = openfl.display.Sprite;
+delegating.Case.prototype = $extend(openfl.display.Sprite.prototype,{
+	startMove: function(e) {
+		this.addEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.stopMove));
+		this.removeEventListener(openfl.events.MouseEvent.MOUSE_DOWN,$bind(this,this.startMove));
+		Global.level.currentCase = this;
+		this.opacity = 0.5;
+		this.startDrag();
+	}
+	,stopMove: function(e) {
+		this.stopDrag();
+		Global.level.currentCase = null;
+		this.opacity = 1;
+		this.removeEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.stopMove));
+		this.onItem = false;
+		var _g1 = 0;
+		var _g = Global.level.categories.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			this.distance = Math.sqrt((Global.level.categories[i].x - this.get_x()) * (Global.level.categories[i].x - this.get_x()) + (Global.level.categories[i].y - this.get_y()) * (Global.level.categories[i].y - this.get_y())) - Global.elementSize;
+			if(this.distance <= Global.level.categories[i].size * Global.elementSize && !Global.level.categories[i].taken) {
+				this.onItem = true;
+				this.item = i;
+				Global.level.categories[i].taken = true;
+				Global.level.delegated++;
+				break;
+			}
+		}
+		if(!this.onItem) motion.Actuate.tween(this,0.5,{ x : this.startX, y : this.startY}).onComplete($bind(this,this.newDrag)); else {
+			Global.level.categories[this.item].zoom = 1;
+			this.opacity = 1;
+			this.draw();
+			this.removeEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+			motion.Actuate.tween(this,0.5,{ x : Global.level.categories[this.item].x, y : Global.level.categories[this.item].y});
+		}
+	}
+	,newDrag: function() {
+		this.addEventListener(openfl.events.MouseEvent.MOUSE_DOWN,$bind(this,this.startMove));
+	}
+	,update: function(e) {
+		this.draw();
+	}
+	,draw: function() {
+		this.get_graphics().clear();
+		this.get_graphics().beginFill(0,this.opacity);
+		this.get_graphics().drawCircle(0,0,this.zoom * Global.elementSize);
+	}
+	,__class__: delegating.Case
+});
+delegating.CaseTarget = function(x,y) {
+	this.taken = false;
+	this.size = 1;
+	this.zoom = 1;
+	openfl.display.Sprite.call(this);
+	this.set_x(x);
+	this.set_y(y);
+	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+};
+$hxClasses["delegating.CaseTarget"] = delegating.CaseTarget;
+delegating.CaseTarget.__name__ = ["delegating","CaseTarget"];
+delegating.CaseTarget.__super__ = openfl.display.Sprite;
+delegating.CaseTarget.prototype = $extend(openfl.display.Sprite.prototype,{
+	update: function(e) {
+		if(Global.level.currentCase != null && !this.taken) {
+			this.distance = Math.sqrt((Global.level.currentCase.x - this.get_x()) * (Global.level.currentCase.x - this.get_x()) + (Global.level.currentCase.y - this.get_y()) * (Global.level.currentCase.y - this.get_y())) - Global.elementSize;
+			if(this.distance <= this.size * Global.elementSize) this.zoom = 1.5; else this.zoom = 1;
+		}
+		this.draw();
+	}
+	,draw: function() {
+		this.get_graphics().clear();
+		this.get_graphics().beginFill(16711680);
+		this.get_graphics().drawCircle(0,0,this.size * this.zoom * Global.elementSize);
+	}
+	,__class__: delegating.CaseTarget
+});
+delegating.ChooseCase = function(x,y) {
+	delegating.CaseTarget.call(this,x,y);
+	this.set_x(x);
+	this.set_y(y);
+	this.size = 3;
+};
+$hxClasses["delegating.ChooseCase"] = delegating.ChooseCase;
+delegating.ChooseCase.__name__ = ["delegating","ChooseCase"];
+delegating.ChooseCase.__super__ = delegating.CaseTarget;
+delegating.ChooseCase.prototype = $extend(delegating.CaseTarget.prototype,{
+	__class__: delegating.ChooseCase
+});
+delegating.Delegation = function() {
+	this.delegated = 0;
+	this.categories = new Array();
+	openfl.display.Sprite.call(this);
+	this.categories[0] = new delegating.CaseTarget(openfl.Lib.current.stage.stageWidth * 0.5 - 80,170);
+	this.addChild(this.categories[0]);
+	this.categories[1] = new delegating.CaseTarget(openfl.Lib.current.stage.stageWidth * 0.5,140);
+	this.addChild(this.categories[1]);
+	this.categories[2] = new delegating.CaseTarget(openfl.Lib.current.stage.stageWidth * 0.5 + 80,170);
+	this.addChild(this.categories[2]);
+	this.categories[3] = new delegating.CaseTarget(openfl.Lib.current.stage.stageWidth * 0.5 - 100,openfl.Lib.current.stage.stageHeight - 120);
+	this.addChild(this.categories[3]);
+	this.categories[4] = new delegating.CaseTarget(openfl.Lib.current.stage.stageWidth * 0.5 + 100,openfl.Lib.current.stage.stageHeight - 120);
+	this.addChild(this.categories[4]);
+	this.categories[5] = new delegating.ChooseCase(openfl.Lib.current.stage.stageWidth * 0.5,openfl.Lib.current.stage.stageHeight - 120 - Global.elementSize);
+	this.addChild(this.categories[5]);
+	this.addChild(new delegating.Case(openfl.Lib.current.stage.stageWidth - 50,80));
+	this.addChild(new delegating.Case(openfl.Lib.current.stage.stageWidth - 50,130));
+	this.addChild(new delegating.Case(openfl.Lib.current.stage.stageWidth - 50,180));
+	this.addChild(new delegating.Case(openfl.Lib.current.stage.stageWidth - 50,230));
+	this.addChild(new delegating.Case(openfl.Lib.current.stage.stageWidth - 50,280));
+	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+};
+$hxClasses["delegating.Delegation"] = delegating.Delegation;
+delegating.Delegation.__name__ = ["delegating","Delegation"];
+delegating.Delegation.__super__ = openfl.display.Sprite;
+delegating.Delegation.prototype = $extend(openfl.display.Sprite.prototype,{
+	update: function(e) {
+		if(this.delegated == 5) {
+			Global.main.level = new platform.Platform2();
+			Global.main.addChild(Global.main.level);
+			Global.level = Global.main.level;
+			this.removeEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+			this.parent.removeChild(this);
+		}
+	}
+	,__class__: delegating.Delegation
+});
 var haxe = {};
 haxe.StackItem = $hxClasses["haxe.StackItem"] = { __ename__ : true, __constructs__ : ["CFunction","Module","FilePos","Method","LocalFunction"] };
 haxe.StackItem.CFunction = ["CFunction",0];
@@ -1845,10 +1896,14 @@ haxe.CallStack.callStack = function() {
 		}
 		return stack;
 	};
-	var a = haxe.CallStack.makeStack(new Error().stack);
-	a.shift();
-	Error.prepareStackTrace = oldValue;
-	return a;
+	try {
+		throw new Error();
+	} catch( e ) {
+		var a = haxe.CallStack.makeStack(e.stack);
+		if(a != null) a.shift();
+		Error.prepareStackTrace = oldValue;
+		return a;
+	}
 };
 haxe.CallStack.exceptionStack = function() {
 	return [];
@@ -1904,12 +1959,20 @@ haxe.CallStack.itemToString = function(b,s) {
 haxe.CallStack.makeStack = function(s) {
 	if(typeof(s) == "string") {
 		var stack = s.split("\n");
+		if(stack[0] == "Error") stack.shift();
 		var m = [];
+		var rie10 = new EReg("^   at ([A-Za-z0-9_. ]+) \\(([^)]+):([0-9]+):([0-9]+)\\)$","");
 		var _g = 0;
 		while(_g < stack.length) {
 			var line = stack[_g];
 			++_g;
-			m.push(haxe.StackItem.Module(line));
+			if(rie10.match(line)) {
+				var path = rie10.matched(1).split(".");
+				var meth = path.pop();
+				var file = rie10.matched(2);
+				var line1 = Std.parseInt(rie10.matched(3));
+				m.push(haxe.StackItem.FilePos(meth == "Anonymous function"?haxe.StackItem.LocalFunction():meth == "Global code"?null:haxe.StackItem.Method(path.join("."),meth),file,line1));
+			} else m.push(haxe.StackItem.Module(line));
 		}
 		return m;
 	} else return s;
@@ -1954,6 +2017,12 @@ haxe.Timer.prototype = {
 	,run: function() {
 	}
 	,__class__: haxe.Timer
+};
+haxe.Utf8 = function() { };
+$hxClasses["haxe.Utf8"] = haxe.Utf8;
+haxe.Utf8.__name__ = ["haxe","Utf8"];
+haxe.Utf8.charCodeAt = function(s,index) {
+	return HxOverrides.cca(s,index);
 };
 haxe.crypto = {};
 haxe.crypto.BaseCode = function(base) {
@@ -2129,7 +2198,71 @@ $hxClasses["haxe.ds.IntMap"] = haxe.ds.IntMap;
 haxe.ds.IntMap.__name__ = ["haxe","ds","IntMap"];
 haxe.ds.IntMap.__interfaces__ = [IMap];
 haxe.ds.IntMap.prototype = {
-	__class__: haxe.ds.IntMap
+	set: function(key,value) {
+		this.h[key] = value;
+	}
+	,get: function(key) {
+		return this.h[key];
+	}
+	,exists: function(key) {
+		return this.h.hasOwnProperty(key);
+	}
+	,keys: function() {
+		var a = [];
+		for( var key in this.h ) {
+		if(this.h.hasOwnProperty(key)) a.push(key | 0);
+		}
+		return HxOverrides.iter(a);
+	}
+	,iterator: function() {
+		return { ref : this.h, it : this.keys(), hasNext : function() {
+			return this.it.hasNext();
+		}, next : function() {
+			var i = this.it.next();
+			return this.ref[i];
+		}};
+	}
+	,__class__: haxe.ds.IntMap
+};
+haxe.ds.ObjectMap = function() {
+	this.h = { };
+	this.h.__keys__ = { };
+};
+$hxClasses["haxe.ds.ObjectMap"] = haxe.ds.ObjectMap;
+haxe.ds.ObjectMap.__name__ = ["haxe","ds","ObjectMap"];
+haxe.ds.ObjectMap.__interfaces__ = [IMap];
+haxe.ds.ObjectMap.prototype = {
+	set: function(key,value) {
+		var id = key.__id__ || (key.__id__ = ++haxe.ds.ObjectMap.count);
+		this.h[id] = value;
+		this.h.__keys__[id] = key;
+	}
+	,get: function(key) {
+		return this.h[key.__id__];
+	}
+	,remove: function(key) {
+		var id = key.__id__;
+		if(this.h.__keys__[id] == null) return false;
+		delete(this.h[id]);
+		delete(this.h.__keys__[id]);
+		return true;
+	}
+	,keys: function() {
+		var a = [];
+		for( var key in this.h.__keys__ ) {
+		if(this.h.hasOwnProperty(key)) a.push(this.h.__keys__[key]);
+		}
+		return HxOverrides.iter(a);
+	}
+	,iterator: function() {
+		return { ref : this.h, it : this.keys(), hasNext : function() {
+			return this.it.hasNext();
+		}, next : function() {
+			var i = this.it.next();
+			return this.ref[i.__id__];
+		}};
+	}
+	,__class__: haxe.ds.ObjectMap
 };
 haxe.ds.StringMap = function() {
 	this.h = { };
@@ -2323,6 +2456,18 @@ haxe.io.Path.prototype = {
 	,__class__: haxe.io.Path
 };
 var js = {};
+js._Boot = {};
+js._Boot.HaxeError = function(val) {
+	Error.call(this);
+	this.val = val;
+	if(Error.captureStackTrace) Error.captureStackTrace(this,js._Boot.HaxeError);
+};
+$hxClasses["js._Boot.HaxeError"] = js._Boot.HaxeError;
+js._Boot.HaxeError.__name__ = ["js","_Boot","HaxeError"];
+js._Boot.HaxeError.__super__ = Error;
+js._Boot.HaxeError.prototype = $extend(Error.prototype,{
+	__class__: js._Boot.HaxeError
+});
 js.Boot = function() { };
 $hxClasses["js.Boot"] = js.Boot;
 js.Boot.__name__ = ["js","Boot"];
@@ -2884,6 +3029,7 @@ lime._backend.html5.HTML5Application.prototype = {
 			var renderer = new lime.graphics.Renderer($window);
 			this.parent.addWindow($window);
 			this.parent.addRenderer(renderer);
+			this.parent.init(renderer.context);
 		}
 	}
 	,exec: function() {
@@ -2977,10 +3123,6 @@ lime._backend.html5.HTML5Application.prototype = {
 			} else i++;
 		}
 		if(this.parent.renderers[0] != null) {
-			if(!this.initialized) {
-				this.initialized = true;
-				this.parent.init(this.parent.renderers[0].context);
-			}
 			var listeners1 = this.parent.renderers[0].onRender.listeners;
 			var repeat1 = this.parent.renderers[0].onRender.repeat;
 			var length1 = listeners1.length;
@@ -3049,16 +3191,16 @@ lime._backend.html5.HTML5Application.prototype = {
 				}
 				break;
 			case "resize":
-				var cacheWidth = this.parent.windows[0].width;
-				var cacheHeight = this.parent.windows[0].height;
+				var cacheWidth = this.parent.windows[0].__width;
+				var cacheHeight = this.parent.windows[0].__height;
 				this.parent.windows[0].backend.handleResize();
-				if(this.parent.windows[0].width != cacheWidth || this.parent.windows[0].height != cacheHeight) {
+				if(this.parent.windows[0].__width != cacheWidth || this.parent.windows[0].__height != cacheHeight) {
 					var listeners4 = this.parent.windows[0].onWindowResize.listeners;
 					var repeat4 = this.parent.windows[0].onWindowResize.repeat;
 					var length4 = listeners4.length;
 					var i4 = 0;
 					while(i4 < length4) {
-						listeners4[i4](this.parent.windows[0].width,this.parent.windows[0].height);
+						listeners4[i4](this.parent.windows[0].__width,this.parent.windows[0].__height);
 						if(!repeat4[i4]) {
 							this.parent.windows[0].onWindowResize.remove(listeners4[i4]);
 							length4--;
@@ -3108,6 +3250,8 @@ lime._backend.html5.HTML5Mouse.show = function() {
 		lime._backend.html5.HTML5Mouse.__cursor = null;
 		lime._backend.html5.HTML5Mouse.set_cursor(cacheValue);
 	}
+};
+lime._backend.html5.HTML5Mouse.warp = function(x,y,window) {
 };
 lime._backend.html5.HTML5Mouse.get_cursor = function() {
 	if(lime._backend.html5.HTML5Mouse.__cursor == null) return lime.ui.MouseCursor.DEFAULT;
@@ -3164,6 +3308,12 @@ lime._backend.html5.HTML5Mouse.set_cursor = function(value) {
 	}
 	return lime._backend.html5.HTML5Mouse.__cursor;
 };
+lime._backend.html5.HTML5Mouse.get_lock = function() {
+	return false;
+};
+lime._backend.html5.HTML5Mouse.set_lock = function(value) {
+	return value;
+};
 lime._backend.html5.HTML5Renderer = function(parent) {
 	this.parent = parent;
 };
@@ -3187,6 +3337,7 @@ lime._backend.html5.HTML5Renderer.prototype = {
 		if(this.parent.window.backend.div != null) this.parent.context = lime.graphics.RenderContext.DOM(this.parent.window.backend.div); else if(this.parent.window.backend.canvas != null) {
 			var webgl = null;
 			if(webgl == null) this.parent.context = lime.graphics.RenderContext.CANVAS(this.parent.window.backend.canvas.getContext("2d")); else {
+				webgl = WebGLDebugUtils.makeDebugContext(webgl);
 				lime.graphics.opengl.GL.context = webgl;
 				this.parent.context = lime.graphics.RenderContext.OPENGL(lime.graphics.opengl.GL.context);
 			}
@@ -3243,8 +3394,8 @@ lime._backend.html5.HTML5Window.prototype = {
 	close: function() {
 	}
 	,create: function(application) {
-		this.setWidth = this.parent.width;
-		this.setHeight = this.parent.height;
+		this.setWidth = this.parent.__width;
+		this.setHeight = this.parent.__height;
 		if(js.Boot.__instanceof(this.element,HTMLCanvasElement)) this.canvas = this.element; else this.canvas = window.document.createElement("canvas");
 		if(this.canvas != null) {
 			var style = this.canvas.style;
@@ -3261,22 +3412,22 @@ lime._backend.html5.HTML5Window.prototype = {
 			style1.setProperty("-ms-user-select","none",null);
 			style1.setProperty("-o-user-select","none",null);
 		}
-		if(this.parent.width == 0 && this.parent.height == 0) {
+		if(this.parent.__width == 0 && this.parent.__height == 0) {
 			if(this.element != null) {
-				this.parent.width = this.element.clientWidth;
-				this.parent.height = this.element.clientHeight;
+				this.parent.set_width(this.element.clientWidth);
+				this.parent.set_height(this.element.clientHeight);
 			} else {
-				this.parent.width = window.innerWidth;
-				this.parent.height = window.innerHeight;
+				this.parent.set_width(window.innerWidth);
+				this.parent.set_height(window.innerHeight);
 			}
-			this.parent.fullscreen = true;
+			this.parent.set_fullscreen(true);
 		}
 		if(this.canvas != null) {
-			this.canvas.width = this.parent.width;
-			this.canvas.height = this.parent.height;
+			this.canvas.width = this.parent.__width;
+			this.canvas.height = this.parent.__height;
 		} else {
-			this.div.style.width = this.parent.width + "px";
-			this.div.style.height = this.parent.height + "px";
+			this.div.style.width = this.parent.__width + "px";
+			this.div.style.height = this.parent.__height + "px";
 		}
 		this.handleResize();
 		if(this.element != null) {
@@ -3309,16 +3460,16 @@ lime._backend.html5.HTML5Window.prototype = {
 			if(this.element != null) {
 				if(this.canvas != null) {
 					var rect = this.canvas.getBoundingClientRect();
-					x = (event.clientX - rect.left) * (this.parent.width / rect.width);
-					y = (event.clientY - rect.top) * (this.parent.height / rect.height);
+					x = (event.clientX - rect.left) * (this.parent.__width / rect.width);
+					y = (event.clientY - rect.top) * (this.parent.__height / rect.height);
 				} else if(this.div != null) {
 					var rect1 = this.div.getBoundingClientRect();
 					x = event.clientX - rect1.left;
 					y = event.clientY - rect1.top;
 				} else {
 					var rect2 = this.element.getBoundingClientRect();
-					x = (event.clientX - rect2.left) * (this.parent.width / rect2.width);
-					y = (event.clientY - rect2.top) * (this.parent.height / rect2.height);
+					x = (event.clientX - rect2.left) * (this.parent.__width / rect2.width);
+					y = (event.clientY - rect2.top) * (this.parent.__height / rect2.height);
 				}
 			} else {
 				x = event.clientX;
@@ -3358,7 +3509,7 @@ lime._backend.html5.HTML5Window.prototype = {
 				var length2 = listeners2.length;
 				var i2 = 0;
 				while(i2 < length2) {
-					listeners2[i2](x,y,event.button);
+					listeners2[i2](x,y);
 					if(!repeat2[i2]) {
 						this.parent.onMouseMove.remove(listeners2[i2]);
 						length2--;
@@ -3373,7 +3524,7 @@ lime._backend.html5.HTML5Window.prototype = {
 			var length3 = listeners3.length;
 			var i3 = 0;
 			while(i3 < length3) {
-				listeners3[i3](event.deltaX,event.deltaY);
+				listeners3[i3](event.deltaX,-event.deltaY);
 				if(!repeat3[i3]) {
 					this.parent.onMouseWheel.remove(listeners3[i3]);
 					length3--;
@@ -3382,12 +3533,12 @@ lime._backend.html5.HTML5Window.prototype = {
 		}
 	}
 	,handleResize: function() {
-		var stretch = this.parent.fullscreen || this.setWidth == 0 && this.setHeight == 0;
+		var stretch = this.parent.__fullscreen || this.setWidth == 0 && this.setHeight == 0;
 		if(this.element != null && (this.div == null || this.div != null && stretch)) {
 			if(stretch) {
-				if(this.parent.width != this.element.clientWidth || this.parent.height != this.element.clientHeight) {
-					this.parent.width = this.element.clientWidth;
-					this.parent.height = this.element.clientHeight;
+				if(this.parent.__width != this.element.clientWidth || this.parent.__height != this.element.clientHeight) {
+					this.parent.set_width(this.element.clientWidth);
+					this.parent.set_height(this.element.clientHeight);
 					if(this.canvas != null) {
 						if(this.element != this.canvas) {
 							this.canvas.width = this.element.clientWidth;
@@ -3428,16 +3579,16 @@ lime._backend.html5.HTML5Window.prototype = {
 		if(this.element != null) {
 			if(this.canvas != null) {
 				var rect = this.canvas.getBoundingClientRect();
-				x = (touch.clientX - rect.left) * (this.parent.width / rect.width);
-				y = (touch.clientY - rect.top) * (this.parent.height / rect.height);
+				x = (touch.clientX - rect.left) * (this.parent.__width / rect.width);
+				y = (touch.clientY - rect.top) * (this.parent.__height / rect.height);
 			} else if(this.div != null) {
 				var rect1 = this.div.getBoundingClientRect();
 				x = touch.clientX - rect1.left;
 				y = touch.clientY - rect1.top;
 			} else {
 				var rect2 = this.element.getBoundingClientRect();
-				x = (touch.clientX - rect2.left) * (this.parent.width / rect2.width);
-				y = (touch.clientY - rect2.top) * (this.parent.height / rect2.height);
+				x = (touch.clientX - rect2.left) * (this.parent.__width / rect2.width);
+				y = (touch.clientY - rect2.top) * (this.parent.__height / rect2.height);
 			}
 		} else {
 			x = touch.clientX;
@@ -3491,66 +3642,40 @@ lime._backend.html5.HTML5Window.prototype = {
 	}
 	,resize: function(width,height) {
 	}
+	,setFullscreen: function(value) {
+		return false;
+	}
 	,setIcon: function(image) {
+	}
+	,setMinimized: function(value) {
+		return false;
 	}
 	,__class__: lime._backend.html5.HTML5Window
 };
 lime.app = {};
+lime.app.IModule = function() { };
+$hxClasses["lime.app.IModule"] = lime.app.IModule;
+lime.app.IModule.__name__ = ["lime","app","IModule"];
+lime.app.IModule.prototype = {
+	__class__: lime.app.IModule
+};
 lime.app.Module = function() {
 };
 $hxClasses["lime.app.Module"] = lime.app.Module;
 lime.app.Module.__name__ = ["lime","app","Module"];
+lime.app.Module.__interfaces__ = [lime.app.IModule];
 lime.app.Module.prototype = {
-	__class__: lime.app.Module
-};
-lime.app.Application = function() {
-	this.onUpdate = new lime.app.Event();
-	lime.app.Module.call(this);
-	if(lime.app.Application.current == null) lime.app.Application.current = this;
-	this.renderers = new Array();
-	this.windows = new Array();
-	this.backend = new lime._backend.html5.HTML5Application(this);
-	this.onUpdate.add($bind(this,this.update));
-};
-$hxClasses["lime.app.Application"] = lime.app.Application;
-lime.app.Application.__name__ = ["lime","app","Application"];
-lime.app.Application.current = null;
-lime.app.Application.__super__ = lime.app.Module;
-lime.app.Application.prototype = $extend(lime.app.Module.prototype,{
-	addRenderer: function(renderer) {
-		renderer.onRender.add($bind(this,this.render));
-		renderer.onRenderContextLost.add($bind(this,this.onRenderContextLost));
-		renderer.onRenderContextRestored.add($bind(this,this.onRenderContextRestored));
-		this.renderers.push(renderer);
+	init: function(context) {
 	}
-	,addWindow: function(window) {
-		this.windows.push(window);
-		window.onKeyDown.add($bind(this,this.onKeyDown));
-		window.onKeyUp.add($bind(this,this.onKeyUp));
-		window.onMouseDown.add($bind(this,this.onMouseDown));
-		window.onMouseMove.add($bind(this,this.onMouseMove));
-		window.onMouseUp.add($bind(this,this.onMouseUp));
-		window.onMouseWheel.add($bind(this,this.onMouseWheel));
-		window.onTouchStart.add($bind(this,this.onTouchStart));
-		window.onTouchMove.add($bind(this,this.onTouchMove));
-		window.onTouchEnd.add($bind(this,this.onTouchEnd));
-		window.onWindowActivate.add($bind(this,this.onWindowActivate));
-		window.onWindowClose.add($bind(this,this.onWindowClose));
-		window.onWindowDeactivate.add($bind(this,this.onWindowDeactivate));
-		window.onWindowFocusIn.add($bind(this,this.onWindowFocusIn));
-		window.onWindowFocusOut.add($bind(this,this.onWindowFocusOut));
-		window.onWindowMove.add($bind(this,this.onWindowMove));
-		window.onWindowResize.add($bind(this,this.onWindowResize));
-		window.create(this);
+	,onGamepadAxisMove: function(gamepad,axis,value) {
 	}
-	,create: function(config) {
-		this.backend.create(config);
+	,onGamepadButtonDown: function(gamepad,button) {
 	}
-	,exec: function() {
-		lime.app.Application.current = this;
-		return this.backend.exec();
+	,onGamepadButtonUp: function(gamepad,button) {
 	}
-	,init: function(context) {
+	,onGamepadConnect: function(gamepad) {
+	}
+	,onGamepadDisconnect: function(gamepad) {
 	}
 	,onKeyDown: function(keyCode,modifier) {
 	}
@@ -3558,7 +3683,9 @@ lime.app.Application.prototype = $extend(lime.app.Module.prototype,{
 	}
 	,onMouseDown: function(x,y,button) {
 	}
-	,onMouseMove: function(x,y,button) {
+	,onMouseMove: function(x,y) {
+	}
+	,onMouseMoveRelative: function(x,y) {
 	}
 	,onMouseUp: function(x,y,button) {
 	}
@@ -3584,9 +3711,338 @@ lime.app.Application.prototype = $extend(lime.app.Module.prototype,{
 	}
 	,onWindowFocusOut: function() {
 	}
+	,onWindowFullscreen: function() {
+	}
+	,onWindowMinimize: function() {
+	}
 	,onWindowMove: function(x,y) {
 	}
 	,onWindowResize: function(width,height) {
+	}
+	,onWindowRestore: function() {
+	}
+	,render: function(context) {
+	}
+	,update: function(deltaTime) {
+	}
+	,__class__: lime.app.Module
+};
+lime.app.Application = function() {
+	this.onUpdate = new lime.app.Event();
+	lime.app.Module.call(this);
+	if(lime.app.Application.current == null) lime.app.Application.current = this;
+	this.modules = new Array();
+	this.renderers = new Array();
+	this.windows = new Array();
+	this.backend = new lime._backend.html5.HTML5Application(this);
+	this.onUpdate.add($bind(this,this.update));
+};
+$hxClasses["lime.app.Application"] = lime.app.Application;
+lime.app.Application.__name__ = ["lime","app","Application"];
+lime.app.Application.current = null;
+lime.app.Application.__super__ = lime.app.Module;
+lime.app.Application.prototype = $extend(lime.app.Module.prototype,{
+	addModule: function(module) {
+		this.modules.push(module);
+		if(this.initialized && this.renderers[0] != null) module.init(this.renderers[0].context);
+	}
+	,addRenderer: function(renderer) {
+		renderer.onRender.add($bind(this,this.render));
+		renderer.onRenderContextLost.add($bind(this,this.onRenderContextLost));
+		renderer.onRenderContextRestored.add($bind(this,this.onRenderContextRestored));
+		this.renderers.push(renderer);
+	}
+	,addWindow: function(window) {
+		this.windows.push(window);
+		window.onGamepadAxisMove.add($bind(this,this.onGamepadAxisMove));
+		window.onGamepadButtonDown.add($bind(this,this.onGamepadButtonDown));
+		window.onGamepadButtonUp.add($bind(this,this.onGamepadButtonUp));
+		window.onGamepadConnect.add($bind(this,this.onGamepadConnect));
+		window.onGamepadDisconnect.add($bind(this,this.onGamepadDisconnect));
+		window.onKeyDown.add($bind(this,this.onKeyDown));
+		window.onKeyUp.add($bind(this,this.onKeyUp));
+		window.onMouseDown.add($bind(this,this.onMouseDown));
+		window.onMouseMove.add($bind(this,this.onMouseMove));
+		window.onMouseMoveRelative.add($bind(this,this.onMouseMoveRelative));
+		window.onMouseUp.add($bind(this,this.onMouseUp));
+		window.onMouseWheel.add($bind(this,this.onMouseWheel));
+		window.onTouchStart.add($bind(this,this.onTouchStart));
+		window.onTouchMove.add($bind(this,this.onTouchMove));
+		window.onTouchEnd.add($bind(this,this.onTouchEnd));
+		window.onWindowActivate.add($bind(this,this.onWindowActivate));
+		window.onWindowClose.add($bind(this,this.onWindowClose));
+		window.onWindowDeactivate.add($bind(this,this.onWindowDeactivate));
+		window.onWindowFocusIn.add($bind(this,this.onWindowFocusIn));
+		window.onWindowFocusOut.add($bind(this,this.onWindowFocusOut));
+		window.onWindowFullscreen.add($bind(this,this.onWindowFullscreen));
+		window.onWindowMinimize.add($bind(this,this.onWindowMinimize));
+		window.onWindowMove.add($bind(this,this.onWindowMove));
+		window.onWindowResize.add($bind(this,this.onWindowResize));
+		window.onWindowRestore.add($bind(this,this.onWindowRestore));
+		window.create(this);
+	}
+	,create: function(config) {
+		this.backend.create(config);
+	}
+	,exec: function() {
+		lime.app.Application.current = this;
+		return this.backend.exec();
+	}
+	,init: function(context) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.init(context);
+		}
+		this.initialized = true;
+	}
+	,onGamepadAxisMove: function(gamepad,axis,value) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onGamepadAxisMove(gamepad,axis,value);
+		}
+	}
+	,onGamepadButtonDown: function(gamepad,button) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onGamepadButtonDown(gamepad,button);
+		}
+	}
+	,onGamepadButtonUp: function(gamepad,button) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onGamepadButtonUp(gamepad,button);
+		}
+	}
+	,onGamepadConnect: function(gamepad) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onGamepadConnect(gamepad);
+		}
+	}
+	,onGamepadDisconnect: function(gamepad) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onGamepadDisconnect(gamepad);
+		}
+	}
+	,onKeyDown: function(keyCode,modifier) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onKeyDown(keyCode,modifier);
+		}
+	}
+	,onKeyUp: function(keyCode,modifier) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onKeyUp(keyCode,modifier);
+		}
+	}
+	,onMouseDown: function(x,y,button) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onMouseDown(x,y,button);
+		}
+	}
+	,onMouseMove: function(x,y) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onMouseMove(x,y);
+		}
+	}
+	,onMouseMoveRelative: function(x,y) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onMouseMoveRelative(x,y);
+		}
+	}
+	,onMouseUp: function(x,y,button) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onMouseUp(x,y,button);
+		}
+	}
+	,onMouseWheel: function(deltaX,deltaY) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onMouseWheel(deltaX,deltaY);
+		}
+	}
+	,onRenderContextLost: function() {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onRenderContextLost();
+		}
+	}
+	,onRenderContextRestored: function(context) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onRenderContextRestored(context);
+		}
+	}
+	,onTouchEnd: function(x,y,id) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onTouchEnd(x,y,id);
+		}
+	}
+	,onTouchMove: function(x,y,id) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onTouchMove(x,y,id);
+		}
+	}
+	,onTouchStart: function(x,y,id) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onTouchStart(x,y,id);
+		}
+	}
+	,onWindowActivate: function() {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowActivate();
+		}
+	}
+	,onWindowClose: function() {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowClose();
+		}
+	}
+	,onWindowDeactivate: function() {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowDeactivate();
+		}
+	}
+	,onWindowFocusIn: function() {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowFocusIn();
+		}
+	}
+	,onWindowFocusOut: function() {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowFocusOut();
+		}
+	}
+	,onWindowFullscreen: function() {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowFullscreen();
+		}
+	}
+	,onWindowMinimize: function() {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowMinimize();
+		}
+	}
+	,onWindowMove: function(x,y) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowMove(x,y);
+		}
+	}
+	,onWindowResize: function(width,height) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowResize(width,height);
+		}
+	}
+	,onWindowRestore: function() {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.onWindowRestore();
+		}
+	}
+	,removeModule: function(module) {
+		HxOverrides.remove(this.modules,module);
 	}
 	,removeRenderer: function(renderer) {
 		if(renderer != null && HxOverrides.indexOf(this.renderers,renderer,0) > -1) HxOverrides.remove(this.renderers,renderer);
@@ -3598,8 +4054,22 @@ lime.app.Application.prototype = $extend(lime.app.Module.prototype,{
 		}
 	}
 	,render: function(context) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.render(context);
+		}
 	}
 	,update: function(deltaTime) {
+		var _g = 0;
+		var _g1 = this.modules;
+		while(_g < _g1.length) {
+			var module = _g1[_g];
+			++_g;
+			module.update(deltaTime);
+		}
 	}
 	,get_renderer: function() {
 		return this.renderers[0];
@@ -3608,6 +4078,7 @@ lime.app.Application.prototype = $extend(lime.app.Module.prototype,{
 		return this.windows[0];
 	}
 	,__class__: lime.app.Application
+	,__properties__: {get_window:"get_window",get_renderer:"get_renderer"}
 });
 lime.app.Event = function() {
 	this.listeners = new Array();
@@ -3699,7 +4170,7 @@ lime.app.Preloader.prototype = {
 	}
 	,loadFont: function(font) {
 		var _g = this;
-		if(window.document.fonts && window.document.fonts.load) window.document.fonts.load("1em '" + font + "'").then(function() {
+		if(window.document.fonts && window.document.fonts.load) window.document.fonts.load("1em '" + font + "'").then(function(_) {
 			_g.loaded++;
 			_g.update(_g.loaded,_g.total);
 			if(_g.loaded == _g.total) _g.start();
@@ -4227,11 +4698,15 @@ lime.audio.AudioManager.suspend = function() {
 		}
 	}
 };
-lime.audio.AudioSource = function(buffer) {
+lime.audio.AudioSource = function(buffer,offset,length,loops) {
+	if(loops == null) loops = 0;
+	if(offset == null) offset = 0;
 	this.onComplete = new lime.app.Event();
 	this.buffer = buffer;
+	this.offset = offset;
+	if(length != null && length != 0) this.set_length(length);
+	this.loops = loops;
 	this.id = 0;
-	this.pauseTime = 0;
 	if(buffer != null) this.init();
 };
 $hxClasses["lime.audio.AudioSource"] = lime.audio.AudioSource;
@@ -4272,19 +4747,29 @@ lime.audio.AudioSource.prototype = {
 	}
 	,stop: function() {
 	}
+	,timer_onRun: function() {
+	}
+	,get_currentTime: function() {
+		return 0;
+	}
+	,set_currentTime: function(value) {
+		return this.pauseTime = value;
+	}
 	,get_gain: function() {
 		return 1;
 	}
 	,set_gain: function(value) {
 		return 1;
 	}
-	,get_timeOffset: function() {
+	,get_length: function() {
+		if(this.__length != null) return this.__length;
 		return 0;
 	}
-	,set_timeOffset: function(value) {
-		return 0;
+	,set_length: function(value) {
+		return this.__length = value;
 	}
 	,__class__: lime.audio.AudioSource
+	,__properties__: {set_length:"set_length",get_length:"get_length",set_gain:"set_gain",get_gain:"get_gain",set_currentTime:"set_currentTime",get_currentTime:"get_currentTime"}
 };
 lime.audio.FlashAudioContext = function() {
 };
@@ -4922,57 +5407,9 @@ lime.graphics.FlashRenderContext.prototype = {
 	}
 	,__class__: lime.graphics.FlashRenderContext
 };
-lime.graphics.Font = function(fontName) {
-	this.fontName = fontName;
-	this.glyphs = new haxe.ds.IntMap();
-};
-$hxClasses["lime.graphics.Font"] = lime.graphics.Font;
-lime.graphics.Font.__name__ = ["lime","graphics","Font"];
-lime.graphics.Font.fromBytes = function(bytes) {
-	var font = new lime.graphics.Font();
-	return font;
-};
-lime.graphics.Font.fromFile = function(path) {
-	var font = new lime.graphics.Font();
-	font.__fromFile(path);
-	return font;
-};
-lime.graphics.Font.prototype = {
-	createImage: function() {
-		this.glyphs = new haxe.ds.IntMap();
-		return null;
-	}
-	,decompose: function() {
-		return null;
-	}
-	,loadRange: function(size,start,end) {
-	}
-	,loadGlyphs: function(size,glyphs) {
-		if(glyphs == null) glyphs = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^`'\"/\\&*()[]{}<>|:;_-+=?,. ";
-	}
-	,__fromFile: function(path) {
-		this.__fontPath = path;
-	}
-	,__class__: lime.graphics.Font
-};
-lime.graphics.GlyphRect = function(x,y,width,height,xOffset,yOffset) {
-	if(yOffset == null) yOffset = 0;
-	if(xOffset == null) xOffset = 0;
-	this.x = x;
-	this.y = y;
-	this.xOffset = xOffset;
-	this.yOffset = yOffset;
-	this.width = width;
-	this.height = height;
-};
-$hxClasses["lime.graphics.GlyphRect"] = lime.graphics.GlyphRect;
-lime.graphics.GlyphRect.__name__ = ["lime","graphics","GlyphRect"];
-lime.graphics.GlyphRect.prototype = {
-	__class__: lime.graphics.GlyphRect
-};
 lime.graphics.Image = function(buffer,offsetX,offsetY,width,height,color,type) {
-	if(height == null) height = 0;
-	if(width == null) width = 0;
+	if(height == null) height = -1;
+	if(width == null) width = -1;
 	if(offsetY == null) offsetY = 0;
 	if(offsetX == null) offsetX = 0;
 	this.offsetX = offsetX;
@@ -5081,7 +5518,6 @@ lime.graphics.Image.__isGIF = function(bytes) {
 };
 lime.graphics.Image.prototype = {
 	clone: function() {
-		lime.graphics.utils.ImageCanvasUtil.sync(this);
 		var image = new lime.graphics.Image(this.buffer.clone(),this.offsetX,this.offsetY,this.width,this.height,null,this.type);
 		return image;
 	}
@@ -5164,6 +5600,8 @@ lime.graphics.Image.prototype = {
 		if(sourceRect.x + sourceRect.width > sourceImage.width) sourceRect.width = sourceImage.width - sourceRect.x;
 		if(sourceRect.y + sourceRect.height > sourceImage.height) sourceRect.height = sourceImage.height - sourceRect.y;
 		if(sourceRect.width <= 0 || sourceRect.height <= 0) return;
+		if(destPoint.x + sourceRect.width > this.width) sourceRect.width = this.width - destPoint.x;
+		if(destPoint.y + sourceRect.height > this.height) sourceRect.height = this.height - destPoint.y;
 		var _g = this.type;
 		switch(_g[1]) {
 		case 0:
@@ -5189,84 +5627,103 @@ lime.graphics.Image.prototype = {
 		if(format == null) format = "png";
 		return null;
 	}
-	,fillRect: function(rect,color) {
+	,fillRect: function(rect,color,format) {
 		rect = this.__clipRect(rect);
 		if(this.buffer == null || rect == null) return;
 		var _g = this.type;
 		switch(_g[1]) {
 		case 0:
-			lime.graphics.utils.ImageCanvasUtil.fillRect(this,rect,color);
+			lime.graphics.utils.ImageCanvasUtil.fillRect(this,rect,color,format);
 			break;
 		case 1:
 			lime.graphics.utils.ImageCanvasUtil.convertToData(this);
-			lime.graphics.utils.ImageDataUtil.fillRect(this,rect,color);
+			lime.graphics.utils.ImageDataUtil.fillRect(this,rect,color,format);
 			break;
 		case 2:
 			rect.offset(this.offsetX,this.offsetY);
+			if(format == null || format == lime.graphics.PixelFormat.RGBA) color = (color & 255) << 24 | color >> 8;
 			this.buffer.__srcBitmapData.fillRect(rect.__toFlashRectangle(),color);
 			break;
 		default:
 		}
 	}
-	,floodFill: function(x,y,color) {
+	,floodFill: function(x,y,color,format) {
 		if(this.buffer == null) return;
 		var _g = this.type;
 		switch(_g[1]) {
 		case 0:
-			lime.graphics.utils.ImageCanvasUtil.floodFill(this,x,y,color);
+			lime.graphics.utils.ImageCanvasUtil.floodFill(this,x,y,color,format);
 			break;
 		case 1:
 			lime.graphics.utils.ImageCanvasUtil.convertToData(this);
-			lime.graphics.utils.ImageDataUtil.floodFill(this,x,y,color);
+			lime.graphics.utils.ImageDataUtil.floodFill(this,x,y,color,format);
 			break;
 		case 2:
+			if(format == null || format == lime.graphics.PixelFormat.RGBA) color = (color & 255) << 24 | color >> 8;
 			this.buffer.__srcBitmapData.floodFill(x + this.offsetX,y + this.offsetY,color);
 			break;
 		default:
 		}
 	}
-	,getPixel: function(x,y) {
+	,getPixel: function(x,y,format) {
 		if(this.buffer == null || x < 0 || y < 0 || x >= this.width || y >= this.height) return 0;
 		var _g = this.type;
 		switch(_g[1]) {
 		case 0:
-			return lime.graphics.utils.ImageCanvasUtil.getPixel(this,x,y);
+			return lime.graphics.utils.ImageCanvasUtil.getPixel(this,x,y,format);
 		case 1:
 			lime.graphics.utils.ImageCanvasUtil.convertToData(this);
-			return lime.graphics.utils.ImageDataUtil.getPixel(this,x,y);
+			return lime.graphics.utils.ImageDataUtil.getPixel(this,x,y,format);
 		case 2:
-			return this.buffer.__srcBitmapData.getPixel(x + this.offsetX,y + this.offsetY);
+			var color = this.buffer.__srcBitmapData.getPixel(x + this.offsetX,y + this.offsetY);
+			if(format == null || format == lime.graphics.PixelFormat.RGBA) return (color & 255) << 24 | color >> 8; else return color;
+			break;
 		default:
 			return 0;
 		}
 	}
-	,getPixel32: function(x,y) {
+	,getPixel32: function(x,y,format) {
 		if(this.buffer == null || x < 0 || y < 0 || x >= this.width || y >= this.height) return 0;
 		var _g = this.type;
 		switch(_g[1]) {
 		case 0:
-			return lime.graphics.utils.ImageCanvasUtil.getPixel32(this,x,y);
+			return lime.graphics.utils.ImageCanvasUtil.getPixel32(this,x,y,format);
 		case 1:
 			lime.graphics.utils.ImageCanvasUtil.convertToData(this);
-			return lime.graphics.utils.ImageDataUtil.getPixel32(this,x,y);
+			return lime.graphics.utils.ImageDataUtil.getPixel32(this,x,y,format);
 		case 2:
-			return this.buffer.__srcBitmapData.getPixel32(x + this.offsetX,y + this.offsetY);
+			var color = this.buffer.__srcBitmapData.getPixel32(x + this.offsetX,y + this.offsetY);
+			if(format == null || format == lime.graphics.PixelFormat.RGBA) return (color & 255) << 24 | color >> 8; else return color;
+			break;
 		default:
 			return 0;
 		}
 	}
-	,getPixels: function(rect) {
+	,getPixels: function(rect,format) {
 		if(this.buffer == null) return null;
 		var _g = this.type;
 		switch(_g[1]) {
 		case 0:
-			return lime.graphics.utils.ImageCanvasUtil.getPixels(this,rect);
+			return lime.graphics.utils.ImageCanvasUtil.getPixels(this,rect,format);
 		case 1:
 			lime.graphics.utils.ImageCanvasUtil.convertToData(this);
-			return lime.graphics.utils.ImageDataUtil.getPixels(this,rect);
+			return lime.graphics.utils.ImageDataUtil.getPixels(this,rect,format);
 		case 2:
 			rect.offset(this.offsetX,this.offsetY);
-			return this.buffer.__srcBitmapData.getPixels(rect.__toFlashRectangle());
+			var byteArray = this.buffer.__srcBitmapData.getPixels(rect.__toFlashRectangle());
+			if(format == null || format == lime.graphics.PixelFormat.RGBA) {
+				var color;
+				var length = byteArray.length / 4 | 0;
+				var _g1 = 0;
+				while(_g1 < length) {
+					var i = _g1++;
+					color = byteArray.readUnsignedInt();
+					byteArray.position -= 4;
+					byteArray.writeUnsignedInt((color & 255) << 24 | color >> 8);
+				}
+				byteArray.position = 0;
+			}
+			return byteArray;
 		default:
 			return null;
 		}
@@ -5312,54 +5769,70 @@ lime.graphics.Image.prototype = {
 		this.width = newWidth;
 		this.height = newHeight;
 	}
-	,setPixel: function(x,y,color) {
+	,setPixel: function(x,y,color,format) {
 		if(this.buffer == null || x < 0 || y < 0 || x >= this.width || y >= this.height) return;
 		var _g = this.type;
 		switch(_g[1]) {
 		case 0:
-			lime.graphics.utils.ImageCanvasUtil.setPixel(this,x,y,color);
+			lime.graphics.utils.ImageCanvasUtil.setPixel(this,x,y,color,format);
 			break;
 		case 1:
 			lime.graphics.utils.ImageCanvasUtil.convertToData(this);
-			lime.graphics.utils.ImageDataUtil.setPixel(this,x,y,color);
+			lime.graphics.utils.ImageDataUtil.setPixel(this,x,y,color,format);
 			break;
 		case 2:
+			if(format == null || format == lime.graphics.PixelFormat.RGBA) color = (color & 255) << 24 | color >> 8;
 			this.buffer.__srcBitmapData.setPixel(x + this.offsetX,y + this.offsetX,color);
 			break;
 		default:
 		}
 	}
-	,setPixel32: function(x,y,color) {
+	,setPixel32: function(x,y,color,format) {
 		if(this.buffer == null || x < 0 || y < 0 || x >= this.width || y >= this.height) return;
 		var _g = this.type;
 		switch(_g[1]) {
 		case 0:
-			lime.graphics.utils.ImageCanvasUtil.setPixel32(this,x,y,color);
+			lime.graphics.utils.ImageCanvasUtil.setPixel32(this,x,y,color,format);
 			break;
 		case 1:
 			lime.graphics.utils.ImageCanvasUtil.convertToData(this);
-			lime.graphics.utils.ImageDataUtil.setPixel32(this,x,y,color);
+			lime.graphics.utils.ImageDataUtil.setPixel32(this,x,y,color,format);
 			break;
 		case 2:
+			if(format == null || format == lime.graphics.PixelFormat.RGBA) color = (color & 255) << 24 | color >> 8;
 			this.buffer.__srcBitmapData.setPixel32(x + this.offsetX,y + this.offsetY,color);
 			break;
 		default:
 		}
 	}
-	,setPixels: function(rect,byteArray) {
+	,setPixels: function(rect,byteArray,format) {
 		rect = this.__clipRect(rect);
 		if(this.buffer == null || rect == null) return;
 		var _g = this.type;
 		switch(_g[1]) {
 		case 0:
-			lime.graphics.utils.ImageCanvasUtil.setPixels(this,rect,byteArray);
+			lime.graphics.utils.ImageCanvasUtil.setPixels(this,rect,byteArray,format);
 			break;
 		case 1:
 			lime.graphics.utils.ImageCanvasUtil.convertToData(this);
-			lime.graphics.utils.ImageDataUtil.setPixels(this,rect,byteArray);
+			lime.graphics.utils.ImageDataUtil.setPixels(this,rect,byteArray,format);
 			break;
 		case 2:
 			rect.offset(this.offsetX,this.offsetY);
+			if(format == null || format == lime.graphics.PixelFormat.RGBA) {
+				var srcData = byteArray;
+				byteArray = new lime.utils.ByteArray();
+				var color;
+				var length = byteArray.length / 4 | 0;
+				var _g1 = 0;
+				while(_g1 < length) {
+					var i = _g1++;
+					color = srcData.readUnsignedInt();
+					byteArray.writeUnsignedInt((color & 255) << 24 | color >> 8);
+				}
+				srcData.position = 0;
+				byteArray.position = 0;
+			}
 			this.buffer.__srcBitmapData.setPixels(rect.__toFlashRectangle(),byteArray);
 			break;
 		default:
@@ -5427,13 +5900,14 @@ lime.graphics.Image.prototype = {
 	,__fromImageBuffer: function(buffer) {
 		this.buffer = buffer;
 		if(buffer != null) {
-			if(this.width == 0) this.width = buffer.width;
-			if(this.height == 0) this.height = buffer.height;
+			if(this.width == -1) this.width = buffer.width;
+			if(this.height == -1) this.height = buffer.height;
 		}
 	}
 	,get_data: function() {
 		if(this.buffer.data == null && this.buffer.width > 0 && this.buffer.height > 0) {
 			lime.graphics.utils.ImageCanvasUtil.convertToCanvas(this);
+			lime.graphics.utils.ImageCanvasUtil.sync(this);
 			lime.graphics.utils.ImageCanvasUtil.createImageData(this);
 		}
 		return this.buffer.data;
@@ -5505,20 +5979,8 @@ lime.graphics.Image.prototype = {
 		return this.buffer.transparent = value;
 	}
 	,__class__: lime.graphics.Image
+	,__properties__: {set_transparent:"set_transparent",get_transparent:"get_transparent",set_src:"set_src",get_src:"get_src",get_rect:"get_rect",set_premultiplied:"set_premultiplied",get_premultiplied:"get_premultiplied",set_powerOfTwo:"set_powerOfTwo",get_powerOfTwo:"get_powerOfTwo",set_data:"set_data",get_data:"get_data"}
 };
-lime.graphics.ImageChannel = $hxClasses["lime.graphics.ImageChannel"] = { __ename__ : true, __constructs__ : ["RED","GREEN","BLUE","ALPHA"] };
-lime.graphics.ImageChannel.RED = ["RED",0];
-lime.graphics.ImageChannel.RED.toString = $estr;
-lime.graphics.ImageChannel.RED.__enum__ = lime.graphics.ImageChannel;
-lime.graphics.ImageChannel.GREEN = ["GREEN",1];
-lime.graphics.ImageChannel.GREEN.toString = $estr;
-lime.graphics.ImageChannel.GREEN.__enum__ = lime.graphics.ImageChannel;
-lime.graphics.ImageChannel.BLUE = ["BLUE",2];
-lime.graphics.ImageChannel.BLUE.toString = $estr;
-lime.graphics.ImageChannel.BLUE.__enum__ = lime.graphics.ImageChannel;
-lime.graphics.ImageChannel.ALPHA = ["ALPHA",3];
-lime.graphics.ImageChannel.ALPHA.toString = $estr;
-lime.graphics.ImageChannel.ALPHA.__enum__ = lime.graphics.ImageChannel;
 lime.graphics.ImageBuffer = function(data,width,height,bitsPerPixel) {
 	if(bitsPerPixel == null) bitsPerPixel = 4;
 	if(height == null) height = 0;
@@ -5534,7 +5996,25 @@ lime.graphics.ImageBuffer.__name__ = ["lime","graphics","ImageBuffer"];
 lime.graphics.ImageBuffer.prototype = {
 	clone: function() {
 		var buffer = new lime.graphics.ImageBuffer(this.data,this.width,this.height,this.bitsPerPixel);
-		buffer.set_src(this.get_src());
+		if(this.data != null) {
+			buffer.data = new Uint8Array(this.data.byteLength);
+			var copy = new Uint8Array(this.data);
+			buffer.data.set(copy);
+		} else if(this.__srcImageData != null) {
+			buffer.__srcCanvas = window.document.createElement("canvas");
+			buffer.__srcContext = buffer.__srcCanvas.getContext("2d");
+			buffer.__srcCanvas.width = this.__srcImageData.width;
+			buffer.__srcCanvas.height = this.__srcImageData.height;
+			buffer.__srcImageData = buffer.__srcContext.createImageData(this.__srcImageData.width,this.__srcImageData.height);
+			var copy1 = new Uint8ClampedArray(this.__srcImageData.data);
+			buffer.__srcImageData.data.set(copy1);
+		} else if(this.__srcCanvas != null) {
+			buffer.__srcCanvas = window.document.createElement("canvas");
+			buffer.__srcContext = buffer.__srcCanvas.getContext("2d");
+			buffer.__srcCanvas.width = this.__srcCanvas.width;
+			buffer.__srcCanvas.height = this.__srcCanvas.height;
+			buffer.__srcContext.drawImage(this.__srcCanvas,0,0);
+		} else buffer.__srcImage = this.__srcImage;
 		buffer.premultiplied = this.premultiplied;
 		buffer.transparent = this.transparent;
 		return buffer;
@@ -5551,7 +6031,21 @@ lime.graphics.ImageBuffer.prototype = {
 		return value;
 	}
 	,__class__: lime.graphics.ImageBuffer
+	,__properties__: {set_src:"set_src",get_src:"get_src"}
 };
+lime.graphics.ImageChannel = $hxClasses["lime.graphics.ImageChannel"] = { __ename__ : true, __constructs__ : ["RED","GREEN","BLUE","ALPHA"] };
+lime.graphics.ImageChannel.RED = ["RED",0];
+lime.graphics.ImageChannel.RED.toString = $estr;
+lime.graphics.ImageChannel.RED.__enum__ = lime.graphics.ImageChannel;
+lime.graphics.ImageChannel.GREEN = ["GREEN",1];
+lime.graphics.ImageChannel.GREEN.toString = $estr;
+lime.graphics.ImageChannel.GREEN.__enum__ = lime.graphics.ImageChannel;
+lime.graphics.ImageChannel.BLUE = ["BLUE",2];
+lime.graphics.ImageChannel.BLUE.toString = $estr;
+lime.graphics.ImageChannel.BLUE.__enum__ = lime.graphics.ImageChannel;
+lime.graphics.ImageChannel.ALPHA = ["ALPHA",3];
+lime.graphics.ImageChannel.ALPHA.toString = $estr;
+lime.graphics.ImageChannel.ALPHA.__enum__ = lime.graphics.ImageChannel;
 lime.graphics.ImageType = $hxClasses["lime.graphics.ImageType"] = { __ename__ : true, __constructs__ : ["CANVAS","DATA","FLASH","CUSTOM"] };
 lime.graphics.ImageType.CANVAS = ["CANVAS",0];
 lime.graphics.ImageType.CANVAS.toString = $estr;
@@ -5565,6 +6059,13 @@ lime.graphics.ImageType.FLASH.__enum__ = lime.graphics.ImageType;
 lime.graphics.ImageType.CUSTOM = ["CUSTOM",3];
 lime.graphics.ImageType.CUSTOM.toString = $estr;
 lime.graphics.ImageType.CUSTOM.__enum__ = lime.graphics.ImageType;
+lime.graphics.PixelFormat = $hxClasses["lime.graphics.PixelFormat"] = { __ename__ : true, __constructs__ : ["RGBA","ARGB"] };
+lime.graphics.PixelFormat.RGBA = ["RGBA",0];
+lime.graphics.PixelFormat.RGBA.toString = $estr;
+lime.graphics.PixelFormat.RGBA.__enum__ = lime.graphics.PixelFormat;
+lime.graphics.PixelFormat.ARGB = ["ARGB",1];
+lime.graphics.PixelFormat.ARGB.toString = $estr;
+lime.graphics.PixelFormat.ARGB.__enum__ = lime.graphics.PixelFormat;
 lime.graphics.RenderContext = $hxClasses["lime.graphics.RenderContext"] = { __ename__ : true, __constructs__ : ["OPENGL","CANVAS","DOM","FLASH","CONSOLE","CUSTOM"] };
 lime.graphics.RenderContext.OPENGL = function(gl) { var $x = ["OPENGL",0,gl]; $x.__enum__ = lime.graphics.RenderContext; $x.toString = $estr; return $x; };
 lime.graphics.RenderContext.CANVAS = function(context) { var $x = ["CANVAS",1,context]; $x.__enum__ = lime.graphics.RenderContext; $x.toString = $estr; return $x; };
@@ -5611,28 +6112,25 @@ lime.graphics.format.BMP.encode = function(image,type) {
 		fileHeaderLength = 0;
 		pixelValuesLength += image.width * image.height;
 		break;
-	default:
+	case 0:
+		pixelValuesLength = image.width * 3 + image.width * 3 % 4 + image.height * 3 + image.height * 3;
+		break;
 	}
 	var data = new lime.utils.ByteArray(fileHeaderLength + infoHeaderLength + pixelValuesLength);
 	if(fileHeaderLength > 0) {
 		data.writeByte(66);
 		data.writeByte(77);
 		data.writeInt(data.length);
-		data.writeInt(0);
+		data.writeShort(0);
+		data.writeShort(0);
 		data.writeInt(fileHeaderLength + infoHeaderLength);
 	}
 	data.writeInt(infoHeaderLength);
 	data.writeInt(image.width);
-	if(type == lime.graphics.format.BMPType.ICO) data.writeInt(image.height * 2); else data.writeInt(image.height);
+	data.writeInt(type == lime.graphics.format.BMPType.ICO?image.height * 2:image.height);
 	data.writeShort(1);
-	data.writeShort(32);
-	switch(type[1]) {
-	case 1:
-		data.writeInt(3);
-		break;
-	default:
-		data.writeInt(0);
-	}
+	data.writeShort(type == lime.graphics.format.BMPType.RGB?24:32);
+	data.writeInt(type == lime.graphics.format.BMPType.BITFIELD?3:0);
 	data.writeInt(pixelValuesLength);
 	data.writeInt(11824);
 	data.writeInt(11824);
@@ -5647,33 +6145,27 @@ lime.graphics.format.BMP.encode = function(image,type) {
 		data.writeByte(110);
 		data.writeByte(105);
 		data.writeByte(87);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
-		data.writeInt(0);
+		var _g = 0;
+		while(_g < 48) {
+			var i = _g++;
+			data.writeByte(0);
+		}
 	}
-	var pixels = image.getPixels(new lime.math.Rectangle(0,0,image.width,image.height));
+	var pixels = image.getPixels(new lime.math.Rectangle(0,0,image.width,image.height),lime.graphics.PixelFormat.ARGB);
 	var a;
 	var r;
 	var g;
 	var b;
-	if(type != lime.graphics.format.BMPType.ICO) {
+	switch(type[1]) {
+	case 1:
 		var _g1 = 0;
-		var _g = image.height;
-		while(_g1 < _g) {
+		var _g2 = image.height;
+		while(_g1 < _g2) {
 			var y = _g1++;
 			pixels.position = (image.height - 1 - y) * 4 * image.width;
 			var _g3 = 0;
-			var _g2 = image.width;
-			while(_g3 < _g2) {
+			var _g21 = image.width;
+			while(_g3 < _g21) {
 				var x = _g3++;
 				a = pixels.readByte();
 				r = pixels.readByte();
@@ -5685,7 +6177,8 @@ lime.graphics.format.BMP.encode = function(image,type) {
 				data.writeByte(a);
 			}
 		}
-	} else {
+		break;
+	case 2:
 		var andMask = new lime.utils.ByteArray(image.width * image.height);
 		var _g11 = 0;
 		var _g4 = image.height;
@@ -5693,8 +6186,8 @@ lime.graphics.format.BMP.encode = function(image,type) {
 			var y1 = _g11++;
 			pixels.position = (image.height - 1 - y1) * 4 * image.width;
 			var _g31 = 0;
-			var _g21 = image.width;
-			while(_g31 < _g21) {
+			var _g22 = image.width;
+			while(_g31 < _g22) {
 				var x1 = _g31++;
 				a = pixels.readByte();
 				r = pixels.readByte();
@@ -5708,6 +6201,33 @@ lime.graphics.format.BMP.encode = function(image,type) {
 			}
 		}
 		data.writeBytes(andMask);
+		break;
+	case 0:
+		var _g12 = 0;
+		var _g5 = image.height;
+		while(_g12 < _g5) {
+			var y2 = _g12++;
+			pixels.position = (image.height - 1 - y2) * 4 * image.width;
+			var _g32 = 0;
+			var _g23 = image.width;
+			while(_g32 < _g23) {
+				var x2 = _g32++;
+				a = pixels.readByte();
+				r = pixels.readByte();
+				g = pixels.readByte();
+				b = pixels.readByte();
+				data.writeByte(b);
+				data.writeByte(g);
+				data.writeByte(r);
+			}
+			var _g33 = 0;
+			var _g24 = image.width * 3 % 4;
+			while(_g33 < _g24) {
+				var i1 = _g33++;
+				data.writeByte(0);
+			}
+		}
+		break;
 	}
 	return data;
 };
@@ -5737,6 +6257,7 @@ lime.graphics.opengl = {};
 lime.graphics.opengl.GL = function() { };
 $hxClasses["lime.graphics.opengl.GL"] = lime.graphics.opengl.GL;
 lime.graphics.opengl.GL.__name__ = ["lime","graphics","opengl","GL"];
+lime.graphics.opengl.GL.__properties__ = {get_version:"get_version"}
 lime.graphics.opengl.GL.version = null;
 lime.graphics.opengl.GL.context = null;
 lime.graphics.opengl.GL.activeTexture = function(texture) {
@@ -6172,6 +6693,7 @@ lime.graphics.utils.ImageCanvasUtil.convertToCanvas = function(image) {
 lime.graphics.utils.ImageCanvasUtil.convertToData = function(image) {
 	if(image.buffer.data == null) {
 		lime.graphics.utils.ImageCanvasUtil.convertToCanvas(image);
+		lime.graphics.utils.ImageCanvasUtil.sync(image);
 		lime.graphics.utils.ImageCanvasUtil.createImageData(image);
 		image.buffer.__srcCanvas = null;
 		image.buffer.__srcContext = null;
@@ -6221,42 +6743,52 @@ lime.graphics.utils.ImageCanvasUtil.createImageData = function(image) {
 		buffer.data = new Uint8Array(buffer.__srcImageData.data.buffer);
 	}
 };
-lime.graphics.utils.ImageCanvasUtil.fillRect = function(image,rect,color) {
+lime.graphics.utils.ImageCanvasUtil.fillRect = function(image,rect,color,format) {
 	lime.graphics.utils.ImageCanvasUtil.convertToCanvas(image);
 	lime.graphics.utils.ImageCanvasUtil.sync(image);
 	if(rect.x == 0 && rect.y == 0 && rect.width == image.width && rect.height == image.height) {
-		if(image.get_transparent() && (color & -16777216) == 0) {
+		if(image.get_transparent() && (color & 255) == 0) {
 			image.buffer.__srcCanvas.width = image.buffer.width;
 			return;
 		}
 	}
+	var r;
+	var g;
+	var b;
 	var a;
-	if(image.get_transparent()) a = (color & -16777216) >>> 24; else a = 255;
-	var r = (color & 16711680) >>> 16;
-	var g = (color & 65280) >>> 8;
-	var b = color & 255;
+	if(format == lime.graphics.PixelFormat.ARGB) {
+		r = color >> 16 & 255;
+		g = color >> 8 & 255;
+		b = color & 255;
+		if(image.get_transparent()) a = color >> 24 & 255; else a = 255;
+	} else {
+		r = color >> 24 & 255;
+		g = color >> 16 & 255;
+		b = color >> 8 & 255;
+		if(image.get_transparent()) a = color & 255; else a = 255;
+	}
 	image.buffer.__srcContext.fillStyle = "rgba(" + r + ", " + g + ", " + b + ", " + a / 255 + ")";
 	image.buffer.__srcContext.fillRect(rect.x + image.offsetX,rect.y + image.offsetY,rect.width + image.offsetX,rect.height + image.offsetY);
 };
-lime.graphics.utils.ImageCanvasUtil.floodFill = function(image,x,y,color) {
+lime.graphics.utils.ImageCanvasUtil.floodFill = function(image,x,y,color,format) {
 	lime.graphics.utils.ImageCanvasUtil.convertToCanvas(image);
 	lime.graphics.utils.ImageCanvasUtil.createImageData(image);
-	lime.graphics.utils.ImageDataUtil.floodFill(image,x,y,color);
+	lime.graphics.utils.ImageDataUtil.floodFill(image,x,y,color,format);
 };
-lime.graphics.utils.ImageCanvasUtil.getPixel = function(image,x,y) {
+lime.graphics.utils.ImageCanvasUtil.getPixel = function(image,x,y,format) {
 	lime.graphics.utils.ImageCanvasUtil.convertToCanvas(image);
 	lime.graphics.utils.ImageCanvasUtil.createImageData(image);
-	return lime.graphics.utils.ImageDataUtil.getPixel(image,x,y);
+	return lime.graphics.utils.ImageDataUtil.getPixel(image,x,y,format);
 };
-lime.graphics.utils.ImageCanvasUtil.getPixel32 = function(image,x,y) {
+lime.graphics.utils.ImageCanvasUtil.getPixel32 = function(image,x,y,format) {
 	lime.graphics.utils.ImageCanvasUtil.convertToCanvas(image);
 	lime.graphics.utils.ImageCanvasUtil.createImageData(image);
-	return lime.graphics.utils.ImageDataUtil.getPixel32(image,x,y);
+	return lime.graphics.utils.ImageDataUtil.getPixel32(image,x,y,format);
 };
-lime.graphics.utils.ImageCanvasUtil.getPixels = function(image,rect) {
+lime.graphics.utils.ImageCanvasUtil.getPixels = function(image,rect,format) {
 	lime.graphics.utils.ImageCanvasUtil.convertToCanvas(image);
 	lime.graphics.utils.ImageCanvasUtil.createImageData(image);
-	return lime.graphics.utils.ImageDataUtil.getPixels(image,rect);
+	return lime.graphics.utils.ImageDataUtil.getPixels(image,rect,format);
 };
 lime.graphics.utils.ImageCanvasUtil.merge = function(image,sourceImage,sourceRect,destPoint,redMultiplier,greenMultiplier,blueMultiplier,alphaMultiplier) {
 	lime.graphics.utils.ImageCanvasUtil.convertToCanvas(sourceImage);
@@ -6271,26 +6803,27 @@ lime.graphics.utils.ImageCanvasUtil.resize = function(image,newWidth,newHeight) 
 		lime.graphics.utils.ImageCanvasUtil.createCanvas(image,newWidth,newHeight);
 		buffer.__srcContext.drawImage(buffer.get_src(),0,0,newWidth,newHeight);
 	} else {
+		lime.graphics.utils.ImageCanvasUtil.sync(image);
 		var sourceCanvas = buffer.__srcCanvas;
 		buffer.__srcCanvas = null;
 		lime.graphics.utils.ImageCanvasUtil.createCanvas(image,newWidth,newHeight);
 		buffer.__srcContext.drawImage(sourceCanvas,0,0,newWidth,newHeight);
 	}
 };
-lime.graphics.utils.ImageCanvasUtil.setPixel = function(image,x,y,color) {
+lime.graphics.utils.ImageCanvasUtil.setPixel = function(image,x,y,color,format) {
 	lime.graphics.utils.ImageCanvasUtil.convertToCanvas(image);
 	lime.graphics.utils.ImageCanvasUtil.createImageData(image);
-	lime.graphics.utils.ImageDataUtil.setPixel(image,x,y,color);
+	lime.graphics.utils.ImageDataUtil.setPixel(image,x,y,color,format);
 };
-lime.graphics.utils.ImageCanvasUtil.setPixel32 = function(image,x,y,color) {
+lime.graphics.utils.ImageCanvasUtil.setPixel32 = function(image,x,y,color,format) {
 	lime.graphics.utils.ImageCanvasUtil.convertToCanvas(image);
 	lime.graphics.utils.ImageCanvasUtil.createImageData(image);
-	lime.graphics.utils.ImageDataUtil.setPixel32(image,x,y,color);
+	lime.graphics.utils.ImageDataUtil.setPixel32(image,x,y,color,format);
 };
-lime.graphics.utils.ImageCanvasUtil.setPixels = function(image,rect,byteArray) {
+lime.graphics.utils.ImageCanvasUtil.setPixels = function(image,rect,byteArray,format) {
 	lime.graphics.utils.ImageCanvasUtil.convertToCanvas(image);
 	lime.graphics.utils.ImageCanvasUtil.createImageData(image);
-	lime.graphics.utils.ImageDataUtil.setPixels(image,rect,byteArray);
+	lime.graphics.utils.ImageDataUtil.setPixels(image,rect,byteArray,format);
 };
 lime.graphics.utils.ImageCanvasUtil.sync = function(image) {
 	if(image.dirty && image.type != lime.graphics.ImageType.DATA) {
@@ -6306,6 +6839,7 @@ lime.graphics.utils.ImageDataUtil.__alpha16 = null;
 lime.graphics.utils.ImageDataUtil.__clamp = null;
 lime.graphics.utils.ImageDataUtil.colorTransform = function(image,rect,colorMatrix) {
 	var data = image.buffer.data;
+	if(data == null) return;
 	var stride = image.buffer.width * 4;
 	var offset;
 	var rowStart = Std["int"](rect.get_top() + image.offsetY);
@@ -6370,21 +6904,24 @@ lime.graphics.utils.ImageDataUtil.copyChannel = function(image,sourceImage,sourc
 		srcIdx = 3;
 		break;
 	}
+	var srcData = sourceImage.buffer.data;
+	var destData = image.buffer.data;
+	if(srcData == null || destData == null) return;
 	var srcStride = sourceImage.buffer.width * 4 | 0;
 	var srcPosition = (sourceRect.x + sourceImage.offsetX) * 4 + srcStride * (sourceRect.y + sourceImage.offsetY) + srcIdx | 0;
 	var srcRowOffset = srcStride - (4 * (sourceRect.width + sourceImage.offsetX) | 0);
 	var srcRowEnd = 4 * (sourceRect.x + sourceImage.offsetX + sourceRect.width) | 0;
-	var srcData = sourceImage.buffer.data;
+	var srcData1 = sourceImage.buffer.data;
 	var destStride = image.buffer.width * 4 | 0;
 	var destPosition = (destPoint.x + image.offsetX) * 4 + destStride * (destPoint.y + image.offsetY) + destIdx | 0;
 	var destRowOffset = destStride - (4 * (sourceRect.width + image.offsetX) | 0);
 	var destRowEnd = 4 * (destPoint.x + image.offsetX + sourceRect.width) | 0;
-	var destData = image.buffer.data;
+	var destData1 = image.buffer.data;
 	var length = sourceRect.width * sourceRect.height | 0;
 	var _g = 0;
 	while(_g < length) {
 		var i = _g++;
-		destData[destPosition] = srcData[srcPosition];
+		destData1[destPosition] = srcData1[srcPosition];
 		srcPosition += 4;
 		destPosition += 4;
 		if(srcPosition % srcStride > srcRowEnd) srcPosition += srcRowOffset;
@@ -6449,14 +6986,25 @@ lime.graphics.utils.ImageDataUtil.copyPixels = function(image,sourceImage,source
 	}
 	image.dirty = true;
 };
-lime.graphics.utils.ImageDataUtil.fillRect = function(image,rect,color) {
+lime.graphics.utils.ImageDataUtil.fillRect = function(image,rect,color,format) {
+	var r;
+	var g;
+	var b;
 	var a;
-	if(image.get_transparent()) a = (color & -16777216) >>> 24; else a = 255;
-	var r = (color & 16711680) >>> 16;
-	var g = (color & 65280) >>> 8;
-	var b = color & 255;
+	if(format == lime.graphics.PixelFormat.ARGB) {
+		if(image.get_transparent()) a = color >> 24 & 255; else a = 255;
+		r = color >> 16 & 255;
+		g = color >> 8 & 255;
+		b = color & 255;
+	} else {
+		r = color >> 24 & 255;
+		g = color >> 16 & 255;
+		b = color >> 8 & 255;
+		if(image.get_transparent()) a = color & 255; else a = 255;
+	}
 	var rgba = r | g << 8 | b << 16 | a << 24;
 	var data = image.buffer.data;
+	if(data == null) return;
 	if(rect.width == image.buffer.width && rect.height == image.buffer.height && rect.x == 0 && rect.y == 0 && image.offsetX == 0 && image.offsetY == 0) {
 		var length = image.buffer.width * image.buffer.height;
 		var j = 0;
@@ -6492,19 +7040,21 @@ lime.graphics.utils.ImageDataUtil.fillRect = function(image,rect,color) {
 	}
 	image.dirty = true;
 };
-lime.graphics.utils.ImageDataUtil.floodFill = function(image,x,y,color) {
+lime.graphics.utils.ImageDataUtil.floodFill = function(image,x,y,color,format) {
 	var data = image.buffer.data;
+	if(data == null) return;
+	if(format == lime.graphics.PixelFormat.ARGB) color = (color & 16777215) << 8 | color >> 24 & 255;
 	var offset = (y + image.offsetY) * (image.buffer.width * 4) + (x + image.offsetX) * 4;
 	var hitColorR = data[offset];
 	var hitColorG = data[offset + 1];
 	var hitColorB = data[offset + 2];
 	var hitColorA;
 	if(image.get_transparent()) hitColorA = data[offset + 3]; else hitColorA = 255;
-	var r = (color & 16711680) >>> 16;
-	var g = (color & 65280) >>> 8;
-	var b = color & 255;
+	var r = color >> 24 & 255;
+	var g = color >> 16 & 255;
+	var b = color >> 8 & 255;
 	var a;
-	if(image.get_transparent()) a = (color & -16777216) >>> 24; else a = 255;
+	if(image.get_transparent()) a = color & 255; else a = 255;
 	if(hitColorR == r && hitColorG == g && hitColorB == b && hitColorA == a) return;
 	var dx = [0,-1,1,0];
 	var dy = [-1,0,0,1];
@@ -6537,52 +7087,76 @@ lime.graphics.utils.ImageDataUtil.floodFill = function(image,x,y,color) {
 	}
 	image.dirty = true;
 };
-lime.graphics.utils.ImageDataUtil.getPixel = function(image,x,y) {
+lime.graphics.utils.ImageDataUtil.getPixel = function(image,x,y,format) {
 	var data = image.buffer.data;
 	var offset = 4 * (y + image.offsetY) * image.buffer.width + (x + image.offsetX) * 4;
+	var pixel;
 	if(image.get_premultiplied()) {
 		var unmultiply = 255.0 / data[offset + 3];
-		haxe.Log.trace(unmultiply,{ fileName : "ImageDataUtil.hx", lineNumber : 364, className : "lime.graphics.utils.ImageDataUtil", methodName : "getPixel"});
-		return lime.graphics.utils.ImageDataUtil.__clamp[data[offset] * unmultiply | 0] << 16 | lime.graphics.utils.ImageDataUtil.__clamp[data[offset + 1] * unmultiply | 0] << 8 | lime.graphics.utils.ImageDataUtil.__clamp[data[offset + 2] * unmultiply | 0];
-	} else return data[offset] << 16 | data[offset + 1] << 8 | data[offset + 2];
+		pixel = lime.graphics.utils.ImageDataUtil.__clamp[data[offset] * unmultiply | 0] << 24 | lime.graphics.utils.ImageDataUtil.__clamp[data[offset + 1] * unmultiply | 0] << 16 | lime.graphics.utils.ImageDataUtil.__clamp[data[offset + 2] * unmultiply | 0] << 8;
+	} else pixel = data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8;
+	if(format == lime.graphics.PixelFormat.ARGB) return pixel >> 8 & 16777215; else return pixel;
 };
-lime.graphics.utils.ImageDataUtil.getPixel32 = function(image,x,y) {
+lime.graphics.utils.ImageDataUtil.getPixel32 = function(image,x,y,format) {
 	var data = image.buffer.data;
 	var offset = 4 * (y + image.offsetY) * image.buffer.width + (x + image.offsetX) * 4;
 	var a;
 	if(image.get_transparent()) a = data[offset + 3]; else a = 255;
+	var r;
+	var g;
+	var b;
 	if(image.get_premultiplied() && a != 0) {
 		var unmultiply = 255.0 / a;
-		return a << 24 | (function($this) {
-			var $r;
-			var index = Math.round(data[offset] * unmultiply);
-			$r = lime.graphics.utils.ImageDataUtil.__clamp[index];
-			return $r;
-		}(this)) << 16 | lime.graphics.utils.ImageDataUtil.__clamp[data[offset + 1] * unmultiply | 0] << 8 | lime.graphics.utils.ImageDataUtil.__clamp[data[offset + 2] * unmultiply | 0];
-	} else return a << 24 | data[offset] << 16 | data[offset + 1] << 8 | data[offset + 2];
+		var index = Math.round(data[offset] * unmultiply);
+		r = lime.graphics.utils.ImageDataUtil.__clamp[index];
+		var index1 = Math.round(data[offset + 1] * unmultiply);
+		g = lime.graphics.utils.ImageDataUtil.__clamp[index1];
+		var index2 = Math.round(data[offset + 2] * unmultiply);
+		b = lime.graphics.utils.ImageDataUtil.__clamp[index2];
+	} else {
+		r = data[offset];
+		g = data[offset + 1];
+		b = data[offset + 2];
+	}
+	if(format == lime.graphics.PixelFormat.ARGB) return a << 24 | r << 16 | g << 8 | b; else return r << 24 | g << 16 | b << 8 | a;
 };
-lime.graphics.utils.ImageDataUtil.getPixels = function(image,rect) {
-	var byteArray = new lime.utils.ByteArray(image.width * image.height * 4);
+lime.graphics.utils.ImageDataUtil.getPixels = function(image,rect,format) {
+	if(image.buffer.data == null) return null;
+	var length = rect.width * rect.height | 0;
+	var byteArray = new lime.utils.ByteArray(length * 4);
+	byteArray.position = 0;
 	var srcData = image.buffer.data;
 	var srcStride = image.buffer.width * 4 | 0;
 	var srcPosition = rect.x * 4 + srcStride * rect.y | 0;
 	var srcRowOffset = srcStride - (4 * rect.width | 0);
 	var srcRowEnd = 4 * (rect.x + rect.width) | 0;
-	var length = rect.width * rect.height | 0;
 	byteArray.set_length(length * 4);
-	var _g = 0;
-	while(_g < length) {
-		var i = _g++;
-		byteArray.__set(i * 4 + 1,srcData[srcPosition++]);
-		byteArray.__set(i * 4 + 2,srcData[srcPosition++]);
-		byteArray.__set(i * 4 + 3,srcData[srcPosition++]);
-		byteArray.__set(i * 4,srcData[srcPosition++]);
-		if(srcPosition % srcStride > srcRowEnd) srcPosition += srcRowOffset;
+	if(format == lime.graphics.PixelFormat.ARGB) {
+		var _g = 0;
+		while(_g < length) {
+			var i = _g++;
+			byteArray.__set(i * 4 + 1,srcData[srcPosition++]);
+			byteArray.__set(i * 4 + 2,srcData[srcPosition++]);
+			byteArray.__set(i * 4 + 3,srcData[srcPosition++]);
+			byteArray.__set(i * 4,srcData[srcPosition++]);
+			if(srcPosition % srcStride > srcRowEnd) srcPosition += srcRowOffset;
+		}
+	} else {
+		var _g1 = 0;
+		while(_g1 < length) {
+			var i1 = _g1++;
+			byteArray.__set(i1 * 4,srcData[srcPosition++]);
+			byteArray.__set(i1 * 4 + 1,srcData[srcPosition++]);
+			byteArray.__set(i1 * 4 + 2,srcData[srcPosition++]);
+			byteArray.__set(i1 * 4 + 3,srcData[srcPosition++]);
+			if(srcPosition % srcStride > srcRowEnd) srcPosition += srcRowOffset;
+		}
 	}
 	byteArray.position = 0;
 	return byteArray;
 };
 lime.graphics.utils.ImageDataUtil.merge = function(image,sourceImage,sourceRect,destPoint,redMultiplier,greenMultiplier,blueMultiplier,alphaMultiplier) {
+	if(image.buffer.data == null || sourceImage.buffer.data == null) return;
 	var rowOffset = destPoint.y + image.offsetY - sourceRect.y - sourceImage.offsetY | 0;
 	var columnOffset = destPoint.x + image.offsetX - sourceRect.x - sourceImage.offsetY | 0;
 	var sourceData = sourceImage.buffer.data;
@@ -6619,16 +7193,17 @@ lime.graphics.utils.ImageDataUtil.multiplyAlpha = function(image) {
 	while(_g < length) {
 		var i = _g++;
 		index = i * 4;
-		var a161 = lime.graphics.utils.ImageDataUtil.__alpha16[data[index + 3]];
-		data[index] = data[index] * a161 >> 16;
-		data[index + 1] = data[index + 1] * a161 >> 16;
-		data[index + 2] = data[index + 2] * a161 >> 16;
+		a16 = lime.graphics.utils.ImageDataUtil.__alpha16[data[index + 3]];
+		data[index] = data[index] * a16 >> 16;
+		data[index + 1] = data[index + 1] * a16 >> 16;
+		data[index + 2] = data[index + 2] * a16 >> 16;
 	}
 	image.buffer.premultiplied = true;
 	image.dirty = true;
 };
 lime.graphics.utils.ImageDataUtil.resize = function(image,newWidth,newHeight) {
 	var buffer = image.buffer;
+	if(buffer.width == newWidth && buffer.height == newHeight) return;
 	var newBuffer = new lime.graphics.ImageBuffer(new Uint8Array(newWidth * newHeight * 4),newWidth,newHeight);
 	var imageWidth = image.width;
 	var imageHeight = image.height;
@@ -6672,7 +7247,7 @@ lime.graphics.utils.ImageDataUtil.resize = function(image,newWidth,newHeight) {
 			if(data[sourceIndexX + 3] == 0 || data[sourceIndexY + 3] == 0 || data[sourceIndexXY + 3] == 0) newData[index + 3] = 0; else newData[index + 3] = data[sourceIndex + 3];
 		}
 	}
-	buffer.data = newData;
+	buffer.data = newBuffer.data;
 	buffer.width = newWidth;
 	buffer.height = newHeight;
 };
@@ -6702,35 +7277,50 @@ lime.graphics.utils.ImageDataUtil.resizeBuffer = function(image,newWidth,newHeig
 	buffer.width = newWidth;
 	buffer.height = newHeight;
 };
-lime.graphics.utils.ImageDataUtil.setPixel = function(image,x,y,color) {
+lime.graphics.utils.ImageDataUtil.setPixel = function(image,x,y,color,format) {
 	var data = image.buffer.data;
 	var offset = 4 * (y + image.offsetY) * image.buffer.width + (x + image.offsetX) * 4;
+	if(format == null || format == lime.graphics.PixelFormat.RGBA) color = color >> 8;
 	data[offset] = (color & 16711680) >>> 16;
 	data[offset + 1] = (color & 65280) >>> 8;
 	data[offset + 2] = color & 255;
 	if(image.get_transparent()) data[offset + 3] = 255;
 	image.dirty = true;
 };
-lime.graphics.utils.ImageDataUtil.setPixel32 = function(image,x,y,color) {
+lime.graphics.utils.ImageDataUtil.setPixel32 = function(image,x,y,color,format) {
 	var data = image.buffer.data;
 	var offset = 4 * (y + image.offsetY) * image.buffer.width + (x + image.offsetX) * 4;
 	var a;
-	if(image.get_transparent()) a = (color & -16777216) >>> 24; else a = 255;
+	var r;
+	var g;
+	var b;
+	if(format == lime.graphics.PixelFormat.ARGB) {
+		if(image.get_transparent()) a = color >> 24 & 255; else a = 255;
+		r = color >> 16 & 255;
+		g = color >> 8 & 255;
+		b = color & 255;
+	} else {
+		r = color >> 24 & 255;
+		g = color >> 16 & 255;
+		b = color >> 8 & 255;
+		if(image.get_transparent()) a = color & 255; else a = 255;
+	}
 	if(image.get_transparent() && image.get_premultiplied()) {
 		var a16 = lime.graphics.utils.ImageDataUtil.__alpha16[a];
-		data[offset] = ((color & 16711680) >>> 16) * a16 >> 16;
-		data[offset + 1] = ((color & 65280) >>> 8) * a16 >> 16;
-		data[offset + 2] = (color & 255) * a16 >> 16;
+		data[offset] = r * a16 >> 16;
+		data[offset + 1] = g * a16 >> 16;
+		data[offset + 2] = b * a16 >> 16;
 		data[offset + 3] = a;
 	} else {
-		data[offset] = (color & 16711680) >>> 16;
-		data[offset + 1] = (color & 65280) >>> 8;
-		data[offset + 2] = color & 255;
+		data[offset] = r;
+		data[offset + 1] = g;
+		data[offset + 2] = b;
 		data[offset + 3] = a;
 	}
 	image.dirty = true;
 };
-lime.graphics.utils.ImageDataUtil.setPixels = function(image,rect,byteArray) {
+lime.graphics.utils.ImageDataUtil.setPixels = function(image,rect,byteArray,format) {
+	if(image.buffer.data == null) return;
 	var len = Math.round(rect.width * rect.height);
 	var data = image.buffer.data;
 	var offset = Math.round(image.buffer.width * (rect.y + image.offsetX) + (rect.x + image.offsetY));
@@ -6738,20 +7328,34 @@ lime.graphics.utils.ImageDataUtil.setPixels = function(image,rect,byteArray) {
 	var boundR = Math.round(rect.x + rect.width + image.offsetX);
 	var width = image.buffer.width;
 	var color;
-	var _g = 0;
-	while(_g < len) {
-		var i = _g++;
-		if(pos % (width * 4) >= boundR * 4) pos += (width - boundR) * 4;
-		color = byteArray.readUnsignedInt();
-		data[pos++] = (color & 16711680) >>> 16;
-		data[pos++] = (color & 65280) >>> 8;
-		data[pos++] = color & 255;
-		data[pos++] = (color & -16777216) >>> 24;
+	if(format == lime.graphics.PixelFormat.ARGB) {
+		var _g = 0;
+		while(_g < len) {
+			var i = _g++;
+			if(pos % (width * 4) >= boundR * 4) pos += (width - boundR) * 4;
+			color = byteArray.readUnsignedInt();
+			data[pos++] = (color & 16711680) >>> 16;
+			data[pos++] = (color & 65280) >>> 8;
+			data[pos++] = color & 255;
+			data[pos++] = (color & -16777216) >>> 24;
+		}
+	} else {
+		var _g1 = 0;
+		while(_g1 < len) {
+			var i1 = _g1++;
+			if(pos % (width * 4) >= boundR * 4) pos += (width - boundR) * 4;
+			color = byteArray.readUnsignedInt();
+			data[pos++] = (color & -16777216) >>> 24;
+			data[pos++] = (color & 16711680) >>> 16;
+			data[pos++] = (color & 65280) >>> 8;
+			data[pos++] = color & 255;
+		}
 	}
 	image.dirty = true;
 };
 lime.graphics.utils.ImageDataUtil.unmultiplyAlpha = function(image) {
 	var data = image.buffer.data;
+	if(data == null) return;
 	var index;
 	var a;
 	var unmultiply;
@@ -6776,6 +7380,7 @@ lime.math._ColorMatrix = {};
 lime.math._ColorMatrix.ColorMatrix_Impl_ = function() { };
 $hxClasses["lime.math._ColorMatrix.ColorMatrix_Impl_"] = lime.math._ColorMatrix.ColorMatrix_Impl_;
 lime.math._ColorMatrix.ColorMatrix_Impl_.__name__ = ["lime","math","_ColorMatrix","ColorMatrix_Impl_"];
+lime.math._ColorMatrix.ColorMatrix_Impl_.__properties__ = {set_redOffset:"set_redOffset",get_redOffset:"get_redOffset",set_redMultiplier:"set_redMultiplier",get_redMultiplier:"get_redMultiplier",set_greenOffset:"set_greenOffset",get_greenOffset:"get_greenOffset",set_greenMultiplier:"set_greenMultiplier",get_greenMultiplier:"get_greenMultiplier",set_color:"set_color",get_color:"get_color",set_blueOffset:"set_blueOffset",get_blueOffset:"get_blueOffset",set_blueMultiplier:"set_blueMultiplier",get_blueMultiplier:"get_blueMultiplier",set_alphaOffset:"set_alphaOffset",get_alphaOffset:"get_alphaOffset",set_alphaMultiplier:"set_alphaMultiplier",get_alphaMultiplier:"get_alphaMultiplier"}
 lime.math._ColorMatrix.ColorMatrix_Impl_._new = function(data) {
 	var this1;
 	if(data != null && data.length == 20) this1 = data; else this1 = new Float32Array(lime.math._ColorMatrix.ColorMatrix_Impl_.__identity);
@@ -7154,6 +7759,7 @@ lime.math._Matrix4 = {};
 lime.math._Matrix4.Matrix4_Impl_ = function() { };
 $hxClasses["lime.math._Matrix4.Matrix4_Impl_"] = lime.math._Matrix4.Matrix4_Impl_;
 lime.math._Matrix4.Matrix4_Impl_.__name__ = ["lime","math","_Matrix4","Matrix4_Impl_"];
+lime.math._Matrix4.Matrix4_Impl_.__properties__ = {set_position:"set_position",get_position:"get_position",get_determinant:"get_determinant"}
 lime.math._Matrix4.Matrix4_Impl_._new = function(data) {
 	var this1;
 	if(data != null && data.length == 16) this1 = data; else this1 = new Float32Array(lime.math._Matrix4.Matrix4_Impl_.__identity);
@@ -7860,6 +8466,7 @@ lime.math.Rectangle.prototype = {
 		return p.clone();
 	}
 	,__class__: lime.math.Rectangle
+	,__properties__: {set_topLeft:"set_topLeft",get_topLeft:"get_topLeft",set_top:"set_top",get_top:"get_top",set_size:"set_size",get_size:"get_size",set_right:"set_right",get_right:"get_right",set_left:"set_left",get_left:"get_left",set_bottomRight:"set_bottomRight",get_bottomRight:"get_bottomRight",set_bottom:"set_bottom",get_bottom:"get_bottom"}
 };
 lime.math.Vector2 = function(x,y) {
 	if(y == null) y = 0;
@@ -7915,6 +8522,7 @@ lime.math.Vector2.prototype = {
 		return Math.sqrt(this.x * this.x + this.y * this.y);
 	}
 	,__class__: lime.math.Vector2
+	,__properties__: {get_length:"get_length"}
 };
 lime.math.Vector4 = function(x,y,z,w) {
 	if(w == null) w = 0.;
@@ -7928,6 +8536,7 @@ lime.math.Vector4 = function(x,y,z,w) {
 };
 $hxClasses["lime.math.Vector4"] = lime.math.Vector4;
 lime.math.Vector4.__name__ = ["lime","math","Vector4"];
+lime.math.Vector4.__properties__ = {get_Z_AXIS:"get_Z_AXIS",get_Y_AXIS:"get_Y_AXIS",get_X_AXIS:"get_X_AXIS"}
 lime.math.Vector4.X_AXIS = null;
 lime.math.Vector4.Y_AXIS = null;
 lime.math.Vector4.Z_AXIS = null;
@@ -8031,6 +8640,7 @@ lime.math.Vector4.prototype = {
 		return this.x * this.x + this.y * this.y + this.z * this.z;
 	}
 	,__class__: lime.math.Vector4
+	,__properties__: {get_lengthSquared:"get_lengthSquared",get_length:"get_length"}
 };
 lime.net = {};
 lime.net.URLLoader = function(request) {
@@ -8272,6 +8882,7 @@ lime.net.URLLoader.prototype = {
 		return this.dataFormat;
 	}
 	,__class__: lime.net.URLLoader
+	,__properties__: {set_dataFormat:"set_dataFormat"}
 };
 lime.net.URLLoaderDataFormat = $hxClasses["lime.net.URLLoaderDataFormat"] = { __ename__ : true, __constructs__ : ["BINARY","TEXT","VARIABLES"] };
 lime.net.URLLoaderDataFormat.BINARY = ["BINARY",0];
@@ -8355,11 +8966,23 @@ lime.net.URLVariables.prototype = {
 	}
 	,__class__: lime.net.URLVariables
 };
+lime.project = {};
+lime.project._Platform = {};
+lime.project._Platform.Platform_Impl_ = function() { };
+$hxClasses["lime.project._Platform.Platform_Impl_"] = lime.project._Platform.Platform_Impl_;
+lime.project._Platform.Platform_Impl_.__name__ = ["lime","project","_Platform","Platform_Impl_"];
 lime.system = {};
 lime.system.System = function() { };
 $hxClasses["lime.system.System"] = lime.system.System;
 lime.system.System.__name__ = ["lime","system","System"];
+lime.system.System.__properties__ = {get_userDirectory:"get_userDirectory",get_fontsDirectory:"get_fontsDirectory",get_documentsDirectory:"get_documentsDirectory",get_desktopDirectory:"get_desktopDirectory",get_applicationStorageDirectory:"get_applicationStorageDirectory",get_applicationDirectory:"get_applicationDirectory"}
+lime.system.System.applicationDirectory = null;
+lime.system.System.applicationStorageDirectory = null;
+lime.system.System.desktopDirectory = null;
 lime.system.System.disableCFFI = null;
+lime.system.System.documentsDirectory = null;
+lime.system.System.fontsDirectory = null;
+lime.system.System.userDirectory = null;
 lime.system.System.embed = $hx_exports.lime.embed = function(element,width,height,background,assetsPrefix) {
 	var htmlElement = null;
 	if(typeof(element) == "string") htmlElement = window.document.getElementById(js.Boot.__cast(element , String)); else if(element == null) htmlElement = window.document.createElement("div"); else htmlElement = element;
@@ -8377,11 +9000,13 @@ lime.system.System.embed = $hx_exports.lime.embed = function(element,width,heigh
 	ApplicationMain.config.assetsPrefix = assetsPrefix;
 	ApplicationMain.create();
 };
+lime.system.System.exit = function(code) {
+};
 lime.system.System.findHaxeLib = function(library) {
 	return "";
 };
 lime.system.System.getTimer = function() {
-	return Std["int"]((haxe.Timer.stamp() - lime.system.System.__startTime) * 1000);
+	return Std["int"](new Date().getTime());
 };
 lime.system.System.load = function(library,method,args,lazy) {
 	if(lazy == null) lazy = false;
@@ -8389,8 +9014,6 @@ lime.system.System.load = function(library,method,args,lazy) {
 	if(lime.system.System.disableCFFI) return Reflect.makeVarArgs(function(__) {
 		return { };
 	});
-	if(lazy) {
-	}
 	var result = null;
 	return result;
 };
@@ -8402,7 +9025,330 @@ lime.system.System.tryLoad = function(name,library,func,args) {
 };
 lime.system.System.loaderTrace = function(message) {
 };
+lime.system.System.get_applicationDirectory = function() {
+	return null;
+};
+lime.system.System.get_applicationStorageDirectory = function() {
+	var company = "MyCompany";
+	var file = "MyApplication";
+	if(lime.app.Application.current != null && lime.app.Application.current.config != null) {
+		if(lime.app.Application.current.config.company != null) company = lime.app.Application.current.config.company;
+		if(lime.app.Application.current.config.file != null) file = lime.app.Application.current.config.file;
+	}
+	return null;
+};
+lime.system.System.get_desktopDirectory = function() {
+	return null;
+};
+lime.system.System.get_documentsDirectory = function() {
+	return null;
+};
+lime.system.System.get_fontsDirectory = function() {
+	return null;
+};
+lime.system.System.get_userDirectory = function() {
+	return null;
+};
+lime.system._System = {};
+lime.system._System.SystemDirectory_Impl_ = function() { };
+$hxClasses["lime.system._System.SystemDirectory_Impl_"] = lime.system._System.SystemDirectory_Impl_;
+lime.system._System.SystemDirectory_Impl_.__name__ = ["lime","system","_System","SystemDirectory_Impl_"];
+lime.text = {};
+lime.text.Font = function(name) {
+	this.name = name;
+	if(this.__fontPath != null) this.__fromFile(this.__fontPath);
+};
+$hxClasses["lime.text.Font"] = lime.text.Font;
+lime.text.Font.__name__ = ["lime","text","Font"];
+lime.text.Font.fromBytes = function(bytes) {
+	var font = new lime.text.Font();
+	font.__fromBytes(bytes);
+	return font;
+};
+lime.text.Font.fromFile = function(path) {
+	var font = new lime.text.Font();
+	font.__fromFile(path);
+	return font;
+};
+lime.text.Font.prototype = {
+	decompose: function() {
+		return null;
+	}
+	,getGlyph: function(character) {
+		return -1;
+	}
+	,getGlyphs: function(characters) {
+		if(characters == null) characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^`'\"/\\&*()[]{}<>|:;_-+=?,. ";
+		return null;
+	}
+	,getGlyphMetrics: function(glyph) {
+		return null;
+	}
+	,renderGlyph: function(glyph,fontSize) {
+		return null;
+	}
+	,renderGlyphs: function(glyphs,fontSize) {
+		return null;
+	}
+	,__fromBytes: function(bytes) {
+		this.__fontPath = null;
+	}
+	,__fromFile: function(path) {
+		this.__fontPath = path;
+	}
+	,get_ascender: function() {
+		return 0;
+	}
+	,get_descender: function() {
+		return 0;
+	}
+	,get_height: function() {
+		return 0;
+	}
+	,get_numGlyphs: function() {
+		return 0;
+	}
+	,get_underlinePosition: function() {
+		return 0;
+	}
+	,get_underlineThickness: function() {
+		return 0;
+	}
+	,get_unitsPerEM: function() {
+		return 0;
+	}
+	,__class__: lime.text.Font
+	,__properties__: {get_unitsPerEM:"get_unitsPerEM",get_underlineThickness:"get_underlineThickness",get_underlinePosition:"get_underlinePosition",get_numGlyphs:"get_numGlyphs",get_height:"get_height",get_descender:"get_descender",get_ascender:"get_ascender"}
+};
+lime.text._Glyph = {};
+lime.text._Glyph.Glyph_Impl_ = function() { };
+$hxClasses["lime.text._Glyph.Glyph_Impl_"] = lime.text._Glyph.Glyph_Impl_;
+lime.text._Glyph.Glyph_Impl_.__name__ = ["lime","text","_Glyph","Glyph_Impl_"];
+lime.text._Glyph.Glyph_Impl_._new = function(i) {
+	return i;
+};
+lime.text.GlyphMetrics = function() {
+};
+$hxClasses["lime.text.GlyphMetrics"] = lime.text.GlyphMetrics;
+lime.text.GlyphMetrics.__name__ = ["lime","text","GlyphMetrics"];
+lime.text.GlyphMetrics.prototype = {
+	__class__: lime.text.GlyphMetrics
+};
+lime.text.GlyphPosition = function(glyph,advance,offset) {
+	this.glyph = glyph;
+	this.advance = advance;
+	if(offset != null) this.offset = offset; else this.offset = new lime.math.Vector2();
+};
+$hxClasses["lime.text.GlyphPosition"] = lime.text.GlyphPosition;
+lime.text.GlyphPosition.__name__ = ["lime","text","GlyphPosition"];
+lime.text.GlyphPosition.prototype = {
+	__class__: lime.text.GlyphPosition
+};
+lime.text._TextDirection = {};
+lime.text._TextDirection.TextDirection_Impl_ = function() { };
+$hxClasses["lime.text._TextDirection.TextDirection_Impl_"] = lime.text._TextDirection.TextDirection_Impl_;
+lime.text._TextDirection.TextDirection_Impl_.__name__ = ["lime","text","_TextDirection","TextDirection_Impl_"];
+lime.text._TextDirection.TextDirection_Impl_.__properties__ = {get_vertical:"get_vertical",get_horizontal:"get_horizontal",get_forward:"get_forward",get_backward:"get_backward"}
+lime.text._TextDirection.TextDirection_Impl_.reverse = function(this1) {
+	this1 = this1 ^ 1;
+};
+lime.text._TextDirection.TextDirection_Impl_.toString = function(this1) {
+	switch(this1) {
+	case 4:
+		return "leftToRight";
+	case 5:
+		return "rightToLeft";
+	case 6:
+		return "topToBottom";
+	case 7:
+		return "bottomToTop";
+	default:
+		return "";
+	}
+};
+lime.text._TextDirection.TextDirection_Impl_.get_backward = function(this1) {
+	return (this1 & -3) == 5;
+};
+lime.text._TextDirection.TextDirection_Impl_.get_forward = function(this1) {
+	return (this1 & -3) == 4;
+};
+lime.text._TextDirection.TextDirection_Impl_.get_horizontal = function(this1) {
+	return (this1 & -2) == 4;
+};
+lime.text._TextDirection.TextDirection_Impl_.get_vertical = function(this1) {
+	return (this1 & -2) == 6;
+};
+lime.text.TextLayout = function(text,font,size,direction,script,language) {
+	if(language == null) language = "en";
+	if(script == null) script = "Zyyy";
+	if(direction == null) direction = 4;
+	if(size == null) size = 12;
+	if(text == null) text = "";
+	this.set_text(text);
+	this.set_font(font);
+	this.set_size(size);
+	this.__direction = direction;
+	this.__script = script;
+	this.__language = language;
+	this.__position();
+};
+$hxClasses["lime.text.TextLayout"] = lime.text.TextLayout;
+lime.text.TextLayout.__name__ = ["lime","text","TextLayout"];
+lime.text.TextLayout.prototype = {
+	__position: function() {
+		this.positions = [];
+	}
+	,get_direction: function() {
+		return this.__direction;
+	}
+	,set_direction: function(value) {
+		if(value == this.__direction) return value;
+		this.__direction = value;
+		this.__position();
+		return value;
+	}
+	,set_font: function(value) {
+		if(value == this.font) return value;
+		this.font = value;
+		this.__position();
+		return value;
+	}
+	,get_glyphs: function() {
+		var glyphs = [];
+		var _g = 0;
+		var _g1 = this.positions;
+		while(_g < _g1.length) {
+			var position = _g1[_g];
+			++_g;
+			glyphs.push(position.glyph);
+		}
+		return glyphs;
+	}
+	,get_language: function() {
+		return this.__language;
+	}
+	,set_language: function(value) {
+		if(value == this.__language) return value;
+		this.__language = value;
+		this.__position();
+		return value;
+	}
+	,get_script: function() {
+		return this.__script;
+	}
+	,set_script: function(value) {
+		if(value == this.__script) return value;
+		this.__script = value;
+		this.__position();
+		return value;
+	}
+	,set_size: function(value) {
+		if(value == this.size) return value;
+		this.size = value;
+		this.__position();
+		return value;
+	}
+	,set_text: function(value) {
+		if(value == this.text) return value;
+		this.text = value;
+		this.__position();
+		return value;
+	}
+	,__class__: lime.text.TextLayout
+	,__properties__: {set_text:"set_text",set_size:"set_size",set_script:"set_script",get_script:"get_script",set_language:"set_language",get_language:"get_language",get_glyphs:"get_glyphs",set_font:"set_font",set_direction:"set_direction",get_direction:"get_direction"}
+};
+lime.text._TextScript = {};
+lime.text._TextScript.TextScript_Impl_ = function() { };
+$hxClasses["lime.text._TextScript.TextScript_Impl_"] = lime.text._TextScript.TextScript_Impl_;
+lime.text._TextScript.TextScript_Impl_.__name__ = ["lime","text","_TextScript","TextScript_Impl_"];
+lime.text._TextScript.TextScript_Impl_.__properties__ = {get_rightToLeft:"get_rightToLeft"}
+lime.text._TextScript.TextScript_Impl_.get_rightToLeft = function(this1) {
+	switch(this1) {
+	case "Hebr":case "Arab":case "Syrc":case "Thaa":case "Nkoo":case "Samr":case "Mand":case "Armi":case "Phnx":case "Lydi":case "Cprt":case "Khar":case "Sarb":case "Avst":case "Phli":case "Phlp":case "Orkh":
+		return true;
+	default:
+		return false;
+	}
+};
 lime.ui = {};
+lime.ui.Gamepad = function(id) {
+	this.id = id;
+	this.connected = true;
+};
+$hxClasses["lime.ui.Gamepad"] = lime.ui.Gamepad;
+lime.ui.Gamepad.__name__ = ["lime","ui","Gamepad"];
+lime.ui.Gamepad.prototype = {
+	get_guid: function() {
+		return null;
+	}
+	,get_name: function() {
+		return null;
+	}
+	,__class__: lime.ui.Gamepad
+	,__properties__: {get_name:"get_name",get_guid:"get_guid"}
+};
+lime.ui._GamepadAxis = {};
+lime.ui._GamepadAxis.GamepadAxis_Impl_ = function() { };
+$hxClasses["lime.ui._GamepadAxis.GamepadAxis_Impl_"] = lime.ui._GamepadAxis.GamepadAxis_Impl_;
+lime.ui._GamepadAxis.GamepadAxis_Impl_.__name__ = ["lime","ui","_GamepadAxis","GamepadAxis_Impl_"];
+lime.ui._GamepadAxis.GamepadAxis_Impl_.toString = function(this1) {
+	switch(this1) {
+	case 0:
+		return "LEFT_X";
+	case 1:
+		return "LEFT_Y";
+	case 2:
+		return "RIGHT_X";
+	case 3:
+		return "RIGHT_Y";
+	case 4:
+		return "TRIGGER_LEFT";
+	case 5:
+		return "TRIGGER_RIGHT";
+	default:
+		return "UNKNOWN (" + this1 + ")";
+	}
+};
+lime.ui._GamepadButton = {};
+lime.ui._GamepadButton.GamepadButton_Impl_ = function() { };
+$hxClasses["lime.ui._GamepadButton.GamepadButton_Impl_"] = lime.ui._GamepadButton.GamepadButton_Impl_;
+lime.ui._GamepadButton.GamepadButton_Impl_.__name__ = ["lime","ui","_GamepadButton","GamepadButton_Impl_"];
+lime.ui._GamepadButton.GamepadButton_Impl_.toString = function(this1) {
+	switch(this1) {
+	case 0:
+		return "A";
+	case 1:
+		return "B";
+	case 2:
+		return "X";
+	case 3:
+		return "Y";
+	case 4:
+		return "BACK";
+	case 5:
+		return "GUIDE";
+	case 6:
+		return "START";
+	case 7:
+		return "LEFT_STICK";
+	case 8:
+		return "RIGHT_STICK";
+	case 9:
+		return "LEFT_SHOULDER";
+	case 10:
+		return "RIGHT_SHOULDER";
+	case 11:
+		return "DPAD_UP";
+	case 12:
+		return "DPAD_DOWN";
+	case 13:
+		return "DPAD_LEFT";
+	case 14:
+		return "DPAD_RIGHT";
+	default:
+		return "UNKNOWN (" + this1 + ")";
+	}
+};
 lime.ui._KeyCode = {};
 lime.ui._KeyCode.KeyCode_Impl_ = function() { };
 $hxClasses["lime.ui._KeyCode.KeyCode_Impl_"] = lime.ui._KeyCode.KeyCode_Impl_;
@@ -8411,6 +9357,7 @@ lime.ui._KeyModifier = {};
 lime.ui._KeyModifier.KeyModifier_Impl_ = function() { };
 $hxClasses["lime.ui._KeyModifier.KeyModifier_Impl_"] = lime.ui._KeyModifier.KeyModifier_Impl_;
 lime.ui._KeyModifier.KeyModifier_Impl_.__name__ = ["lime","ui","_KeyModifier","KeyModifier_Impl_"];
+lime.ui._KeyModifier.KeyModifier_Impl_.__properties__ = {set_shiftKey:"set_shiftKey",get_shiftKey:"get_shiftKey",set_numLock:"set_numLock",get_numLock:"get_numLock",set_metaKey:"set_metaKey",get_metaKey:"get_metaKey",set_ctrlKey:"set_ctrlKey",get_ctrlKey:"get_ctrlKey",set_capsLock:"set_capsLock",get_capsLock:"get_capsLock",set_altKey:"set_altKey",get_altKey:"get_altKey"}
 lime.ui._KeyModifier.KeyModifier_Impl_.get_altKey = function(this1) {
 	return (this1 & 256) > 0 || (this1 & 512) > 0;
 };
@@ -8456,17 +9403,27 @@ lime.ui._KeyModifier.KeyModifier_Impl_.set_shiftKey = function(this1,value) {
 lime.ui.Mouse = function() { };
 $hxClasses["lime.ui.Mouse"] = lime.ui.Mouse;
 lime.ui.Mouse.__name__ = ["lime","ui","Mouse"];
+lime.ui.Mouse.__properties__ = {set_lock:"set_lock",get_lock:"get_lock",set_cursor:"set_cursor",get_cursor:"get_cursor"}
 lime.ui.Mouse.hide = function() {
 	lime._backend.html5.HTML5Mouse.hide();
 };
 lime.ui.Mouse.show = function() {
 	lime._backend.html5.HTML5Mouse.show();
 };
+lime.ui.Mouse.warp = function(x,y,window) {
+	lime._backend.html5.HTML5Mouse.warp(x,y,window);
+};
 lime.ui.Mouse.get_cursor = function() {
 	return lime._backend.html5.HTML5Mouse.get_cursor();
 };
 lime.ui.Mouse.set_cursor = function(value) {
 	return lime._backend.html5.HTML5Mouse.set_cursor(value);
+};
+lime.ui.Mouse.get_lock = function() {
+	return lime._backend.html5.HTML5Mouse.get_lock();
+};
+lime.ui.Mouse.set_lock = function(value) {
+	return lime._backend.html5.HTML5Mouse.set_lock(value);
 };
 lime.ui.MouseCursor = $hxClasses["lime.ui.MouseCursor"] = { __ename__ : true, __constructs__ : ["ARROW","CROSSHAIR","DEFAULT","MOVE","POINTER","RESIZE_NESW","RESIZE_NS","RESIZE_NWSE","RESIZE_WE","TEXT","WAIT","WAIT_ARROW","CUSTOM"] };
 lime.ui.MouseCursor.ARROW = ["ARROW",0];
@@ -8509,8 +9466,11 @@ lime.ui.MouseCursor.CUSTOM = ["CUSTOM",12];
 lime.ui.MouseCursor.CUSTOM.toString = $estr;
 lime.ui.MouseCursor.CUSTOM.__enum__ = lime.ui.MouseCursor;
 lime.ui.Window = function(config) {
+	this.onWindowRestore = new lime.app.Event();
 	this.onWindowResize = new lime.app.Event();
 	this.onWindowMove = new lime.app.Event();
+	this.onWindowMinimize = new lime.app.Event();
+	this.onWindowFullscreen = new lime.app.Event();
 	this.onWindowFocusOut = new lime.app.Event();
 	this.onWindowFocusIn = new lime.app.Event();
 	this.onWindowDeactivate = new lime.app.Event();
@@ -8521,20 +9481,26 @@ lime.ui.Window = function(config) {
 	this.onTouchEnd = new lime.app.Event();
 	this.onMouseWheel = new lime.app.Event();
 	this.onMouseUp = new lime.app.Event();
+	this.onMouseMoveRelative = new lime.app.Event();
 	this.onMouseMove = new lime.app.Event();
 	this.onMouseDown = new lime.app.Event();
 	this.onKeyUp = new lime.app.Event();
 	this.onKeyDown = new lime.app.Event();
+	this.onGamepadDisconnect = new lime.app.Event();
+	this.onGamepadConnect = new lime.app.Event();
+	this.onGamepadButtonUp = new lime.app.Event();
+	this.onGamepadButtonDown = new lime.app.Event();
+	this.onGamepadAxisMove = new lime.app.Event();
 	this.config = config;
-	this.width = 0;
-	this.height = 0;
-	this.fullscreen = false;
-	this.x = 0;
-	this.y = 0;
+	this.__width = 0;
+	this.__height = 0;
+	this.__fullscreen = false;
+	this.__x = 0;
+	this.__y = 0;
 	if(config != null) {
-		if(Object.prototype.hasOwnProperty.call(config,"width")) this.width = config.width;
-		if(Object.prototype.hasOwnProperty.call(config,"height")) this.height = config.height;
-		if(Object.prototype.hasOwnProperty.call(config,"fullscreen")) this.fullscreen = config.fullscreen;
+		if(Object.prototype.hasOwnProperty.call(config,"width")) this.__width = config.width;
+		if(Object.prototype.hasOwnProperty.call(config,"height")) this.__height = config.height;
+		if(Object.prototype.hasOwnProperty.call(config,"fullscreen")) this.__fullscreen = config.fullscreen;
 	}
 	this.backend = new lime._backend.html5.HTML5Window(this);
 };
@@ -8550,19 +9516,60 @@ lime.ui.Window.prototype = {
 	}
 	,move: function(x,y) {
 		this.backend.move(x,y);
-		this.x = x;
-		this.y = y;
+		this.__x = x;
+		this.__y = y;
 	}
 	,resize: function(width,height) {
 		this.backend.resize(width,height);
-		this.width = width;
-		this.height = height;
+		this.__width = width;
+		this.__height = height;
 	}
 	,setIcon: function(image) {
 		if(image == null) return;
 		this.backend.setIcon(image);
 	}
+	,get_fullscreen: function() {
+		return this.__fullscreen;
+	}
+	,set_fullscreen: function(value) {
+		return this.__fullscreen = this.backend.setFullscreen(value);
+	}
+	,get_height: function() {
+		return this.__height;
+	}
+	,set_height: function(value) {
+		this.resize(this.__width,value);
+		return this.__height;
+	}
+	,get_minimized: function() {
+		return this.__minimized;
+	}
+	,set_minimized: function(value) {
+		return this.__minimized = this.backend.setMinimized(value);
+	}
+	,get_width: function() {
+		return this.__width;
+	}
+	,set_width: function(value) {
+		this.resize(value,this.__height);
+		return this.__width;
+	}
+	,get_x: function() {
+		return this.__x;
+	}
+	,set_x: function(value) {
+		this.move(value,this.__y);
+		return this.__x;
+	}
+	,get_y: function() {
+		return this.__y;
+	}
+	,set_y: function(value) {
+		this.move(this.__x,value);
+		return this.__y;
+	}
 	,__class__: lime.ui.Window
+	,__properties__: {set_y:"set_y",get_y:"get_y",set_x:"set_x",get_x:"get_x",set_width:"set_width",get_width:"get_width",set_minimized:"set_minimized",get_minimized:"get_minimized",set_height:"set_height",get_height:"get_height",set_fullscreen:"set_fullscreen",get_fullscreen:"get_fullscreen"}
 };
 lime.utils = {};
 lime.utils.ByteArray = function(size) {
@@ -8623,7 +9630,7 @@ lime.utils.ByteArray.prototype = {
 		if(length == 0) length = this.length - this.position;
 		var lengthToEnsure = offset + length;
 		if(bytes.length < lengthToEnsure) {
-			if(bytes.allocated < lengthToEnsure) bytes.___resizeBuffer(bytes.allocated = Std["int"](Math.max(lengthToEnsure,bytes.allocated * 2))); else if(bytes.allocated > lengthToEnsure) bytes.___resizeBuffer(bytes.allocated = lengthToEnsure);
+			if(bytes.allocated < lengthToEnsure) bytes.___resizeBuffer(bytes.allocated = Std["int"](Math.max(lengthToEnsure,bytes.allocated * 2))); else if(bytes.allocated > lengthToEnsure * 2) bytes.___resizeBuffer(bytes.allocated = lengthToEnsure);
 			bytes.length = lengthToEnsure;
 			lengthToEnsure;
 		}
@@ -8701,7 +9708,7 @@ lime.utils.ByteArray.prototype = {
 		return value;
 	}
 	,uncompress: function(algorithm) {
-		haxe.Log.trace("Warning: ByteArray.uncompress on JS target requires the 'format' haxelib",{ fileName : "ByteArray.hx", lineNumber : 659, className : "lime.utils.ByteArray", methodName : "uncompress"});
+		haxe.Log.trace("Warning: ByteArray.uncompress on JS target requires the 'format' haxelib",{ fileName : "ByteArray.hx", lineNumber : 667, className : "lime.utils.ByteArray", methodName : "uncompress"});
 	}
 	,write_uncheck: function($byte) {
 	}
@@ -8711,7 +9718,7 @@ lime.utils.ByteArray.prototype = {
 	,writeByte: function(value) {
 		var lengthToEnsure = this.position + 1;
 		if(this.length < lengthToEnsure) {
-			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure) this.___resizeBuffer(this.allocated = lengthToEnsure);
+			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure * 2) this.___resizeBuffer(this.allocated = lengthToEnsure);
 			this.length = lengthToEnsure;
 			lengthToEnsure;
 		}
@@ -8744,7 +9751,7 @@ lime.utils.ByteArray.prototype = {
 		}(this)) == 0) length = bytes.length;
 		var lengthToEnsure = this.position + length;
 		if(this.length < lengthToEnsure) {
-			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure) this.___resizeBuffer(this.allocated = lengthToEnsure);
+			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure * 2) this.___resizeBuffer(this.allocated = lengthToEnsure);
 			this.length = lengthToEnsure;
 			lengthToEnsure;
 		}
@@ -8754,7 +9761,7 @@ lime.utils.ByteArray.prototype = {
 	,writeDouble: function(x) {
 		var lengthToEnsure = this.position + 8;
 		if(this.length < lengthToEnsure) {
-			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure) this.___resizeBuffer(this.allocated = lengthToEnsure);
+			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure * 2) this.___resizeBuffer(this.allocated = lengthToEnsure);
 			this.length = lengthToEnsure;
 			lengthToEnsure;
 		}
@@ -8766,7 +9773,7 @@ lime.utils.ByteArray.prototype = {
 	,writeFloat: function(x) {
 		var lengthToEnsure = this.position + 4;
 		if(this.length < lengthToEnsure) {
-			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure) this.___resizeBuffer(this.allocated = lengthToEnsure);
+			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure * 2) this.___resizeBuffer(this.allocated = lengthToEnsure);
 			this.length = lengthToEnsure;
 			lengthToEnsure;
 		}
@@ -8776,7 +9783,7 @@ lime.utils.ByteArray.prototype = {
 	,writeInt: function(value) {
 		var lengthToEnsure = this.position + 4;
 		if(this.length < lengthToEnsure) {
-			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure) this.___resizeBuffer(this.allocated = lengthToEnsure);
+			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure * 2) this.___resizeBuffer(this.allocated = lengthToEnsure);
 			this.length = lengthToEnsure;
 			lengthToEnsure;
 		}
@@ -8786,7 +9793,7 @@ lime.utils.ByteArray.prototype = {
 	,writeShort: function(value) {
 		var lengthToEnsure = this.position + 2;
 		if(this.length < lengthToEnsure) {
-			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure) this.___resizeBuffer(this.allocated = lengthToEnsure);
+			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure * 2) this.___resizeBuffer(this.allocated = lengthToEnsure);
 			this.length = lengthToEnsure;
 			lengthToEnsure;
 		}
@@ -8796,7 +9803,7 @@ lime.utils.ByteArray.prototype = {
 	,writeUnsignedInt: function(value) {
 		var lengthToEnsure = this.position + 4;
 		if(this.length < lengthToEnsure) {
-			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure) this.___resizeBuffer(this.allocated = lengthToEnsure);
+			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure * 2) this.___resizeBuffer(this.allocated = lengthToEnsure);
 			this.length = lengthToEnsure;
 			lengthToEnsure;
 		}
@@ -8806,7 +9813,7 @@ lime.utils.ByteArray.prototype = {
 	,writeUnsignedShort: function(value) {
 		var lengthToEnsure = this.position + 2;
 		if(this.length < lengthToEnsure) {
-			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure) this.___resizeBuffer(this.allocated = lengthToEnsure);
+			if(this.allocated < lengthToEnsure) this.___resizeBuffer(this.allocated = Std["int"](Math.max(lengthToEnsure,this.allocated * 2))); else if(this.allocated > lengthToEnsure * 2) this.___resizeBuffer(this.allocated = lengthToEnsure);
 			this.length = lengthToEnsure;
 			lengthToEnsure;
 		}
@@ -8883,11 +9890,12 @@ lime.utils.ByteArray.prototype = {
 		return endian;
 	}
 	,set_length: function(value) {
-		if(this.allocated < value) this.___resizeBuffer(this.allocated = Std["int"](Math.max(value,this.allocated * 2))); else if(this.allocated > value) this.___resizeBuffer(this.allocated = value);
+		if(this.allocated < value) this.___resizeBuffer(this.allocated = Std["int"](Math.max(value,this.allocated * 2))); else if(this.allocated > value * 2) this.___resizeBuffer(this.allocated = value);
 		this.length = value;
 		return value;
 	}
 	,__class__: lime.utils.ByteArray
+	,__properties__: {set_length:"set_length",set_endian:"set_endian",get_endian:"get_endian",get_bytesAvailable:"get_bytesAvailable"}
 };
 lime.utils.CompressionAlgorithm = $hxClasses["lime.utils.CompressionAlgorithm"] = { __ename__ : true, __constructs__ : ["DEFLATE","ZLIB","LZMA","GZIP"] };
 lime.utils.CompressionAlgorithm.DEFLATE = ["DEFLATE",0];
@@ -8936,6 +9944,7 @@ $hxClasses["lime.utils.IDataInput"] = lime.utils.IDataInput;
 lime.utils.IDataInput.__name__ = ["lime","utils","IDataInput"];
 lime.utils.IDataInput.prototype = {
 	__class__: lime.utils.IDataInput
+	,__properties__: {set_endian:"set_endian",get_endian:"get_endian",get_bytesAvailable:"get_bytesAvailable"}
 };
 lime.utils.IMemoryRange = function() { };
 $hxClasses["lime.utils.IMemoryRange"] = lime.utils.IMemoryRange;
@@ -8943,6 +9952,1153 @@ lime.utils.IMemoryRange.__name__ = ["lime","utils","IMemoryRange"];
 lime.utils.IMemoryRange.prototype = {
 	__class__: lime.utils.IMemoryRange
 };
+var motion = {};
+motion.actuators = {};
+motion.actuators.IGenericActuator = function() { };
+$hxClasses["motion.actuators.IGenericActuator"] = motion.actuators.IGenericActuator;
+motion.actuators.IGenericActuator.__name__ = ["motion","actuators","IGenericActuator"];
+motion.actuators.IGenericActuator.prototype = {
+	__class__: motion.actuators.IGenericActuator
+};
+motion.actuators.GenericActuator = function(target,duration,properties) {
+	this._autoVisible = true;
+	this._delay = 0;
+	this._reflect = false;
+	this._repeat = 0;
+	this._reverse = false;
+	this._smartRotation = false;
+	this._snapping = false;
+	this.special = false;
+	this.target = target;
+	this.properties = properties;
+	this.duration = duration;
+	this._ease = motion.Actuate.defaultEase;
+};
+$hxClasses["motion.actuators.GenericActuator"] = motion.actuators.GenericActuator;
+motion.actuators.GenericActuator.__name__ = ["motion","actuators","GenericActuator"];
+motion.actuators.GenericActuator.__interfaces__ = [motion.actuators.IGenericActuator];
+motion.actuators.GenericActuator.prototype = {
+	apply: function() {
+		var _g = 0;
+		var _g1 = Reflect.fields(this.properties);
+		while(_g < _g1.length) {
+			var i = _g1[_g];
+			++_g;
+			if(Object.prototype.hasOwnProperty.call(this.target,i)) Reflect.setField(this.target,i,Reflect.field(this.properties,i)); else Reflect.setProperty(this.target,i,Reflect.field(this.properties,i));
+		}
+	}
+	,autoVisible: function(value) {
+		if(value == null) value = true;
+		this._autoVisible = value;
+		return this;
+	}
+	,callMethod: function(method,params) {
+		if(params == null) params = [];
+		return method.apply(method,params);
+	}
+	,change: function() {
+		if(this._onUpdate != null) this.callMethod(this._onUpdate,this._onUpdateParams);
+	}
+	,complete: function(sendEvent) {
+		if(sendEvent == null) sendEvent = true;
+		if(sendEvent) {
+			this.change();
+			if(this._onComplete != null) this.callMethod(this._onComplete,this._onCompleteParams);
+		}
+		motion.Actuate.unload(this);
+	}
+	,delay: function(duration) {
+		this._delay = duration;
+		return this;
+	}
+	,ease: function(easing) {
+		this._ease = easing;
+		return this;
+	}
+	,move: function() {
+	}
+	,onComplete: function(handler,parameters) {
+		this._onComplete = handler;
+		if(parameters == null) this._onCompleteParams = []; else this._onCompleteParams = parameters;
+		if(this.duration == 0) this.complete();
+		return this;
+	}
+	,onRepeat: function(handler,parameters) {
+		this._onRepeat = handler;
+		if(parameters == null) this._onRepeatParams = []; else this._onRepeatParams = parameters;
+		return this;
+	}
+	,onUpdate: function(handler,parameters) {
+		this._onUpdate = handler;
+		if(parameters == null) this._onUpdateParams = []; else this._onUpdateParams = parameters;
+		return this;
+	}
+	,onPause: function(handler,parameters) {
+		this._onPause = handler;
+		if(parameters == null) this._onPauseParams = []; else this._onPauseParams = parameters;
+		return this;
+	}
+	,onResume: function(handler,parameters) {
+		this._onResume = handler;
+		if(parameters == null) this._onResumeParams = []; else this._onResumeParams = parameters;
+		return this;
+	}
+	,pause: function() {
+		if(this._onPause != null) this.callMethod(this._onPause,this._onPauseParams);
+	}
+	,reflect: function(value) {
+		if(value == null) value = true;
+		this._reflect = value;
+		this.special = true;
+		return this;
+	}
+	,repeat: function(times) {
+		if(times == null) times = -1;
+		this._repeat = times;
+		return this;
+	}
+	,resume: function() {
+		if(this._onResume != null) this.callMethod(this._onResume,this._onResumeParams);
+	}
+	,reverse: function(value) {
+		if(value == null) value = true;
+		this._reverse = value;
+		this.special = true;
+		return this;
+	}
+	,smartRotation: function(value) {
+		if(value == null) value = true;
+		this._smartRotation = value;
+		this.special = true;
+		return this;
+	}
+	,snapping: function(value) {
+		if(value == null) value = true;
+		this._snapping = value;
+		this.special = true;
+		return this;
+	}
+	,stop: function(properties,complete,sendEvent) {
+	}
+	,__class__: motion.actuators.GenericActuator
+};
+motion.actuators.SimpleActuator = function(target,duration,properties) {
+	this.active = true;
+	this.propertyDetails = new Array();
+	this.sendChange = false;
+	this.paused = false;
+	this.cacheVisible = false;
+	this.initialized = false;
+	this.setVisible = false;
+	this.toggleVisible = false;
+	this.startTime = openfl.Lib.getTimer() / 1000;
+	motion.actuators.GenericActuator.call(this,target,duration,properties);
+	if(!motion.actuators.SimpleActuator.addedEvent) {
+		motion.actuators.SimpleActuator.addedEvent = true;
+		openfl.Lib.current.stage.addEventListener(openfl.events.Event.ENTER_FRAME,motion.actuators.SimpleActuator.stage_onEnterFrame);
+	}
+};
+$hxClasses["motion.actuators.SimpleActuator"] = motion.actuators.SimpleActuator;
+motion.actuators.SimpleActuator.__name__ = ["motion","actuators","SimpleActuator"];
+motion.actuators.SimpleActuator.stage_onEnterFrame = function(event) {
+	var currentTime = openfl.Lib.getTimer() / 1000;
+	var actuator;
+	var j = 0;
+	var cleanup = false;
+	var _g1 = 0;
+	var _g = motion.actuators.SimpleActuator.actuatorsLength;
+	while(_g1 < _g) {
+		var i = _g1++;
+		actuator = motion.actuators.SimpleActuator.actuators[j];
+		if(actuator != null && actuator.active) {
+			if(currentTime >= actuator.timeOffset) actuator.update(currentTime);
+			j++;
+		} else {
+			motion.actuators.SimpleActuator.actuators.splice(j,1);
+			--motion.actuators.SimpleActuator.actuatorsLength;
+		}
+	}
+};
+motion.actuators.SimpleActuator.__super__ = motion.actuators.GenericActuator;
+motion.actuators.SimpleActuator.prototype = $extend(motion.actuators.GenericActuator.prototype,{
+	setField_motion_actuators_SimpleActuator_T: function(target,propertyName,value) {
+		if(Object.prototype.hasOwnProperty.call(target,propertyName)) target[propertyName] = value; else Reflect.setProperty(target,propertyName,value);
+	}
+	,autoVisible: function(value) {
+		if(value == null) value = true;
+		this._autoVisible = value;
+		if(!value) {
+			this.toggleVisible = false;
+			if(this.setVisible) this.setField_motion_actuators_SimpleActuator_T(this.target,"visible",this.cacheVisible);
+		}
+		return this;
+	}
+	,delay: function(duration) {
+		this._delay = duration;
+		this.timeOffset = this.startTime + duration;
+		return this;
+	}
+	,getField: function(target,propertyName) {
+		var value = null;
+		if(Object.prototype.hasOwnProperty.call(target,propertyName)) value = Reflect.field(target,propertyName); else value = Reflect.getProperty(target,propertyName);
+		return value;
+	}
+	,initialize: function() {
+		var details;
+		var start;
+		var _g = 0;
+		var _g1 = Reflect.fields(this.properties);
+		while(_g < _g1.length) {
+			var i = _g1[_g];
+			++_g;
+			var isField = true;
+			if(Object.prototype.hasOwnProperty.call(this.target,i) && !(this.target.__properties__ && this.target.__properties__["set_" + i])) start = Reflect.field(this.target,i); else {
+				isField = false;
+				start = Reflect.getProperty(this.target,i);
+			}
+			if(typeof(start) == "number") {
+				details = new motion.actuators.PropertyDetails(this.target,i,start,this.getField(this.properties,i) - start,isField);
+				this.propertyDetails.push(details);
+			}
+		}
+		this.detailsLength = this.propertyDetails.length;
+		this.initialized = true;
+	}
+	,move: function() {
+		this.toggleVisible = Object.prototype.hasOwnProperty.call(this.properties,"alpha") && js.Boot.__instanceof(this.target,openfl.display.DisplayObject);
+		if(this.toggleVisible && this.properties.alpha != 0 && !this.getField(this.target,"visible")) {
+			this.setVisible = true;
+			this.cacheVisible = this.getField(this.target,"visible");
+			this.setField_motion_actuators_SimpleActuator_T(this.target,"visible",true);
+		}
+		this.timeOffset = this.startTime;
+		motion.actuators.SimpleActuator.actuators.push(this);
+		++motion.actuators.SimpleActuator.actuatorsLength;
+	}
+	,onUpdate: function(handler,parameters) {
+		this._onUpdate = handler;
+		if(parameters == null) this._onUpdateParams = []; else this._onUpdateParams = parameters;
+		this.sendChange = true;
+		return this;
+	}
+	,pause: function() {
+		if(!this.paused) {
+			this.paused = true;
+			motion.actuators.GenericActuator.prototype.pause.call(this);
+			this.pauseTime = openfl.Lib.getTimer();
+		}
+	}
+	,resume: function() {
+		if(this.paused) {
+			this.paused = false;
+			this.timeOffset += (openfl.Lib.getTimer() - this.pauseTime) / 1000;
+			motion.actuators.GenericActuator.prototype.resume.call(this);
+		}
+	}
+	,setProperty: function(details,value) {
+		if(details.isField) details.target[details.propertyName] = value; else Reflect.setProperty(details.target,details.propertyName,value);
+	}
+	,stop: function(properties,complete,sendEvent) {
+		if(this.active) {
+			if(properties == null) {
+				this.active = false;
+				if(complete) this.apply();
+				this.complete(sendEvent);
+				return;
+			}
+			var _g = 0;
+			var _g1 = Reflect.fields(properties);
+			while(_g < _g1.length) {
+				var i = _g1[_g];
+				++_g;
+				if(Object.prototype.hasOwnProperty.call(this.properties,i)) {
+					this.active = false;
+					if(complete) this.apply();
+					this.complete(sendEvent);
+					return;
+				}
+			}
+		}
+	}
+	,update: function(currentTime) {
+		if(!this.paused) {
+			var details;
+			var easing;
+			var i;
+			var tweenPosition = (currentTime - this.timeOffset) / this.duration;
+			if(tweenPosition > 1) tweenPosition = 1;
+			if(!this.initialized) this.initialize();
+			if(!this.special) {
+				easing = this._ease.calculate(tweenPosition);
+				var _g1 = 0;
+				var _g = this.detailsLength;
+				while(_g1 < _g) {
+					var i1 = _g1++;
+					details = this.propertyDetails[i1];
+					this.setProperty(details,details.start + details.change * easing);
+				}
+			} else {
+				if(!this._reverse) easing = this._ease.calculate(tweenPosition); else easing = this._ease.calculate(1 - tweenPosition);
+				var endValue;
+				var _g11 = 0;
+				var _g2 = this.detailsLength;
+				while(_g11 < _g2) {
+					var i2 = _g11++;
+					details = this.propertyDetails[i2];
+					if(this._smartRotation && (details.propertyName == "rotation" || details.propertyName == "rotationX" || details.propertyName == "rotationY" || details.propertyName == "rotationZ")) {
+						var rotation = details.change % 360;
+						if(rotation > 180) rotation -= 360; else if(rotation < -180) rotation += 360;
+						endValue = details.start + rotation * easing;
+					} else endValue = details.start + details.change * easing;
+					if(!this._snapping) {
+						if(details.isField) details.target[details.propertyName] = endValue; else Reflect.setProperty(details.target,details.propertyName,endValue);
+					} else this.setProperty(details,Math.round(endValue));
+				}
+			}
+			if(tweenPosition == 1) {
+				if(this._repeat == 0) {
+					this.active = false;
+					if(this.toggleVisible && this.getField(this.target,"alpha") == 0) this.setField_motion_actuators_SimpleActuator_T(this.target,"visible",false);
+					this.complete(true);
+					return;
+				} else {
+					if(this._onRepeat != null) this.callMethod(this._onRepeat,this._onRepeatParams);
+					if(this._reflect) this._reverse = !this._reverse;
+					this.startTime = currentTime;
+					this.timeOffset = this.startTime + this._delay;
+					if(this._repeat > 0) this._repeat--;
+				}
+			}
+			if(this.sendChange) this.change();
+		}
+	}
+	,__class__: motion.actuators.SimpleActuator
+});
+motion.easing = {};
+motion.easing.Expo = function() { };
+$hxClasses["motion.easing.Expo"] = motion.easing.Expo;
+motion.easing.Expo.__name__ = ["motion","easing","Expo"];
+motion.easing.Expo.__properties__ = {get_easeOut:"get_easeOut",get_easeInOut:"get_easeInOut",get_easeIn:"get_easeIn"}
+motion.easing.Expo.get_easeIn = function() {
+	return new motion.easing.ExpoEaseIn();
+};
+motion.easing.Expo.get_easeInOut = function() {
+	return new motion.easing.ExpoEaseInOut();
+};
+motion.easing.Expo.get_easeOut = function() {
+	return new motion.easing.ExpoEaseOut();
+};
+motion.easing.IEasing = function() { };
+$hxClasses["motion.easing.IEasing"] = motion.easing.IEasing;
+motion.easing.IEasing.__name__ = ["motion","easing","IEasing"];
+motion.easing.IEasing.prototype = {
+	__class__: motion.easing.IEasing
+};
+motion.easing.ExpoEaseOut = function() {
+};
+$hxClasses["motion.easing.ExpoEaseOut"] = motion.easing.ExpoEaseOut;
+motion.easing.ExpoEaseOut.__name__ = ["motion","easing","ExpoEaseOut"];
+motion.easing.ExpoEaseOut.__interfaces__ = [motion.easing.IEasing];
+motion.easing.ExpoEaseOut.prototype = {
+	calculate: function(k) {
+		if(k == 1) return 1; else return 1 - Math.pow(2,-10 * k);
+	}
+	,ease: function(t,b,c,d) {
+		if(t == d) return b + c; else return c * (1 - Math.pow(2,-10 * t / d)) + b;
+	}
+	,__class__: motion.easing.ExpoEaseOut
+};
+motion.Actuate = function() { };
+$hxClasses["motion.Actuate"] = motion.Actuate;
+motion.Actuate.__name__ = ["motion","Actuate"];
+motion.Actuate.apply = function(target,properties,customActuator) {
+	motion.Actuate.stop(target,properties);
+	if(customActuator == null) customActuator = motion.Actuate.defaultActuator;
+	var actuator = Type.createInstance(customActuator,[target,0,properties]);
+	actuator.apply();
+	return actuator;
+};
+motion.Actuate.effects = function(target,duration,overwrite) {
+	if(overwrite == null) overwrite = true;
+	return new motion._Actuate.EffectsOptions(target,duration,overwrite);
+};
+motion.Actuate.getLibrary = function(target,allowCreation) {
+	if(allowCreation == null) allowCreation = true;
+	if(!(motion.Actuate.targetLibraries.h.__keys__[target.__id__] != null) && allowCreation) motion.Actuate.targetLibraries.set(target,new Array());
+	return motion.Actuate.targetLibraries.h[target.__id__];
+};
+motion.Actuate.isActive = function() {
+	var result = false;
+	var $it0 = motion.Actuate.targetLibraries.iterator();
+	while( $it0.hasNext() ) {
+		var library = $it0.next();
+		result = true;
+		break;
+	}
+	return result;
+};
+motion.Actuate.motionPath = function(target,duration,properties,overwrite) {
+	if(overwrite == null) overwrite = true;
+	return motion.Actuate.tween(target,duration,properties,overwrite,motion.actuators.MotionPathActuator);
+};
+motion.Actuate.pause = function(target) {
+	if(js.Boot.__instanceof(target,motion.actuators.IGenericActuator)) {
+		var actuator = target;
+		actuator.pause();
+	} else {
+		var library = motion.Actuate.getLibrary(target,false);
+		if(library != null) {
+			var _g = 0;
+			while(_g < library.length) {
+				var actuator1 = library[_g];
+				++_g;
+				actuator1.pause();
+			}
+		}
+	}
+};
+motion.Actuate.pauseAll = function() {
+	var $it0 = motion.Actuate.targetLibraries.iterator();
+	while( $it0.hasNext() ) {
+		var library = $it0.next();
+		var _g = 0;
+		while(_g < library.length) {
+			var actuator = library[_g];
+			++_g;
+			actuator.pause();
+		}
+	}
+};
+motion.Actuate.reset = function() {
+	var $it0 = motion.Actuate.targetLibraries.iterator();
+	while( $it0.hasNext() ) {
+		var library = $it0.next();
+		var i = library.length - 1;
+		while(i >= 0) {
+			library[i].stop(null,false,false);
+			i--;
+		}
+	}
+	motion.Actuate.targetLibraries = new haxe.ds.ObjectMap();
+};
+motion.Actuate.resume = function(target) {
+	if(js.Boot.__instanceof(target,motion.actuators.IGenericActuator)) {
+		var actuator = target;
+		actuator.resume();
+	} else {
+		var library = motion.Actuate.getLibrary(target,false);
+		if(library != null) {
+			var _g = 0;
+			while(_g < library.length) {
+				var actuator1 = library[_g];
+				++_g;
+				actuator1.resume();
+			}
+		}
+	}
+};
+motion.Actuate.resumeAll = function() {
+	var $it0 = motion.Actuate.targetLibraries.iterator();
+	while( $it0.hasNext() ) {
+		var library = $it0.next();
+		var _g = 0;
+		while(_g < library.length) {
+			var actuator = library[_g];
+			++_g;
+			actuator.resume();
+		}
+	}
+};
+motion.Actuate.stop = function(target,properties,complete,sendEvent) {
+	if(sendEvent == null) sendEvent = true;
+	if(complete == null) complete = false;
+	if(target != null) {
+		if(js.Boot.__instanceof(target,motion.actuators.IGenericActuator)) {
+			var actuator = target;
+			actuator.stop(null,complete,sendEvent);
+		} else {
+			var library = motion.Actuate.getLibrary(target,false);
+			if(library != null) {
+				if(typeof(properties) == "string") {
+					var temp = { };
+					Reflect.setField(temp,properties,null);
+					properties = temp;
+				} else if((properties instanceof Array) && properties.__enum__ == null) {
+					var temp1 = { };
+					var _g = 0;
+					var _g1;
+					_g1 = js.Boot.__cast(properties , Array);
+					while(_g < _g1.length) {
+						var property = _g1[_g];
+						++_g;
+						Reflect.setField(temp1,property,null);
+					}
+					properties = temp1;
+				}
+				var i = library.length - 1;
+				while(i >= 0) {
+					library[i].stop(properties,complete,sendEvent);
+					i--;
+				}
+			}
+		}
+	}
+};
+motion.Actuate.timer = function(duration,customActuator) {
+	return motion.Actuate.tween(new motion._Actuate.TweenTimer(0),duration,new motion._Actuate.TweenTimer(1),false,customActuator);
+};
+motion.Actuate.transform = function(target,duration,overwrite) {
+	if(overwrite == null) overwrite = true;
+	if(duration == null) duration = 0;
+	return new motion._Actuate.TransformOptions(target,duration,overwrite);
+};
+motion.Actuate.tween = function(target,duration,properties,overwrite,customActuator) {
+	if(overwrite == null) overwrite = true;
+	if(target != null) {
+		if(duration > 0) {
+			if(customActuator == null) customActuator = motion.Actuate.defaultActuator;
+			var actuator = Type.createInstance(customActuator,[target,duration,properties]);
+			var library = motion.Actuate.getLibrary(actuator.target);
+			if(overwrite) {
+				var i = library.length - 1;
+				while(i >= 0) {
+					library[i].stop(actuator.properties,false,false);
+					i--;
+				}
+				library = motion.Actuate.getLibrary(actuator.target);
+			}
+			library.push(actuator);
+			actuator.move();
+			return actuator;
+		} else return motion.Actuate.apply(target,properties,customActuator);
+	}
+	return null;
+};
+motion.Actuate.unload = function(actuator) {
+	var target = actuator.target;
+	if(motion.Actuate.targetLibraries.h.__keys__[target.__id__] != null) {
+		HxOverrides.remove(motion.Actuate.targetLibraries.h[target.__id__],actuator);
+		if(motion.Actuate.targetLibraries.h[target.__id__].length == 0) motion.Actuate.targetLibraries.remove(target);
+	}
+};
+motion.Actuate.update = function(target,duration,start,end,overwrite) {
+	if(overwrite == null) overwrite = true;
+	var properties = { start : start, end : end};
+	return motion.Actuate.tween(target,duration,properties,overwrite,motion.actuators.MethodActuator);
+};
+motion._Actuate = {};
+motion._Actuate.EffectsOptions = function(target,duration,overwrite) {
+	this.target = target;
+	this.duration = duration;
+	this.overwrite = overwrite;
+};
+$hxClasses["motion._Actuate.EffectsOptions"] = motion._Actuate.EffectsOptions;
+motion._Actuate.EffectsOptions.__name__ = ["motion","_Actuate","EffectsOptions"];
+motion._Actuate.EffectsOptions.prototype = {
+	filter: function(reference,properties) {
+		properties.filter = reference;
+		return motion.Actuate.tween(this.target,this.duration,properties,this.overwrite,motion.actuators.FilterActuator);
+	}
+	,__class__: motion._Actuate.EffectsOptions
+};
+motion._Actuate.TransformOptions = function(target,duration,overwrite) {
+	this.target = target;
+	this.duration = duration;
+	this.overwrite = overwrite;
+};
+$hxClasses["motion._Actuate.TransformOptions"] = motion._Actuate.TransformOptions;
+motion._Actuate.TransformOptions.__name__ = ["motion","_Actuate","TransformOptions"];
+motion._Actuate.TransformOptions.prototype = {
+	color: function(value,strength,alpha) {
+		if(strength == null) strength = 1;
+		if(value == null) value = 0;
+		var properties = { colorValue : value, colorStrength : strength};
+		if(alpha != null) properties.colorAlpha = alpha;
+		return motion.Actuate.tween(this.target,this.duration,properties,this.overwrite,motion.actuators.TransformActuator);
+	}
+	,sound: function(volume,pan) {
+		var properties = { };
+		if(volume != null) properties.soundVolume = volume;
+		if(pan != null) properties.soundPan = pan;
+		return motion.Actuate.tween(this.target,this.duration,properties,this.overwrite,motion.actuators.TransformActuator);
+	}
+	,__class__: motion._Actuate.TransformOptions
+};
+motion._Actuate.TweenTimer = function(progress) {
+	this.progress = progress;
+};
+$hxClasses["motion._Actuate.TweenTimer"] = motion._Actuate.TweenTimer;
+motion._Actuate.TweenTimer.__name__ = ["motion","_Actuate","TweenTimer"];
+motion._Actuate.TweenTimer.prototype = {
+	__class__: motion._Actuate.TweenTimer
+};
+motion.MotionPath = function() {
+	this._x = new motion.ComponentPath();
+	this._y = new motion.ComponentPath();
+	this._rotation = null;
+};
+$hxClasses["motion.MotionPath"] = motion.MotionPath;
+motion.MotionPath.__name__ = ["motion","MotionPath"];
+motion.MotionPath.prototype = {
+	bezier: function(x,y,controlX,controlY,strength) {
+		if(strength == null) strength = 1;
+		this._x.addPath(new motion.BezierPath(x,controlX,strength));
+		this._y.addPath(new motion.BezierPath(y,controlY,strength));
+		return this;
+	}
+	,line: function(x,y,strength) {
+		if(strength == null) strength = 1;
+		this._x.addPath(new motion.LinearPath(x,strength));
+		this._y.addPath(new motion.LinearPath(y,strength));
+		return this;
+	}
+	,get_rotation: function() {
+		if(this._rotation == null) this._rotation = new motion.RotationPath(this._x,this._y);
+		return this._rotation;
+	}
+	,get_x: function() {
+		return this._x;
+	}
+	,get_y: function() {
+		return this._y;
+	}
+	,__class__: motion.MotionPath
+	,__properties__: {get_y:"get_y",get_x:"get_x",get_rotation:"get_rotation"}
+};
+motion.IComponentPath = function() { };
+$hxClasses["motion.IComponentPath"] = motion.IComponentPath;
+motion.IComponentPath.__name__ = ["motion","IComponentPath"];
+motion.IComponentPath.prototype = {
+	__class__: motion.IComponentPath
+};
+motion.ComponentPath = function() {
+	this.paths = new Array();
+	this.start = 0;
+	this.totalStrength = 0;
+};
+$hxClasses["motion.ComponentPath"] = motion.ComponentPath;
+motion.ComponentPath.__name__ = ["motion","ComponentPath"];
+motion.ComponentPath.__interfaces__ = [motion.IComponentPath];
+motion.ComponentPath.prototype = {
+	addPath: function(path) {
+		this.paths.push(path);
+		this.totalStrength += path.strength;
+	}
+	,calculate: function(k) {
+		if(this.paths.length == 1) return this.paths[0].calculate(this.start,k); else {
+			var ratio = k * this.totalStrength;
+			var lastEnd = this.start;
+			var _g = 0;
+			var _g1 = this.paths;
+			while(_g < _g1.length) {
+				var path = _g1[_g];
+				++_g;
+				if(ratio > path.strength) {
+					ratio -= path.strength;
+					lastEnd = path.end;
+				} else return path.calculate(lastEnd,ratio / path.strength);
+			}
+		}
+		return 0;
+	}
+	,get_end: function() {
+		if(this.paths.length > 0) {
+			var path = this.paths[this.paths.length - 1];
+			return path.end;
+		} else return this.start;
+	}
+	,__class__: motion.ComponentPath
+	,__properties__: {get_end:"get_end"}
+};
+motion.BezierPath = function(end,control,strength) {
+	this.end = end;
+	this.control = control;
+	this.strength = strength;
+};
+$hxClasses["motion.BezierPath"] = motion.BezierPath;
+motion.BezierPath.__name__ = ["motion","BezierPath"];
+motion.BezierPath.prototype = {
+	calculate: function(start,k) {
+		return (1 - k) * (1 - k) * start + 2 * (1 - k) * k * this.control + k * k * this.end;
+	}
+	,__class__: motion.BezierPath
+};
+motion.LinearPath = function(end,strength) {
+	motion.BezierPath.call(this,end,0,strength);
+};
+$hxClasses["motion.LinearPath"] = motion.LinearPath;
+motion.LinearPath.__name__ = ["motion","LinearPath"];
+motion.LinearPath.__super__ = motion.BezierPath;
+motion.LinearPath.prototype = $extend(motion.BezierPath.prototype,{
+	calculate: function(start,k) {
+		return start + k * (this.end - start);
+	}
+	,__class__: motion.LinearPath
+});
+motion.RotationPath = function(x,y) {
+	this.step = 0.01;
+	this._x = x;
+	this._y = y;
+	this.offset = 0;
+	this.start = this.calculate(0.0);
+};
+$hxClasses["motion.RotationPath"] = motion.RotationPath;
+motion.RotationPath.__name__ = ["motion","RotationPath"];
+motion.RotationPath.__interfaces__ = [motion.IComponentPath];
+motion.RotationPath.prototype = {
+	calculate: function(k) {
+		var dX = this._x.calculate(k) - this._x.calculate(k + this.step);
+		var dY = this._y.calculate(k) - this._y.calculate(k + this.step);
+		var angle = Math.atan2(dY,dX) * (180 / Math.PI);
+		angle = (angle + this.offset) % 360;
+		return angle;
+	}
+	,get_end: function() {
+		return this.calculate(1.0);
+	}
+	,__class__: motion.RotationPath
+	,__properties__: {get_end:"get_end"}
+};
+motion.actuators.FilterActuator = function(target,duration,properties) {
+	this.filterIndex = -1;
+	motion.actuators.SimpleActuator.call(this,target,duration,properties);
+	if(js.Boot.__instanceof(properties.filter,Class)) {
+		this.filterClass = properties.filter;
+		if(target.get_filters().length == 0) target.set_filters([Type.createInstance(this.filterClass,[])]);
+		var _g = 0;
+		var _g1 = target.get_filters();
+		while(_g < _g1.length) {
+			var filter = _g1[_g];
+			++_g;
+			if(js.Boot.__instanceof(filter,this.filterClass)) this.filter = filter;
+		}
+	} else {
+		this.filterIndex = properties.filter;
+		this.filter = target.get_filters()[this.filterIndex];
+	}
+};
+$hxClasses["motion.actuators.FilterActuator"] = motion.actuators.FilterActuator;
+motion.actuators.FilterActuator.__name__ = ["motion","actuators","FilterActuator"];
+motion.actuators.FilterActuator.__super__ = motion.actuators.SimpleActuator;
+motion.actuators.FilterActuator.prototype = $extend(motion.actuators.SimpleActuator.prototype,{
+	setField_openfl_display_DisplayObject: function(target,propertyName,value) {
+		if(Object.prototype.hasOwnProperty.call(target,propertyName)) target[propertyName] = value; else Reflect.setProperty(target,propertyName,value);
+	}
+	,apply: function() {
+		var _g = 0;
+		var _g1 = Reflect.fields(this.properties);
+		while(_g < _g1.length) {
+			var propertyName = _g1[_g];
+			++_g;
+			if(propertyName != "filter") Reflect.setField(this.filter,propertyName,Reflect.field(this.properties,propertyName));
+		}
+		var filters = this.getField(this.target,"filters");
+		Reflect.setField(filters,this.properties.filter,this.filter);
+		this.setField_openfl_display_DisplayObject(this.target,"filters",filters);
+	}
+	,initialize: function() {
+		var details;
+		var start;
+		var _g = 0;
+		var _g1 = Reflect.fields(this.properties);
+		while(_g < _g1.length) {
+			var propertyName = _g1[_g];
+			++_g;
+			if(propertyName != "filter") {
+				start = this.getField(this.filter,propertyName);
+				details = new motion.actuators.PropertyDetails(this.filter,propertyName,start,Reflect.field(this.properties,propertyName) - start);
+				this.propertyDetails.push(details);
+			}
+		}
+		this.detailsLength = this.propertyDetails.length;
+		this.initialized = true;
+	}
+	,update: function(currentTime) {
+		motion.actuators.SimpleActuator.prototype.update.call(this,currentTime);
+		var filters = this.target.get_filters();
+		if(this.filterIndex > -1) Reflect.setField(filters,this.properties.filter,this.filter); else {
+			var _g1 = 0;
+			var _g = filters.length;
+			while(_g1 < _g) {
+				var i = _g1++;
+				if(js.Boot.__instanceof(filters[i],this.filterClass)) filters[i] = this.filter;
+			}
+		}
+		this.setField_openfl_display_DisplayObject(this.target,"filters",filters);
+	}
+	,__class__: motion.actuators.FilterActuator
+});
+motion.actuators.MethodActuator = function(target,duration,properties) {
+	this.currentParameters = new Array();
+	this.tweenProperties = { };
+	motion.actuators.SimpleActuator.call(this,target,duration,properties);
+	if(!Object.prototype.hasOwnProperty.call(properties,"start")) this.properties.start = new Array();
+	if(!Object.prototype.hasOwnProperty.call(properties,"end")) this.properties.end = this.properties.start;
+	var _g1 = 0;
+	var _g = this.properties.start.length;
+	while(_g1 < _g) {
+		var i = _g1++;
+		this.currentParameters.push(this.properties.start[i]);
+	}
+};
+$hxClasses["motion.actuators.MethodActuator"] = motion.actuators.MethodActuator;
+motion.actuators.MethodActuator.__name__ = ["motion","actuators","MethodActuator"];
+motion.actuators.MethodActuator.__super__ = motion.actuators.SimpleActuator;
+motion.actuators.MethodActuator.prototype = $extend(motion.actuators.SimpleActuator.prototype,{
+	apply: function() {
+		this.callMethod(this.target,this.properties.end);
+	}
+	,initialize: function() {
+		var details;
+		var propertyName;
+		var start;
+		var _g1 = 0;
+		var _g = this.properties.start.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			propertyName = "param" + i;
+			start = this.properties.start[i];
+			this.tweenProperties[propertyName] = start;
+			if(typeof(start) == "number" || ((start | 0) === start)) {
+				details = new motion.actuators.PropertyDetails(this.tweenProperties,propertyName,start,this.properties.end[i] - start);
+				this.propertyDetails.push(details);
+			}
+		}
+		this.detailsLength = this.propertyDetails.length;
+		this.initialized = true;
+	}
+	,update: function(currentTime) {
+		motion.actuators.SimpleActuator.prototype.update.call(this,currentTime);
+		if(this.active && !this.paused) {
+			var _g1 = 0;
+			var _g = this.properties.start.length;
+			while(_g1 < _g) {
+				var i = _g1++;
+				this.currentParameters[i] = Reflect.field(this.tweenProperties,"param" + i);
+			}
+			this.callMethod(this.target,this.currentParameters);
+		}
+	}
+	,__class__: motion.actuators.MethodActuator
+});
+motion.actuators.MotionPathActuator = function(target,duration,properties) {
+	motion.actuators.SimpleActuator.call(this,target,duration,properties);
+};
+$hxClasses["motion.actuators.MotionPathActuator"] = motion.actuators.MotionPathActuator;
+motion.actuators.MotionPathActuator.__name__ = ["motion","actuators","MotionPathActuator"];
+motion.actuators.MotionPathActuator.__super__ = motion.actuators.SimpleActuator;
+motion.actuators.MotionPathActuator.prototype = $extend(motion.actuators.SimpleActuator.prototype,{
+	setField_motion_actuators_MotionPathActuator_T: function(target,propertyName,value) {
+		if(Object.prototype.hasOwnProperty.call(target,propertyName)) target[propertyName] = value; else Reflect.setProperty(target,propertyName,value);
+	}
+	,apply: function() {
+		var _g = 0;
+		var _g1 = Reflect.fields(this.properties);
+		while(_g < _g1.length) {
+			var propertyName = _g1[_g];
+			++_g;
+			if(Object.prototype.hasOwnProperty.call(this.target,propertyName)) Reflect.setField(this.target,propertyName,(js.Boot.__cast(Reflect.field(this.properties,propertyName) , motion.IComponentPath)).get_end()); else Reflect.setProperty(this.target,propertyName,(js.Boot.__cast(Reflect.field(this.properties,propertyName) , motion.IComponentPath)).get_end());
+		}
+	}
+	,initialize: function() {
+		var details;
+		var path;
+		var _g = 0;
+		var _g1 = Reflect.fields(this.properties);
+		while(_g < _g1.length) {
+			var propertyName = _g1[_g];
+			++_g;
+			path = js.Boot.__cast(Reflect.field(this.properties,propertyName) , motion.IComponentPath);
+			if(path != null) {
+				var isField = true;
+				if(Object.prototype.hasOwnProperty.call(this.target,propertyName)) path.start = Reflect.field(this.target,propertyName); else {
+					isField = false;
+					path.start = Reflect.getProperty(this.target,propertyName);
+				}
+				details = new motion.actuators.PropertyPathDetails(this.target,propertyName,path,isField);
+				this.propertyDetails.push(details);
+			}
+		}
+		this.detailsLength = this.propertyDetails.length;
+		this.initialized = true;
+	}
+	,update: function(currentTime) {
+		if(!this.paused) {
+			var details;
+			var easing;
+			var tweenPosition = (currentTime - this.timeOffset) / this.duration;
+			if(tweenPosition > 1) tweenPosition = 1;
+			if(!this.initialized) this.initialize();
+			if(!this.special) {
+				easing = this._ease.calculate(tweenPosition);
+				var _g = 0;
+				var _g1 = this.propertyDetails;
+				while(_g < _g1.length) {
+					var details1 = _g1[_g];
+					++_g;
+					if(details1.isField) Reflect.setField(details1.target,details1.propertyName,(js.Boot.__cast(details1 , motion.actuators.PropertyPathDetails)).path.calculate(easing)); else Reflect.setProperty(details1.target,details1.propertyName,(js.Boot.__cast(details1 , motion.actuators.PropertyPathDetails)).path.calculate(easing));
+				}
+			} else {
+				if(!this._reverse) easing = this._ease.calculate(tweenPosition); else easing = this._ease.calculate(1 - tweenPosition);
+				var endValue;
+				var _g2 = 0;
+				var _g11 = this.propertyDetails;
+				while(_g2 < _g11.length) {
+					var details2 = _g11[_g2];
+					++_g2;
+					if(!this._snapping) {
+						if(details2.isField) Reflect.setField(details2.target,details2.propertyName,(js.Boot.__cast(details2 , motion.actuators.PropertyPathDetails)).path.calculate(easing)); else Reflect.setProperty(details2.target,details2.propertyName,(js.Boot.__cast(details2 , motion.actuators.PropertyPathDetails)).path.calculate(easing));
+					} else if(details2.isField) Reflect.setField(details2.target,details2.propertyName,Math.round((js.Boot.__cast(details2 , motion.actuators.PropertyPathDetails)).path.calculate(easing))); else Reflect.setProperty(details2.target,details2.propertyName,Math.round((js.Boot.__cast(details2 , motion.actuators.PropertyPathDetails)).path.calculate(easing)));
+				}
+			}
+			if(tweenPosition == 1) {
+				if(this._repeat == 0) {
+					this.active = false;
+					if(this.toggleVisible && this.getField(this.target,"alpha") == 0) this.setField_motion_actuators_MotionPathActuator_T(this.target,"visible",false);
+					this.complete(true);
+					return;
+				} else {
+					if(this._onRepeat != null) this.callMethod(this._onRepeat,this._onRepeatParams);
+					if(this._reflect) this._reverse = !this._reverse;
+					this.startTime = currentTime;
+					this.timeOffset = this.startTime + this._delay;
+					if(this._repeat > 0) this._repeat--;
+				}
+			}
+			if(this.sendChange) this.change();
+		}
+	}
+	,__class__: motion.actuators.MotionPathActuator
+});
+motion.actuators.PropertyDetails = function(target,propertyName,start,change,isField) {
+	if(isField == null) isField = true;
+	this.target = target;
+	this.propertyName = propertyName;
+	this.start = start;
+	this.change = change;
+	this.isField = isField;
+};
+$hxClasses["motion.actuators.PropertyDetails"] = motion.actuators.PropertyDetails;
+motion.actuators.PropertyDetails.__name__ = ["motion","actuators","PropertyDetails"];
+motion.actuators.PropertyDetails.prototype = {
+	__class__: motion.actuators.PropertyDetails
+};
+motion.actuators.PropertyPathDetails = function(target,propertyName,path,isField) {
+	if(isField == null) isField = true;
+	motion.actuators.PropertyDetails.call(this,target,propertyName,0,0,isField);
+	this.path = path;
+};
+$hxClasses["motion.actuators.PropertyPathDetails"] = motion.actuators.PropertyPathDetails;
+motion.actuators.PropertyPathDetails.__name__ = ["motion","actuators","PropertyPathDetails"];
+motion.actuators.PropertyPathDetails.__super__ = motion.actuators.PropertyDetails;
+motion.actuators.PropertyPathDetails.prototype = $extend(motion.actuators.PropertyDetails.prototype,{
+	__class__: motion.actuators.PropertyPathDetails
+});
+motion.actuators.TransformActuator = function(target,duration,properties) {
+	motion.actuators.SimpleActuator.call(this,target,duration,properties);
+};
+$hxClasses["motion.actuators.TransformActuator"] = motion.actuators.TransformActuator;
+motion.actuators.TransformActuator.__name__ = ["motion","actuators","TransformActuator"];
+motion.actuators.TransformActuator.__super__ = motion.actuators.SimpleActuator;
+motion.actuators.TransformActuator.prototype = $extend(motion.actuators.SimpleActuator.prototype,{
+	setField_openfl_geom_Transform: function(target,propertyName,value) {
+		if(Object.prototype.hasOwnProperty.call(target,propertyName)) target[propertyName] = value; else Reflect.setProperty(target,propertyName,value);
+	}
+	,setField_motion_actuators_TransformActuator_T: function(target,propertyName,value) {
+		if(Object.prototype.hasOwnProperty.call(target,propertyName)) target[propertyName] = value; else Reflect.setProperty(target,propertyName,value);
+	}
+	,apply: function() {
+		this.initialize();
+		if(this.endColorTransform != null) {
+			var transform = this.getField(this.target,"transform");
+			this.setField_openfl_geom_Transform(transform,"colorTransform",this.endColorTransform);
+		}
+		if(this.endSoundTransform != null) this.setField_motion_actuators_TransformActuator_T(this.target,"soundTransform",this.endSoundTransform);
+	}
+	,initialize: function() {
+		if(Object.prototype.hasOwnProperty.call(this.properties,"colorValue") && js.Boot.__instanceof(this.target,openfl.display.DisplayObject)) this.initializeColor();
+		if(Object.prototype.hasOwnProperty.call(this.properties,"soundVolume") || Object.prototype.hasOwnProperty.call(this.properties,"soundPan")) this.initializeSound();
+		this.detailsLength = this.propertyDetails.length;
+		this.initialized = true;
+	}
+	,initializeColor: function() {
+		this.endColorTransform = new openfl.geom.ColorTransform();
+		var color = this.properties.colorValue;
+		var strength = this.properties.colorStrength;
+		if(strength < 1) {
+			var multiplier;
+			var offset;
+			if(strength < 0.5) {
+				multiplier = 1;
+				offset = strength * 2;
+			} else {
+				multiplier = 1 - (strength - 0.5) * 2;
+				offset = 1;
+			}
+			this.endColorTransform.redMultiplier = multiplier;
+			this.endColorTransform.greenMultiplier = multiplier;
+			this.endColorTransform.blueMultiplier = multiplier;
+			this.endColorTransform.redOffset = offset * (color >> 16 & 255);
+			this.endColorTransform.greenOffset = offset * (color >> 8 & 255);
+			this.endColorTransform.blueOffset = offset * (color & 255);
+		} else {
+			this.endColorTransform.redMultiplier = 0;
+			this.endColorTransform.greenMultiplier = 0;
+			this.endColorTransform.blueMultiplier = 0;
+			this.endColorTransform.redOffset = color >> 16 & 255;
+			this.endColorTransform.greenOffset = color >> 8 & 255;
+			this.endColorTransform.blueOffset = color & 255;
+		}
+		var propertyNames = ["redMultiplier","greenMultiplier","blueMultiplier","redOffset","greenOffset","blueOffset"];
+		if(Object.prototype.hasOwnProperty.call(this.properties,"colorAlpha")) {
+			this.endColorTransform.alphaMultiplier = this.properties.colorAlpha;
+			propertyNames.push("alphaMultiplier");
+		} else this.endColorTransform.alphaMultiplier = this.getField(this.target,"alpha");
+		var transform = this.getField(this.target,"transform");
+		var begin = this.getField(transform,"colorTransform");
+		this.tweenColorTransform = new openfl.geom.ColorTransform();
+		var details;
+		var start;
+		var _g = 0;
+		while(_g < propertyNames.length) {
+			var propertyName = propertyNames[_g];
+			++_g;
+			start = this.getField(begin,propertyName);
+			details = new motion.actuators.PropertyDetails(this.tweenColorTransform,propertyName,start,this.getField(this.endColorTransform,propertyName) - start);
+			this.propertyDetails.push(details);
+		}
+	}
+	,initializeSound: function() {
+		if(this.getField(this.target,"soundTransform") == null) this.setField_motion_actuators_TransformActuator_T(this.target,"soundTransform",new openfl.media.SoundTransform());
+		var start = this.getField(this.target,"soundTransform");
+		this.endSoundTransform = this.getField(this.target,"soundTransform");
+		this.tweenSoundTransform = new openfl.media.SoundTransform();
+		if(Object.prototype.hasOwnProperty.call(this.properties,"soundVolume")) {
+			this.endSoundTransform.volume = this.properties.soundVolume;
+			this.propertyDetails.push(new motion.actuators.PropertyDetails(this.tweenSoundTransform,"volume",start.volume,this.endSoundTransform.volume - start.volume));
+		}
+		if(Object.prototype.hasOwnProperty.call(this.properties,"soundPan")) {
+			this.endSoundTransform.pan = this.properties.soundPan;
+			this.propertyDetails.push(new motion.actuators.PropertyDetails(this.tweenSoundTransform,"pan",start.pan,this.endSoundTransform.pan - start.pan));
+		}
+	}
+	,update: function(currentTime) {
+		motion.actuators.SimpleActuator.prototype.update.call(this,currentTime);
+		if(this.endColorTransform != null) {
+			var transform = this.getField(this.target,"transform");
+			this.setField_openfl_geom_Transform(transform,"colorTransform",this.tweenColorTransform);
+		}
+		if(this.endSoundTransform != null) this.setField_motion_actuators_TransformActuator_T(this.target,"soundTransform",this.tweenSoundTransform);
+	}
+	,__class__: motion.actuators.TransformActuator
+});
+motion.easing.ExpoEaseIn = function() {
+};
+$hxClasses["motion.easing.ExpoEaseIn"] = motion.easing.ExpoEaseIn;
+motion.easing.ExpoEaseIn.__name__ = ["motion","easing","ExpoEaseIn"];
+motion.easing.ExpoEaseIn.__interfaces__ = [motion.easing.IEasing];
+motion.easing.ExpoEaseIn.prototype = {
+	calculate: function(k) {
+		if(k == 0) return 0; else return Math.pow(2,10 * (k - 1));
+	}
+	,ease: function(t,b,c,d) {
+		if(t == 0) return b; else return c * Math.pow(2,10 * (t / d - 1)) + b;
+	}
+	,__class__: motion.easing.ExpoEaseIn
+};
+motion.easing.ExpoEaseInOut = function() {
+};
+$hxClasses["motion.easing.ExpoEaseInOut"] = motion.easing.ExpoEaseInOut;
+motion.easing.ExpoEaseInOut.__name__ = ["motion","easing","ExpoEaseInOut"];
+motion.easing.ExpoEaseInOut.__interfaces__ = [motion.easing.IEasing];
+motion.easing.ExpoEaseInOut.prototype = {
+	calculate: function(k) {
+		if(k == 0) return 0;
+		if(k == 1) return 1;
+		if((k /= 0.5) < 1.0) return 0.5 * Math.pow(2,10 * (k - 1));
+		return 0.5 * (2 - Math.pow(2,-10 * --k));
+	}
+	,ease: function(t,b,c,d) {
+		if(t == 0) return b;
+		if(t == d) return b + c;
+		if((t /= d / 2.0) < 1.0) return c / 2 * Math.pow(2,10 * (t - 1)) + b;
+		return c / 2 * (2 - Math.pow(2,-10 * --t)) + b;
+	}
+	,__class__: motion.easing.ExpoEaseInOut
+};
+var npcs = {};
+npcs.Darkling = function() {
+	this.maxSpeed = 5;
+	this.ySpeed = 0;
+	this.xSpeed = 0;
+	openfl.display.Sprite.call(this);
+	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+};
+$hxClasses["npcs.Darkling"] = npcs.Darkling;
+npcs.Darkling.__name__ = ["npcs","Darkling"];
+npcs.Darkling.__super__ = openfl.display.Sprite;
+npcs.Darkling.prototype = $extend(openfl.display.Sprite.prototype,{
+	update: function(e) {
+		this.chase();
+		this.move();
+		this.draw();
+	}
+	,chase: function() {
+		this.playerDistanceX = openfl.Lib.current.stage.get_mouseX() + Math.abs(Global.level.x) - (this.get_x() + 0.5 * this.get_width());
+		this.playerDistanceXabs = Math.abs(this.playerDistanceX);
+		this.playerDistanceY = openfl.Lib.current.stage.get_mouseY() + Math.abs(Global.level.y) - (this.get_y() + 0.5 * this.get_height());
+		this.playerDistanceYabs = Math.abs(this.playerDistanceY);
+		this.playerDistance = Math.sqrt(this.playerDistanceX * this.playerDistanceX - this.playerDistanceY * this.playerDistanceY);
+		this.canSeePlayer = true;
+		if(this.playerDistanceXabs > this.playerDistanceYabs) {
+			var _g1 = 0;
+			var _g = Math.floor(this.playerDistanceXabs / 16) * 16;
+			while(_g1 < _g) {
+				var i = _g1++;
+				this.ii = this.playerDistanceY / this.playerDistanceX * i;
+				if(this.playerDistanceX < 0) this.ii *= -1;
+				this.levelY = Math.floor(this.ii / 16) + Math.floor(this.get_y() / 16);
+				this.levelX = Math.floor(i / 16) + Math.floor(this.get_x() / 16);
+				if(this.playerDistanceX < 0) this.levelX = -Math.floor(i / 16) + Math.floor(this.get_x() / 16);
+				if(Global.level.level[this.levelY][this.levelX] > 0 && Global.level.level[this.levelY][this.levelX] != 100) {
+					this.canSeePlayer = false;
+					break;
+				}
+			}
+		} else {
+			var _g11 = 0;
+			var _g2 = Math.floor(this.playerDistanceYabs / 16) * 16;
+			while(_g11 < _g2) {
+				var i1 = _g11++;
+				this.ii = this.playerDistanceX / this.playerDistanceY * i1;
+				if(this.playerDistanceY < 0) this.ii *= -1;
+				this.levelX = Math.floor(this.ii / 16) + Math.floor(this.get_x() / 16);
+				this.levelY = Math.floor(i1 / 16) + Math.floor(this.get_y() / 16);
+				if(this.playerDistanceY < 0) this.levelY = -Math.floor(i1 / 16) + Math.floor(this.get_y() / 16);
+				if(Global.level.level[this.levelY][this.levelX] > 0 && Global.level.level[this.levelY][this.levelX] != 100) {
+					this.canSeePlayer = false;
+					break;
+				}
+			}
+		}
+		haxe.Log.trace("Global.level.level[" + this.levelY + "][" + this.levelX + "] = " + Global.level.level[this.levelY][this.levelX] + " so canSeePlayer = " + Std.string(this.canSeePlayer),{ fileName : "Darkling.hx", lineNumber : 96, className : "npcs.Darkling", methodName : "chase"});
+		if(this.canSeePlayer) {
+		} else {
+		}
+	}
+	,move: function() {
+		var _g = this;
+		_g.set_x(_g.get_x() + this.xSpeed);
+		var _g1 = this;
+		_g1.set_y(_g1.get_y() + this.ySpeed);
+	}
+	,draw: function() {
+		this.get_graphics().clear();
+		this.get_graphics().beginFill(0);
+		this.get_graphics().drawRect(0,0,3 * Global.elementSize,5 * Global.elementSize);
+	}
+	,__class__: npcs.Darkling
+});
 openfl.display.MovieClip = function() {
 	openfl.display.Sprite.call(this);
 	this.__currentFrame = 0;
@@ -8985,6 +11141,7 @@ openfl.display.MovieClip.prototype = $extend(openfl.display.Sprite.prototype,{
 		return this.__totalFrames;
 	}
 	,__class__: openfl.display.MovieClip
+	,__properties__: $extend(openfl.display.Sprite.prototype.__properties__,{get_totalFrames:"get_totalFrames",get_framesLoaded:"get_framesLoaded",get_currentLabels:"get_currentLabels",get_currentLabel:"get_currentLabel",get_currentFrameLabel:"get_currentFrameLabel",get_currentFrame:"get_currentFrame"})
 });
 openfl.display.LoaderInfo = function() {
 	openfl.events.EventDispatcher.call(this);
@@ -9267,9 +11424,9 @@ openfl.geom.Matrix.prototype = {
 		if(transpose == null) transpose = false;
 		if(transpose) {
 			this.__array[0] = this.a;
-			this.__array[1] = this.c;
+			this.__array[1] = this.b;
 			this.__array[2] = 0;
-			this.__array[3] = this.b;
+			this.__array[3] = this.c;
 			this.__array[4] = this.d;
 			this.__array[5] = 0;
 			this.__array[6] = this.tx;
@@ -9277,9 +11434,9 @@ openfl.geom.Matrix.prototype = {
 			this.__array[8] = 1;
 		} else {
 			this.__array[0] = this.a;
-			this.__array[1] = this.b;
+			this.__array[1] = this.c;
 			this.__array[2] = this.tx;
-			this.__array[3] = this.c;
+			this.__array[3] = this.b;
 			this.__array[4] = this.d;
 			this.__array[5] = this.ty;
 			this.__array[6] = 0;
@@ -9308,6 +11465,68 @@ openfl.geom.Matrix.prototype = {
 	}
 	,__class__: openfl.geom.Matrix
 };
+openfl.geom.ColorTransform = function(redMultiplier,greenMultiplier,blueMultiplier,alphaMultiplier,redOffset,greenOffset,blueOffset,alphaOffset) {
+	if(alphaOffset == null) alphaOffset = 0;
+	if(blueOffset == null) blueOffset = 0;
+	if(greenOffset == null) greenOffset = 0;
+	if(redOffset == null) redOffset = 0;
+	if(alphaMultiplier == null) alphaMultiplier = 1;
+	if(blueMultiplier == null) blueMultiplier = 1;
+	if(greenMultiplier == null) greenMultiplier = 1;
+	if(redMultiplier == null) redMultiplier = 1;
+	this.redMultiplier = redMultiplier;
+	this.greenMultiplier = greenMultiplier;
+	this.blueMultiplier = blueMultiplier;
+	this.alphaMultiplier = alphaMultiplier;
+	this.redOffset = redOffset;
+	this.greenOffset = greenOffset;
+	this.blueOffset = blueOffset;
+	this.alphaOffset = alphaOffset;
+};
+$hxClasses["openfl.geom.ColorTransform"] = openfl.geom.ColorTransform;
+openfl.geom.ColorTransform.__name__ = ["openfl","geom","ColorTransform"];
+openfl.geom.ColorTransform.prototype = {
+	concat: function(second) {
+		this.redMultiplier += second.redMultiplier;
+		this.greenMultiplier += second.greenMultiplier;
+		this.blueMultiplier += second.blueMultiplier;
+		this.alphaMultiplier += second.alphaMultiplier;
+	}
+	,__combine: function(ct) {
+		this.redMultiplier *= ct.redMultiplier;
+		this.greenMultiplier *= ct.greenMultiplier;
+		this.blueMultiplier *= ct.blueMultiplier;
+		this.alphaMultiplier *= ct.alphaMultiplier;
+		this.redOffset += ct.redOffset;
+		this.greenOffset += ct.greenOffset;
+		this.blueOffset += ct.blueOffset;
+		this.alphaOffset += ct.alphaOffset;
+	}
+	,__equals: function(ct,skipAlphaMultiplier) {
+		if(skipAlphaMultiplier == null) skipAlphaMultiplier = false;
+		return ct != null && this.redMultiplier == ct.redMultiplier && this.greenMultiplier == ct.greenMultiplier && this.blueMultiplier == ct.blueMultiplier && (skipAlphaMultiplier || this.alphaMultiplier == ct.alphaMultiplier) && this.redOffset == ct.redOffset && this.greenOffset == ct.greenOffset && this.blueOffset == ct.blueOffset && this.alphaOffset == ct.alphaOffset;
+	}
+	,__clone: function() {
+		return new openfl.geom.ColorTransform(this.redMultiplier,this.greenMultiplier,this.blueMultiplier,this.alphaMultiplier,this.redOffset,this.greenOffset,this.blueOffset,this.alphaOffset);
+	}
+	,get_color: function() {
+		return (this.redOffset | 0) << 16 | (this.greenOffset | 0) << 8 | (this.blueOffset | 0);
+	}
+	,set_color: function(value) {
+		this.redOffset = value >> 16 & 255;
+		this.greenOffset = value >> 8 & 255;
+		this.blueOffset = value & 255;
+		this.redMultiplier = 0;
+		this.greenMultiplier = 0;
+		this.blueMultiplier = 0;
+		return this.get_color();
+	}
+	,__toLimeColorMatrix: function() {
+		return new Float32Array([this.redMultiplier,0,0,0,this.redOffset / 255,0,this.greenMultiplier,0,0,this.greenOffset / 255,0,0,this.blueMultiplier,0,this.blueOffset / 255,0,0,0,this.alphaMultiplier,this.alphaOffset / 255]);
+	}
+	,__class__: openfl.geom.ColorTransform
+	,__properties__: {set_color:"set_color",get_color:"get_color"}
+};
 openfl.Lib = function() { };
 $hxClasses["openfl.Lib"] = openfl.Lib;
 openfl.Lib.__name__ = ["openfl","Lib"];
@@ -9331,7 +11550,7 @@ openfl.Lib.getURL = function(request,target) {
 openfl.Lib.notImplemented = function(api) {
 	if(!openfl.Lib.__sentWarnings.exists(api)) {
 		openfl.Lib.__sentWarnings.set(api,true);
-		haxe.Log.trace("Warning: " + api + " is not implemented",{ fileName : "Lib.hx", lineNumber : 115, className : "openfl.Lib", methodName : "notImplemented"});
+		haxe.Log.trace("Warning: " + api + " is not implemented",{ fileName : "Lib.hx", lineNumber : 114, className : "openfl.Lib", methodName : "notImplemented"});
 	}
 };
 openfl.Lib.preventDefaultTouchMove = function() {
@@ -9340,7 +11559,7 @@ openfl.Lib.preventDefaultTouchMove = function() {
 	},false);
 };
 openfl.Lib.trace = function(arg) {
-	haxe.Log.trace(arg,{ fileName : "Lib.hx", lineNumber : 146, className : "openfl.Lib", methodName : "trace"});
+	haxe.Log.trace(arg,{ fileName : "Lib.hx", lineNumber : 145, className : "openfl.Lib", methodName : "trace"});
 };
 openfl.Memory = function() { };
 $hxClasses["openfl.Memory"] = openfl.Memory;
@@ -9355,24 +11574,29 @@ openfl.Memory._setPositionTemporarily = function(position,action) {
 	return value;
 };
 openfl.Memory.getByte = function(addr) {
+	if(addr < 0 || addr + 1 > openfl.Memory.len) throw "Bad address";
 	return openfl.Memory.gcRef.data.getInt8(addr);
 };
 openfl.Memory.getDouble = function(addr) {
+	if(addr < 0 || addr + 8 > openfl.Memory.len) throw "Bad address";
 	return openfl.Memory._setPositionTemporarily(addr,function() {
 		return openfl.Memory.gcRef.readDouble();
 	});
 };
 openfl.Memory.getFloat = function(addr) {
+	if(addr < 0 || addr + 4 > openfl.Memory.len) throw "Bad address";
 	return openfl.Memory._setPositionTemporarily(addr,function() {
 		return openfl.Memory.gcRef.readFloat();
 	});
 };
 openfl.Memory.getI32 = function(addr) {
+	if(addr < 0 || addr + 4 > openfl.Memory.len) throw "Bad address";
 	return openfl.Memory._setPositionTemporarily(addr,function() {
 		return openfl.Memory.gcRef.readInt();
 	});
 };
 openfl.Memory.getUI16 = function(addr) {
+	if(addr < 0 || addr + 2 > openfl.Memory.len) throw "Bad address";
 	return openfl.Memory._setPositionTemporarily(addr,function() {
 		return openfl.Memory.gcRef.readUnsignedShort();
 	});
@@ -9382,24 +11606,29 @@ openfl.Memory.select = function(inBytes) {
 	if(inBytes != null) openfl.Memory.len = inBytes.length; else openfl.Memory.len = 0;
 };
 openfl.Memory.setByte = function(addr,v) {
+	if(addr < 0 || addr + 1 > openfl.Memory.len) throw "Bad address";
 	openfl.Memory.gcRef.data.setUint8(addr,v);
 };
 openfl.Memory.setDouble = function(addr,v) {
+	if(addr < 0 || addr + 8 > openfl.Memory.len) throw "Bad address";
 	openfl.Memory._setPositionTemporarily(addr,function() {
 		openfl.Memory.gcRef.writeDouble(v);
 	});
 };
 openfl.Memory.setFloat = function(addr,v) {
+	if(addr < 0 || addr + 4 > openfl.Memory.len) throw "Bad address";
 	openfl.Memory._setPositionTemporarily(addr,function() {
 		openfl.Memory.gcRef.writeFloat(v);
 	});
 };
 openfl.Memory.setI16 = function(addr,v) {
+	if(addr < 0 || addr + 2 > openfl.Memory.len) throw "Bad address";
 	openfl.Memory._setPositionTemporarily(addr,function() {
 		openfl.Memory.gcRef.writeUnsignedShort(v);
 	});
 };
 openfl.Memory.setI32 = function(addr,v) {
+	if(addr < 0 || addr + 4 > openfl.Memory.len) throw "Bad address";
 	openfl.Memory._setPositionTemporarily(addr,function() {
 		openfl.Memory.gcRef.writeInt(v);
 	});
@@ -9408,6 +11637,7 @@ openfl._Vector = {};
 openfl._Vector.Vector_Impl_ = function() { };
 $hxClasses["openfl._Vector.Vector_Impl_"] = openfl._Vector.Vector_Impl_;
 openfl._Vector.Vector_Impl_.__name__ = ["openfl","_Vector","Vector_Impl_"];
+openfl._Vector.Vector_Impl_.__properties__ = {set_fixed:"set_fixed",get_fixed:"get_fixed",set_length:"set_length",get_length:"get_length"}
 openfl._Vector.Vector_Impl_._new = function(length,fixed) {
 	if(fixed == null) fixed = false;
 	if(length == null) length = 0;
@@ -9916,6 +12146,52 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						openfl._internal.renderer.canvas.CanvasGraphics.hasFill = true;
 						break;
 					case 2:
+						var focalPointRatio = command[9];
+						var interpolationMethod = command[8];
+						var spreadMethod = command[7];
+						var matrix1 = command[6];
+						var ratios = command[5];
+						var alphas = command[4];
+						var colors = command[3];
+						var type = command[2];
+						openfl._internal.renderer.canvas.CanvasGraphics.closePath(false);
+						var gradientFill = null;
+						switch(type[1]) {
+						case 0:
+							if(matrix1 == null) matrix1 = new openfl.geom.Matrix();
+							var point = matrix1.transformPoint(new openfl.geom.Point(1638.4,0));
+							gradientFill = openfl._internal.renderer.canvas.CanvasGraphics.context.createRadialGradient(matrix1.tx,matrix1.ty,0,matrix1.tx,matrix1.ty,(point.x - matrix1.tx) / 2);
+							break;
+						case 1:
+							var matrix2;
+							if(matrix1 != null) matrix2 = new openfl.geom.Matrix(matrix1.a,matrix1.b,matrix1.c,matrix1.d,matrix1.tx,matrix1.ty); else matrix2 = new openfl.geom.Matrix();
+							matrix2.tx -= matrix2.a * 1638.4 / 2;
+							matrix2.ty -= matrix2.d * 1638.4 / 2;
+							var point1 = matrix2.transformPoint(new openfl.geom.Point(0,0));
+							var point2 = matrix2.transformPoint(new openfl.geom.Point(1638.4,0));
+							gradientFill = openfl._internal.renderer.canvas.CanvasGraphics.context.createLinearGradient(point1.x,point1.y,point2.x,point2.y);
+							break;
+						}
+						var _g3 = 0;
+						var _g2 = colors.length;
+						while(_g3 < _g2) {
+							var i = _g3++;
+							var rgb1 = colors[i];
+							var alpha1 = alphas[i];
+							var r1 = (rgb1 & 16711680) >>> 16;
+							var g1 = (rgb1 & 65280) >>> 8;
+							var b1 = rgb1 & 255;
+							var ratio = ratios[i] / 255;
+							if(ratio < 0) ratio = 0;
+							if(ratio > 1) ratio = 1;
+							gradientFill.addColorStop(ratio,"rgba(" + r1 + ", " + g1 + ", " + b1 + ", " + alpha1 + ")");
+						}
+						openfl._internal.renderer.canvas.CanvasGraphics.context.fillStyle = gradientFill;
+						bitmapFill = null;
+						openfl._internal.renderer.canvas.CanvasGraphics.setFill = true;
+						openfl._internal.renderer.canvas.CanvasGraphics.hasFill = true;
+						break;
+					case 3:
 						var y = command[7];
 						var x = command[6];
 						var cy2 = command[5];
@@ -9928,7 +12204,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						openfl._internal.renderer.canvas.CanvasGraphics.positionX = x;
 						openfl._internal.renderer.canvas.CanvasGraphics.positionY = y;
 						break;
-					case 3:
+					case 4:
 						var y1 = command[5];
 						var x1 = command[4];
 						var cy = command[3];
@@ -9939,7 +12215,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						openfl._internal.renderer.canvas.CanvasGraphics.positionX = x1;
 						openfl._internal.renderer.canvas.CanvasGraphics.positionY = y1;
 						break;
-					case 4:
+					case 5:
 						var radius = command[4];
 						var y2 = command[3];
 						var x2 = command[2];
@@ -9948,7 +12224,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						openfl._internal.renderer.canvas.CanvasGraphics.context.moveTo(x2 - offsetX + radius,y2 - offsetY);
 						openfl._internal.renderer.canvas.CanvasGraphics.context.arc(x2 - offsetX,y2 - offsetY,radius,0,Math.PI * 2,true);
 						break;
-					case 5:
+					case 6:
 						var height = command[5];
 						var width = command[4];
 						var y3 = command[3];
@@ -9970,7 +12246,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						openfl._internal.renderer.canvas.CanvasGraphics.context.bezierCurveTo(xe,ym + oy,xm + ox,ye,xm,ye);
 						openfl._internal.renderer.canvas.CanvasGraphics.context.bezierCurveTo(xm - ox,ye,x3,ym + oy,x3,ym);
 						break;
-					case 6:
+					case 7:
 						var height1 = command[5];
 						var width1 = command[4];
 						var y4 = command[3];
@@ -10008,7 +12284,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 							openfl._internal.renderer.canvas.CanvasGraphics.context.rect(x4 - offsetX,y4 - offsetY,width1,height1);
 						}
 						break;
-					case 7:
+					case 8:
 						var ry = command[7];
 						var rx = command[6];
 						var height2 = command[5];
@@ -10019,7 +12295,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						openfl._internal.renderer.canvas.CanvasGraphics.beginPath();
 						openfl._internal.renderer.canvas.CanvasGraphics.drawRoundRect(x5 - offsetX,y5 - offsetY,width2,height2,rx,ry);
 						break;
-					case 8:
+					case 9:
 						var count = command[6];
 						var flags = command[5];
 						var smooth1 = command[4];
@@ -10110,16 +12386,16 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						}
 						if(useBlendAdd) openfl._internal.renderer.canvas.CanvasGraphics.context.globalCompositeOperation = "source-over";
 						break;
-					case 10:
+					case 11:
 						openfl._internal.renderer.canvas.CanvasGraphics.closePath(true);
 						break;
-					case 11:
+					case 12:
 						var miterLimit = command[9];
 						var joints = command[8];
 						var caps = command[7];
 						var scaleMode = command[6];
 						var pixelHinting = command[5];
-						var alpha1 = command[4];
+						var alpha2 = command[4];
 						var color = command[3];
 						var thickness = command[2];
 						openfl._internal.renderer.canvas.CanvasGraphics.closePath(false);
@@ -10134,16 +12410,16 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 								openfl._internal.renderer.canvas.CanvasGraphics.context.lineCap = Std.string(caps).toLowerCase();
 							}
 							if(miterLimit == null) openfl._internal.renderer.canvas.CanvasGraphics.context.miterLimit = 3; else openfl._internal.renderer.canvas.CanvasGraphics.context.miterLimit = miterLimit;
-							if(alpha1 == 1 || alpha1 == null) if(color == null) openfl._internal.renderer.canvas.CanvasGraphics.context.strokeStyle = "#000000"; else openfl._internal.renderer.canvas.CanvasGraphics.context.strokeStyle = "#" + StringTools.hex(color & 16777215,6); else {
-								var r1 = (color & 16711680) >>> 16;
-								var g1 = (color & 65280) >>> 8;
-								var b1 = color & 255;
-								if(color == null) openfl._internal.renderer.canvas.CanvasGraphics.context.strokeStyle = "#000000"; else openfl._internal.renderer.canvas.CanvasGraphics.context.strokeStyle = "rgba(" + r1 + ", " + g1 + ", " + b1 + ", " + alpha1 + ")";
+							if(alpha2 == 1 || alpha2 == null) if(color == null) openfl._internal.renderer.canvas.CanvasGraphics.context.strokeStyle = "#000000"; else openfl._internal.renderer.canvas.CanvasGraphics.context.strokeStyle = "#" + StringTools.hex(color & 16777215,6); else {
+								var r2 = (color & 16711680) >>> 16;
+								var g2 = (color & 65280) >>> 8;
+								var b2 = color & 255;
+								if(color == null) openfl._internal.renderer.canvas.CanvasGraphics.context.strokeStyle = "#000000"; else openfl._internal.renderer.canvas.CanvasGraphics.context.strokeStyle = "rgba(" + r2 + ", " + g2 + ", " + b2 + ", " + alpha2 + ")";
 							}
 							openfl._internal.renderer.canvas.CanvasGraphics.hasStroke = true;
 						}
 						break;
-					case 12:
+					case 13:
 						var y6 = command[3];
 						var x6 = command[2];
 						openfl._internal.renderer.canvas.CanvasGraphics.beginPatternFill(bitmapFill,bitmapRepeat);
@@ -10152,7 +12428,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						openfl._internal.renderer.canvas.CanvasGraphics.positionX = x6;
 						openfl._internal.renderer.canvas.CanvasGraphics.positionY = y6;
 						break;
-					case 13:
+					case 14:
 						var y7 = command[3];
 						var x7 = command[2];
 						openfl._internal.renderer.canvas.CanvasGraphics.beginPath();
@@ -10160,7 +12436,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						openfl._internal.renderer.canvas.CanvasGraphics.positionX = x7;
 						openfl._internal.renderer.canvas.CanvasGraphics.positionY = y7;
 						break;
-					case 9:
+					case 10:
 						var culling = command[5];
 						var uvtData = command[4];
 						var indices = command[3];
@@ -10182,10 +12458,10 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 								this1.length = 0;
 								this1.fixed = false;
 								uvtData = this1;
-								var _g3 = 0;
-								var _g2 = v.length / 2 | 0;
-								while(_g3 < _g2) {
-									var i = _g3++;
+								var _g31 = 0;
+								var _g21 = v.length / 2 | 0;
+								while(_g31 < _g21) {
+									var i1 = _g31++;
 									if(!uvtData.fixed) {
 										uvtData.length++;
 										if(uvtData.data.length < uvtData.length) {
@@ -10196,7 +12472,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 											haxe.ds._Vector.Vector_Impl_.blit(uvtData.data,0,data,0,uvtData.data.length);
 											uvtData.data = data;
 										}
-										uvtData.data[uvtData.length - 1] = v.data[i * 2] / bitmapFill.width;
+										uvtData.data[uvtData.length - 1] = v.data[i1 * 2] / bitmapFill.width;
 									}
 									uvtData.length;
 									if(!uvtData.fixed) {
@@ -10209,7 +12485,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 											haxe.ds._Vector.Vector_Impl_.blit(uvtData.data,0,data1,0,uvtData.data.length);
 											uvtData.data = data1;
 										}
-										uvtData.data[uvtData.length - 1] = v.data[i * 2 + 1] / bitmapFill.height;
+										uvtData.data[uvtData.length - 1] = v.data[i1 * 2 + 1] / bitmapFill.height;
 									}
 									uvtData.length;
 								}
@@ -10220,10 +12496,10 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 							uvt = normalizedUvt.uvt;
 							if(maxUvt > 1) pattern = openfl._internal.renderer.canvas.CanvasGraphics.createTempPatternCanvas(bitmapFill,bitmapRepeat,openfl._internal.renderer.canvas.CanvasGraphics.bounds.width,openfl._internal.renderer.canvas.CanvasGraphics.bounds.height); else pattern = openfl._internal.renderer.canvas.CanvasGraphics.createTempPatternCanvas(bitmapFill,bitmapRepeat,bitmapFill.width,bitmapFill.height);
 						}
-						var i1 = 0;
+						var i2 = 0;
 						var l = ind.length;
 						var a;
-						var b2;
+						var b3;
 						var c;
 						var iax;
 						var iay;
@@ -10250,14 +12526,14 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 						var t4;
 						var dx;
 						var dy;
-						while(i1 < l) {
-							a = i1;
-							b2 = i1 + 1;
-							c = i1 + 2;
+						while(i2 < l) {
+							a = i2;
+							b3 = i2 + 1;
+							c = i2 + 2;
 							iax = ind.data[a] * 2;
 							iay = ind.data[a] * 2 + 1;
-							ibx = ind.data[b2] * 2;
-							iby = ind.data[b2] * 2 + 1;
+							ibx = ind.data[b3] * 2;
+							iby = ind.data[b3] * 2 + 1;
 							icx = ind.data[c] * 2;
 							icy = ind.data[c] * 2 + 1;
 							x11 = v.data[iax];
@@ -10269,13 +12545,13 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 							switch(culling[1]) {
 							case 2:
 								if(!((x21 - x11) * (y31 - y11) - (y21 - y11) * (x31 - x11) < 0)) {
-									i1 += 3;
+									i2 += 3;
 									continue;
 								}
 								break;
 							case 0:
 								if((x21 - x11) * (y31 - y11) - (y21 - y11) * (x31 - x11) < 0) {
-									i1 += 3;
+									i2 += 3;
 									continue;
 								}
 								break;
@@ -10288,7 +12564,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 								openfl._internal.renderer.canvas.CanvasGraphics.context.lineTo(x31,y31);
 								openfl._internal.renderer.canvas.CanvasGraphics.context.closePath();
 								openfl._internal.renderer.canvas.CanvasGraphics.context.fill();
-								i1 += 3;
+								i2 += 3;
 								continue;
 							}
 							openfl._internal.renderer.canvas.CanvasGraphics.context.save();
@@ -10306,7 +12582,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 							uvy3 = uvt.data[icy] * pattern.height;
 							denom = uvx1 * (uvy3 - uvy2) - uvx2 * uvy3 + uvx3 * uvy2 + (uvx2 - uvx3) * uvy1;
 							if(denom == 0) {
-								i1 += 3;
+								i2 += 3;
 								continue;
 							}
 							t1 = -(uvy1 * (x31 - x21) - uvy2 * x31 + uvy3 * x21 + (uvy2 - uvy3) * x11) / denom;
@@ -10318,14 +12594,16 @@ openfl._internal.renderer.canvas.CanvasGraphics.render = function(graphics,rende
 							openfl._internal.renderer.canvas.CanvasGraphics.context.transform(t1,t2,t3,t4,dx,dy);
 							openfl._internal.renderer.canvas.CanvasGraphics.context.drawImage(pattern,0,0);
 							openfl._internal.renderer.canvas.CanvasGraphics.context.restore();
-							i1 += 3;
+							i2 += 3;
 						}
 						break;
+					default:
+						openfl.Lib.notImplemented("CanvasGraphics");
 					}
 				}
 			} catch( e ) { if( e != "__break__" ) throw e; }
 		}
-		graphics.__dirty = false;
+		graphics.set___dirty(false);
 		openfl._internal.renderer.canvas.CanvasGraphics.closePath(false);
 	}
 };
@@ -10342,7 +12620,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.renderMask = function(graphics,r
 			var command = _g1[_g];
 			++_g;
 			switch(command[1]) {
-			case 2:
+			case 3:
 				var y = command[7];
 				var x = command[6];
 				var cy2 = command[5];
@@ -10353,7 +12631,7 @@ openfl._internal.renderer.canvas.CanvasGraphics.renderMask = function(graphics,r
 				positionX = x;
 				positionY = y;
 				break;
-			case 3:
+			case 4:
 				var y1 = command[5];
 				var x1 = command[4];
 				var cy = command[3];
@@ -10362,13 +12640,13 @@ openfl._internal.renderer.canvas.CanvasGraphics.renderMask = function(graphics,r
 				positionX = x1;
 				positionY = y1;
 				break;
-			case 4:
+			case 5:
 				var radius = command[4];
 				var y2 = command[3];
 				var x2 = command[2];
 				context.arc(x2 - offsetX,y2 - offsetY,radius,0,Math.PI * 2,true);
 				break;
-			case 5:
+			case 6:
 				var height = command[5];
 				var width = command[4];
 				var y3 = command[3];
@@ -10388,14 +12666,14 @@ openfl._internal.renderer.canvas.CanvasGraphics.renderMask = function(graphics,r
 				context.bezierCurveTo(xe,ym + oy,xm + ox,ye,xm,ye);
 				context.bezierCurveTo(xm - ox,ye,x3,ym + oy,x3,ym);
 				break;
-			case 6:
+			case 7:
 				var height1 = command[5];
 				var width1 = command[4];
 				var y4 = command[3];
 				var x4 = command[2];
 				context.rect(x4 - offsetX,y4 - offsetY,width1,height1);
 				break;
-			case 7:
+			case 8:
 				var ry = command[7];
 				var rx = command[6];
 				var height2 = command[5];
@@ -10404,14 +12682,14 @@ openfl._internal.renderer.canvas.CanvasGraphics.renderMask = function(graphics,r
 				var x5 = command[2];
 				openfl._internal.renderer.canvas.CanvasGraphics.drawRoundRect(x5 - offsetX,y5 - offsetY,width2,height2,rx,ry);
 				break;
-			case 12:
+			case 13:
 				var y6 = command[3];
 				var x6 = command[2];
 				context.lineTo(x6 - offsetX,y6 - offsetY);
 				positionX = x6;
 				positionY = y6;
 				break;
-			case 13:
+			case 14:
 				var y7 = command[3];
 				var x7 = command[2];
 				context.moveTo(x7 - offsetX,y7 - offsetY);
@@ -10549,25 +12827,59 @@ openfl._internal.renderer.canvas.CanvasTextField.renderText = function(textField
 	openfl._internal.renderer.canvas.CanvasTextField.context.font = textField.__getFont(format);
 	openfl._internal.renderer.canvas.CanvasTextField.context.textBaseline = "top";
 	openfl._internal.renderer.canvas.CanvasTextField.context.fillStyle = "#" + StringTools.hex(format.color,6);
-	var lines = text.split("\n");
+	var lines = [];
+	if(textField.get_wordWrap()) {
+		var words = text.split(" ");
+		var line = "";
+		var word;
+		var newLineIndex;
+		var test;
+		var _g1 = 0;
+		var _g = words.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			word = words[i];
+			newLineIndex = word.indexOf("\n");
+			if(newLineIndex > -1) {
+				while(newLineIndex > -1) {
+					test = line + word.substring(0,newLineIndex) + " ";
+					if(openfl._internal.renderer.canvas.CanvasTextField.context.measureText(test).width > textField.__width - 4 && i > 0) {
+						lines.push(line);
+						lines.push(word.substring(0,newLineIndex) + " ");
+					} else lines.push(line + word.substring(0,newLineIndex) + " ");
+					word = HxOverrides.substr(word,newLineIndex + 1,null);
+					newLineIndex = word.indexOf("\n");
+					line = "";
+				}
+				if(word != "") line = word + " ";
+			} else {
+				test = line + words[i] + " ";
+				if(openfl._internal.renderer.canvas.CanvasTextField.context.measureText(test).width > textField.__width - 4 && i > 0) {
+					lines.push(line);
+					line = words[i] + " ";
+				} else line = test;
+			}
+		}
+		if(line != "") lines.push(line);
+	} else lines = text.split("\n");
 	var yOffset = 0;
-	var _g = 0;
-	while(_g < lines.length) {
-		var line = lines[_g];
-		++_g;
-		var _g1 = format.align;
-		switch(_g1[1]) {
+	var _g2 = 0;
+	while(_g2 < lines.length) {
+		var line1 = lines[_g2];
+		++_g2;
+		var _g11 = format.align;
+		switch(_g11[1]) {
 		case 3:
 			openfl._internal.renderer.canvas.CanvasTextField.context.textAlign = "center";
-			openfl._internal.renderer.canvas.CanvasTextField.context.fillText(line,textField.__width / 2,2 + yOffset,textField.__width - 4);
+			openfl._internal.renderer.canvas.CanvasTextField.context.fillText(line1,textField.__width / 2,2 + yOffset,textField.__width - 4);
 			break;
 		case 1:
 			openfl._internal.renderer.canvas.CanvasTextField.context.textAlign = "end";
-			openfl._internal.renderer.canvas.CanvasTextField.context.fillText(line,textField.__width - 2,2 + yOffset,textField.__width - 4);
+			openfl._internal.renderer.canvas.CanvasTextField.context.fillText(line1,textField.__width - 2,2 + yOffset,textField.__width - 4);
 			break;
 		default:
 			openfl._internal.renderer.canvas.CanvasTextField.context.textAlign = "start";
-			openfl._internal.renderer.canvas.CanvasTextField.context.fillText(line,2 + offsetX,2 + yOffset,textField.__width - 4);
+			openfl._internal.renderer.canvas.CanvasTextField.context.fillText(line1,2 + offsetX,2 + yOffset,textField.__width - 4);
 		}
 		yOffset += textField.get_textHeight();
 	}
@@ -10906,10 +13218,8 @@ openfl._internal.renderer.opengl.GLBitmap = function() { };
 $hxClasses["openfl._internal.renderer.opengl.GLBitmap"] = openfl._internal.renderer.opengl.GLBitmap;
 openfl._internal.renderer.opengl.GLBitmap.__name__ = ["openfl","_internal","renderer","opengl","GLBitmap"];
 openfl._internal.renderer.opengl.GLBitmap.render = function(bitmap,renderSession) {
-	if(!bitmap.__renderable || bitmap.__worldAlpha <= 0) return;
-	var i;
-	var j;
-	renderSession.spriteBatch.render(bitmap);
+	if(!bitmap.__renderable || bitmap.__worldAlpha <= 0 || bitmap.bitmapData == null || !bitmap.bitmapData.__isValid) return;
+	renderSession.spriteBatch.renderBitmapData(bitmap.bitmapData,bitmap.smoothing,bitmap.__worldTransform,bitmap.__worldColorTransform,bitmap.__worldAlpha,bitmap.blendMode);
 };
 openfl._internal.renderer.opengl.GLRenderer = function(width,height,gl,transparent,antialias,preserveDrawingBuffer) {
 	if(preserveDrawingBuffer == null) preserveDrawingBuffer = false;
@@ -10925,6 +13235,7 @@ openfl._internal.renderer.opengl.GLRenderer = function(width,height,gl,transpare
 	this.options = { alpha : transparent, antialias : antialias, premultipliedAlpha : transparent, stencil : true, preserveDrawingBuffer : preserveDrawingBuffer};
 	this._glContextId = openfl._internal.renderer.opengl.GLRenderer.glContextId++;
 	this.gl = gl;
+	this.defaultFramebuffer = null;
 	openfl._internal.renderer.opengl.GLRenderer.glContexts[this._glContextId] = gl;
 	if(openfl._internal.renderer.opengl.GLRenderer.blendModesWebGL == null) {
 		openfl._internal.renderer.opengl.GLRenderer.blendModesWebGL = new haxe.ds.EnumValueMap();
@@ -10965,7 +13276,9 @@ openfl._internal.renderer.opengl.GLRenderer = function(width,height,gl,transpare
 	this.renderSession.spriteBatch = this.spriteBatch;
 	this.renderSession.stencilManager = this.stencilManager;
 	this.renderSession.renderer = this;
-	gl.useProgram(this.shaderManager.defaultShader.program);
+	this.renderSession.projection = this.projection;
+	this.renderSession.offset = this.offset;
+	this.shaderManager.setShader(this.shaderManager.defaultShader);
 	gl.disable(gl.DEPTH_TEST);
 	gl.disable(gl.CULL_FACE);
 	gl.enable(gl.BLEND);
@@ -11002,6 +13315,7 @@ openfl._internal.renderer.opengl.GLRenderer.prototype = $extend(openfl._internal
 		this.maskManager.setContext(gl);
 		this.filterManager.setContext(gl);
 		this.renderSession.gl = gl;
+		this.defaultFramebuffer = null;
 		gl.disable(gl.DEPTH_TEST);
 		gl.disable(gl.CULL_FACE);
 		gl.enable(gl.BLEND);
@@ -11013,8 +13327,8 @@ openfl._internal.renderer.opengl.GLRenderer.prototype = $extend(openfl._internal
 		if(this.contextLost) return;
 		var gl = this.gl;
 		gl.viewport(0,0,this.width,this.height);
-		gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-		if(this.transparent) gl.clearColor(0,0,0,0); else gl.clearColor(stage.__colorSplit[0] | 0,stage.__colorSplit[1] | 0,stage.__colorSplit[2] | 0,1);
+		gl.bindFramebuffer(gl.FRAMEBUFFER,this.defaultFramebuffer);
+		if(this.transparent) gl.clearColor(0,0,0,0); else gl.clearColor(stage.__colorSplit[0],stage.__colorSplit[1],stage.__colorSplit[2],1);
 		gl.clear(gl.COLOR_BUFFER_BIT);
 		this.renderDisplayObject(stage,this.projection);
 	}
@@ -11027,9 +13341,11 @@ openfl._internal.renderer.opengl.GLRenderer.prototype = $extend(openfl._internal
 		this.spriteBatch.begin(this.renderSession);
 		this.filterManager.begin(this.renderSession,buffer);
 		displayObject.__renderGL(this.renderSession);
-		this.spriteBatch.end();
+		this.spriteBatch.finish();
 	}
 	,resize: function(width,height) {
+		this.width = width;
+		this.height = height;
 		openfl._internal.renderer.AbstractRenderer.prototype.resize.call(this,width,height);
 		this.gl.viewport(0,0,width,height);
 		this.projection.x = width / 2;
@@ -11042,372 +13358,496 @@ $hxClasses["openfl._internal.renderer.opengl.GLTextField"] = openfl._internal.re
 openfl._internal.renderer.opengl.GLTextField.__name__ = ["openfl","_internal","renderer","opengl","GLTextField"];
 openfl._internal.renderer.opengl.GLTextField.render = function(textField,renderSession) {
 	if(!textField.__renderable || textField.__worldAlpha <= 0) return;
-	var gl = renderSession.gl;
-	var changed = openfl._internal.renderer.canvas.CanvasTextField.update(textField);
-	if(textField.__texture == null) {
-		textField.__texture = gl.createTexture();
-		gl.bindTexture(gl.TEXTURE_2D,textField.__texture);
-		gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-		gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
-		changed = true;
+	openfl._internal.renderer.opengl.GLTextField.update(textField);
+	if(textField.__graphics == null) textField.__graphics = new openfl.display.Graphics();
+	var graphics = textField.__graphics;
+	graphics.clear();
+	if(textField.border || textField.background) {
+		if(textField.border) graphics.lineStyle(1,textField.borderColor);
+		if(textField.background) graphics.beginFill(textField.backgroundColor);
+		graphics.drawRect(0.5,0.5,textField.__width - 1,textField.__height - 1);
 	}
-	if(changed) {
-		gl.bindTexture(gl.TEXTURE_2D,textField.__texture);
-		gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,textField.__canvas);
-		gl.bindTexture(gl.TEXTURE_2D,null);
+	if(textField.__tileData != null) {
+		var $it0 = textField.__tilesheets.keys();
+		while( $it0.hasNext() ) {
+			var tilesheet = $it0.next();
+			graphics.drawTiles(tilesheet,textField.__tileData.h[tilesheet.__id__],true,4,textField.__tileDataLength.h[tilesheet.__id__]);
+		}
+	}
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.render(textField,renderSession);
+};
+openfl._internal.renderer.opengl.GLTextField.renderText = function(textField,text,format,offsetX,textWidth) {
+	var font = textField.__getFontInstance(format);
+	if(font != null && format.size != null) {
+		if(!(openfl._internal.renderer.opengl.GLTextField.glyphs.h.__keys__[font.__id__] != null)) {
+			var value = new haxe.ds.IntMap();
+			openfl._internal.renderer.opengl.GLTextField.glyphs.set(font,value);
+		}
+		var size = format.size | 0;
+		var fontGlyphs = openfl._internal.renderer.opengl.GLTextField.glyphs.h[font.__id__];
+		if(!fontGlyphs.exists(size)) {
+			var value1 = font.renderGlyphs(font.getGlyphs(),size);
+			fontGlyphs.set(size,value1);
+		}
+		var images = fontGlyphs.get(size);
+		if(!(openfl._internal.renderer.opengl.GLTextField.bitmapData.h.__keys__[font.__id__] != null)) {
+			var value2 = new haxe.ds.IntMap();
+			openfl._internal.renderer.opengl.GLTextField.bitmapData.set(font,value2);
+		}
+		var fontBitmapData = openfl._internal.renderer.opengl.GLTextField.bitmapData.h[font.__id__];
+		if(!fontBitmapData.exists(size)) {
+			var width;
+			var height;
+			var data;
+			var $it0 = images.iterator();
+			while( $it0.hasNext() ) {
+				var image = $it0.next();
+				width = image.buffer.width;
+				height = image.buffer.height;
+				data = image.get_data();
+				break;
+			}
+			var bitmapData = new openfl.display.BitmapData(width,height);
+			var _g = 0;
+			while(_g < width) {
+				var x = _g++;
+				var _g1 = 0;
+				while(_g1 < height) {
+					var y = _g1++;
+					var alpha = data[y * width + x];
+					var color = alpha << 24 | 16711680 | 65280 | 255;
+					bitmapData.setPixel32(x,y,color);
+				}
+			}
+			fontBitmapData.set(size,bitmapData);
+		}
+		var bitmapData1 = fontBitmapData.get(size);
+		if(!(openfl._internal.renderer.opengl.GLTextField.tilesheets.h.__keys__[bitmapData1.__id__] != null)) {
+			var tilesheet = new openfl.display.Tilesheet(bitmapData1);
+			var tileID = new haxe.ds.IntMap();
+			var image1;
+			var index;
+			var $it1 = images.keys();
+			while( $it1.hasNext() ) {
+				var key = $it1.next();
+				image1 = images.get(key);
+				index = tilesheet.addTileRect(new openfl.geom.Rectangle(image1.offsetX,image1.offsetY,image1.width,image1.height));
+				tileID.set(key,index);
+			}
+			openfl._internal.renderer.opengl.GLTextField.tileIDs.set(bitmapData1,tileID);
+			openfl._internal.renderer.opengl.GLTextField.tilesheets.set(bitmapData1,tilesheet);
+		}
+		var tilesheet1 = openfl._internal.renderer.opengl.GLTextField.tilesheets.h[bitmapData1.__id__];
+		var tileID1 = openfl._internal.renderer.opengl.GLTextField.tileIDs.h[bitmapData1.__id__];
+		var r = (format.color >> 16 & 255) / 255;
+		var g = (format.color >> 8 & 255) / 255;
+		var b = (format.color & 255) / 255;
+		var tlm = textField.getLineMetrics(0);
+		var image2;
+		var x1 = offsetX;
+		var y1 = 2 + tlm.ascent;
+		var tileData;
+		textField.__tilesheets.set(tilesheet1,true);
+		if(!(textField.__tileData.h.__keys__[tilesheet1.__id__] != null)) {
+			tileData = new Array();
+			textField.__tileData.set(tilesheet1,tileData);
+			textField.__tileDataLength.set(tilesheet1,0);
+		}
+		tileData = textField.__tileData.h[tilesheet1.__id__];
+		var offsetY = 0;
+		var lines = text.split("\n");
+		if(textField.__textLayout == null) textField.__textLayout = new lime.text.TextLayout();
+		var textLayout = textField.__textLayout;
+		var length = 0;
+		var line_i = 0;
+		var oldX = x1;
+		var _g2 = 0;
+		while(_g2 < lines.length) {
+			var line = lines[_g2];
+			++_g2;
+			tlm = textField.getLineMetrics(line_i);
+			x1 = oldX;
+			var _g11 = format.align;
+			switch(_g11[1]) {
+			case 0:case 2:
+				x1 += 0;
+				break;
+			case 3:
+				x1 += (textField.__width - 4 - tlm.width) / 2;
+				break;
+			case 1:
+				x1 += textField.__width - 4 - tlm.width;
+				break;
+			}
+			textLayout.set_text(null);
+			textLayout.set_font(font);
+			textLayout.set_size(size);
+			textLayout.set_text(line);
+			var _g12 = 0;
+			var _g21 = textLayout.positions;
+			while(_g12 < _g21.length) {
+				var position = _g21[_g12];
+				++_g12;
+				image2 = images.get(position.glyph);
+				if(image2 != null) {
+					if(length >= tileData.length) {
+						tileData.push(x1 + position.offset.x + image2.x);
+						tileData.push(y1 + position.offset.y - image2.y);
+						tileData.push(tileID1.get(position.glyph));
+						tileData.push(r);
+						tileData.push(g);
+						tileData.push(b);
+					} else {
+						tileData[length] = x1 + position.offset.x + image2.x;
+						tileData[length + 1] = y1 + position.offset.y - image2.y;
+						tileData[length + 2] = tileID1.get(position.glyph);
+						tileData[length + 3] = r;
+						tileData[length + 4] = g;
+						tileData[length + 5] = b;
+					}
+					length += 6;
+				}
+				x1 += position.advance.x;
+				y1 -= position.advance.y;
+			}
+			y1 += tlm.height;
+			line_i++;
+		}
+		textField.__tileDataLength.set(tilesheet1,length);
 	}
 };
-openfl._internal.renderer.opengl.shaders = {};
-openfl._internal.renderer.opengl.shaders.AbstractShader = function(gl) {
-	this._UID = openfl._internal.renderer.opengl.shaders.AbstractShader.__UID++;
+openfl._internal.renderer.opengl.GLTextField.update = function(textField) {
+	if(textField.__dirty) {
+		if((textField.__text == null || textField.__text == "") && !textField.background && !textField.border || (textField.get_width() <= 0 || textField.get_height() <= 0) && textField.autoSize != openfl.text.TextFieldAutoSize.LEFT) {
+			textField.__tilesheets = null;
+			textField.__tileData = null;
+			textField.__tileDataLength = null;
+			textField.__dirty = false;
+		} else {
+			textField.__tilesheets = new haxe.ds.ObjectMap();
+			if(textField.__tileData == null) {
+				textField.__tileData = new haxe.ds.ObjectMap();
+				textField.__tileDataLength = new haxe.ds.ObjectMap();
+			}
+			if(textField.__text != null && textField.__text != "") {
+				var text = textField.get_text();
+				if(textField.displayAsPassword) {
+					var length = text.length;
+					var mask = "";
+					var _g = 0;
+					while(_g < length) {
+						var i = _g++;
+						mask += "*";
+					}
+					text = mask;
+				}
+				var measurements = textField.__measureText();
+				var textWidth = 0.0;
+				var _g1 = 0;
+				while(_g1 < measurements.length) {
+					var measurement = measurements[_g1];
+					++_g1;
+					textWidth += measurement;
+				}
+				if(textField.autoSize == openfl.text.TextFieldAutoSize.LEFT) {
+					textField.__width = textWidth + 4;
+					textField.__height = textField.get_textHeight() + 4;
+				}
+				if(textField.__ranges == null) openfl._internal.renderer.opengl.GLTextField.renderText(textField,text,textField.__textFormat,2,textWidth); else {
+					var currentIndex = 0;
+					var range;
+					var offsetX = 2.0;
+					var _g11 = 0;
+					var _g2 = textField.__ranges.length;
+					while(_g11 < _g2) {
+						var i1 = _g11++;
+						range = textField.__ranges[i1];
+						openfl._internal.renderer.opengl.GLTextField.renderText(textField,text.substring(range.start,range.end),range.format,offsetX,textWidth);
+						offsetX += measurements[i1];
+					}
+				}
+			} else if(textField.autoSize == openfl.text.TextFieldAutoSize.LEFT) {
+				textField.__width = 4;
+				textField.__height = 4;
+			}
+			var $it0 = textField.__tileData.keys();
+			while( $it0.hasNext() ) {
+				var key = $it0.next();
+				if(!(textField.__tilesheets.h.__keys__[key.__id__] != null)) {
+					textField.__tileData.remove(key);
+					textField.__tileDataLength.remove(key);
+				}
+			}
+			textField.__dirty = false;
+			return true;
+		}
+	}
+	return false;
+};
+openfl._internal.renderer.opengl.shaders2 = {};
+openfl._internal.renderer.opengl.shaders2.Shader = function(gl) {
+	this.uniforms = new haxe.ds.StringMap();
+	this.attributes = new haxe.ds.StringMap();
+	this.ID = openfl._internal.renderer.opengl.shaders2.Shader.UID++;
 	this.gl = gl;
 	this.program = null;
-	this.attributes = [];
 };
-$hxClasses["openfl._internal.renderer.opengl.shaders.AbstractShader"] = openfl._internal.renderer.opengl.shaders.AbstractShader;
-openfl._internal.renderer.opengl.shaders.AbstractShader.__name__ = ["openfl","_internal","renderer","opengl","shaders","AbstractShader"];
-openfl._internal.renderer.opengl.shaders.AbstractShader.compileProgram = function(gl,vertexSrc,fragmentSrc) {
-	var fragmentShader = openfl._internal.renderer.opengl.shaders.AbstractShader.CompileFragmentShader(gl,fragmentSrc);
-	var vertexShader = openfl._internal.renderer.opengl.shaders.AbstractShader.CompileVertexShader(gl,vertexSrc);
-	var shaderProgram = gl.createProgram();
-	if(fragmentShader != null && vertexShader != null) {
-		gl.attachShader(shaderProgram,vertexShader);
-		gl.attachShader(shaderProgram,fragmentShader);
-		gl.linkProgram(shaderProgram);
-		if(gl.getProgramParameter(shaderProgram,gl.LINK_STATUS) == 0) haxe.Log.trace("Could not initialize shaders",{ fileName : "AbstractShader.hx", lineNumber : 80, className : "openfl._internal.renderer.opengl.shaders.AbstractShader", methodName : "compileProgram"});
+$hxClasses["openfl._internal.renderer.opengl.shaders2.Shader"] = openfl._internal.renderer.opengl.shaders2.Shader;
+openfl._internal.renderer.opengl.shaders2.Shader.__name__ = ["openfl","_internal","renderer","opengl","shaders2","Shader"];
+openfl._internal.renderer.opengl.shaders2.Shader.compileProgram = function(gl,vertexSrc,fragmentSrc) {
+	var vertexShader = openfl._internal.renderer.opengl.shaders2.Shader.compileShader(gl,vertexSrc,gl.VERTEX_SHADER);
+	var fragmentShader = openfl._internal.renderer.opengl.shaders2.Shader.compileShader(gl,fragmentSrc,gl.FRAGMENT_SHADER);
+	var program = gl.createProgram();
+	if(vertexShader != null && fragmentShader != null) {
+		gl.attachShader(program,vertexShader);
+		gl.attachShader(program,fragmentShader);
+		gl.linkProgram(program);
+		if(gl.getProgramParameter(program,gl.LINK_STATUS) == 0) haxe.Log.trace("Could not initialize shaders",{ fileName : "Shader.hx", lineNumber : 127, className : "openfl._internal.renderer.opengl.shaders2.Shader", methodName : "compileProgram"});
 	}
-	return shaderProgram;
+	return program;
 };
-openfl._internal.renderer.opengl.shaders.AbstractShader.CompileVertexShader = function(gl,shaderSrc) {
-	return openfl._internal.renderer.opengl.shaders.AbstractShader._CompileShader(gl,shaderSrc,gl.VERTEX_SHADER);
-};
-openfl._internal.renderer.opengl.shaders.AbstractShader.CompileFragmentShader = function(gl,shaderSrc) {
-	return openfl._internal.renderer.opengl.shaders.AbstractShader._CompileShader(gl,shaderSrc,gl.FRAGMENT_SHADER);
-};
-openfl._internal.renderer.opengl.shaders.AbstractShader._CompileShader = function(gl,shaderSrc,shaderType) {
+openfl._internal.renderer.opengl.shaders2.Shader.compileShader = function(gl,shaderSrc,type) {
 	var src = shaderSrc.join("\n");
-	var shader = gl.createShader(shaderType);
+	var shader = gl.createShader(type);
 	gl.shaderSource(shader,src);
 	gl.compileShader(shader);
 	if(gl.getShaderParameter(shader,gl.COMPILE_STATUS) == 0) {
-		haxe.Log.trace(gl.getShaderInfoLog(shader),{ fileName : "AbstractShader.hx", lineNumber : 115, className : "openfl._internal.renderer.opengl.shaders.AbstractShader", methodName : "_CompileShader"});
+		haxe.Log.trace(gl.getShaderInfoLog(shader),{ fileName : "Shader.hx", lineNumber : 141, className : "openfl._internal.renderer.opengl.shaders2.Shader", methodName : "compileShader"});
 		return null;
 	}
 	return shader;
 };
-openfl._internal.renderer.opengl.shaders.AbstractShader.prototype = {
-	destroy: function() {
+openfl._internal.renderer.opengl.shaders2.Shader.prototype = {
+	init: function() {
+		this.program = openfl._internal.renderer.opengl.shaders2.Shader.compileProgram(this.gl,this.vertexSrc,this.fragmentSrc);
+		this.gl.useProgram(this.program);
+	}
+	,destroy: function() {
 		if(this.program != null) this.gl.deleteProgram(this.program);
-		this.uniforms = null;
-		this.gl = null;
 		this.attributes = null;
 	}
-	,init: function() {
-		var gl = this.gl;
-		var program = openfl._internal.renderer.opengl.shaders.AbstractShader.compileProgram(gl,this.vertexSrc,this.fragmentSrc);
-		gl.useProgram(program);
-		this.program = program;
-	}
-	,__class__: openfl._internal.renderer.opengl.shaders.AbstractShader
-};
-openfl._internal.renderer.opengl.shaders.ComplexPrimitiveShader = function(gl) {
-	openfl._internal.renderer.opengl.shaders.AbstractShader.call(this,gl);
-	this.fragmentSrc = ["precision mediump float;","varying vec4 vColor;","void main(void) {","   gl_FragColor = vColor;","}"];
-	this.vertexSrc = ["attribute vec2 aVertexPosition;","uniform mat3 translationMatrix;","uniform vec2 projectionVector;","uniform vec2 offsetVector;","uniform vec3 tint;","uniform float alpha;","uniform vec3 color;","varying vec4 vColor;","void main(void) {","   vec3 v = translationMatrix * vec3(aVertexPosition , 1.0);","   v -= offsetVector.xyx;","   gl_Position = vec4( v.x / projectionVector.x -1.0, v.y / -projectionVector.y + 1.0 , 0.0, 1.0);","   vColor = vec4(color * alpha * tint, alpha);","}"];
-	this.init();
-};
-$hxClasses["openfl._internal.renderer.opengl.shaders.ComplexPrimitiveShader"] = openfl._internal.renderer.opengl.shaders.ComplexPrimitiveShader;
-openfl._internal.renderer.opengl.shaders.ComplexPrimitiveShader.__name__ = ["openfl","_internal","renderer","opengl","shaders","ComplexPrimitiveShader"];
-openfl._internal.renderer.opengl.shaders.ComplexPrimitiveShader.__super__ = openfl._internal.renderer.opengl.shaders.AbstractShader;
-openfl._internal.renderer.opengl.shaders.ComplexPrimitiveShader.prototype = $extend(openfl._internal.renderer.opengl.shaders.AbstractShader.prototype,{
-	init: function() {
-		openfl._internal.renderer.opengl.shaders.AbstractShader.prototype.init.call(this);
-		var gl = this.gl;
-		this.projectionVector = gl.getUniformLocation(this.program,"projectionVector");
-		this.offsetVector = gl.getUniformLocation(this.program,"offsetVector");
-		this.tintColor = gl.getUniformLocation(this.program,"tint");
-		this.color = gl.getUniformLocation(this.program,"color");
-		this.aVertexPosition = gl.getAttribLocation(this.program,"aVertexPosition");
-		this.attributes = [this.aVertexPosition];
-		this.translationMatrix = gl.getUniformLocation(this.program,"translationMatrix");
-		this.alpha = gl.getUniformLocation(this.program,"alpha");
-	}
-	,__class__: openfl._internal.renderer.opengl.shaders.ComplexPrimitiveShader
-});
-openfl._internal.renderer.opengl.shaders.DefaultShader = function(gl) {
-	openfl._internal.renderer.opengl.shaders.AbstractShader.call(this,gl);
-	this.fragmentSrc = ["precision lowp float;","varying vec2 vTextureCoord;","varying vec4 vColor;","uniform sampler2D uSampler;","void main(void) {","   gl_FragColor = texture2D(uSampler, vTextureCoord) * vColor ;","}"];
-	this.textureCount = 0;
-	this.attributes = [];
-	this.init();
-};
-$hxClasses["openfl._internal.renderer.opengl.shaders.DefaultShader"] = openfl._internal.renderer.opengl.shaders.DefaultShader;
-openfl._internal.renderer.opengl.shaders.DefaultShader.__name__ = ["openfl","_internal","renderer","opengl","shaders","DefaultShader"];
-openfl._internal.renderer.opengl.shaders.DefaultShader.__super__ = openfl._internal.renderer.opengl.shaders.AbstractShader;
-openfl._internal.renderer.opengl.shaders.DefaultShader.prototype = $extend(openfl._internal.renderer.opengl.shaders.AbstractShader.prototype,{
-	init: function() {
-		if(this.vertexSrc == null) this.vertexSrc = openfl._internal.renderer.opengl.shaders.DefaultShader.defaultVertexSrc;
-		openfl._internal.renderer.opengl.shaders.AbstractShader.prototype.init.call(this);
-		var gl = this.gl;
-		this.uSampler = gl.getUniformLocation(this.program,"uSampler");
-		this.projectionVector = gl.getUniformLocation(this.program,"projectionVector");
-		this.offsetVector = gl.getUniformLocation(this.program,"offsetVector");
-		this.dimensions = gl.getUniformLocation(this.program,"dimensions");
-		this.aVertexPosition = gl.getAttribLocation(this.program,"aVertexPosition");
-		this.aTextureCoord = gl.getAttribLocation(this.program,"aTextureCoord");
-		this.colorAttribute = gl.getAttribLocation(this.program,"aColor");
-		if(this.colorAttribute == -1) this.colorAttribute = 2;
-		this.attributes = [this.aVertexPosition,this.aTextureCoord,this.colorAttribute];
-		if(this.uniforms != null) {
-			var $it0 = this.uniforms.keys();
-			while( $it0.hasNext() ) {
-				var key = $it0.next();
-				this.uniforms.get(key).uniformLocation = gl.getUniformLocation(this.program,key);
-			}
+	,getAttribLocation: function(attribute) {
+		if(this.program == null) throw "Shader isn't initialized";
+		if(this.attributes.exists(attribute)) return this.attributes.get(attribute); else {
+			var location = this.gl.getAttribLocation(this.program,attribute);
+			this.attributes.set(attribute,location);
+			return location;
 		}
-		this.initUniforms();
 	}
-	,initSampler2D: function(uniform) {
-		if(uniform.value == null || uniform.value.baseTexture == null || uniform.value.baseTexture.hasLoaded == null) return;
-		var gl = this.gl;
-		gl.activeTexture(Reflect.field(gl,"TEXTURE" + this.textureCount));
-		gl.bindTexture(gl.TEXTURE_2D,uniform.value.baseTexture._glTextures[openfl._internal.renderer.opengl.GLRenderer.glContextId]);
-		if(uniform.textureData != null) {
-			var data = uniform.textureData;
-			var magFilter;
-			if(data.magFilter != 0) magFilter = data.magFilter; else magFilter = gl.LINEAR;
-			var minFilter;
-			if(data.minFilter != 0) minFilter = data.minFilter; else minFilter = gl.LINEAR;
-			var wrapS;
-			if(data.wrapS != 0) wrapS = data.wrapS; else wrapS = gl.CLAMP_TO_EDGE;
-			var wrapT;
-			if(data.wrapT != 0) wrapT = data.wrapT; else wrapT = gl.CLAMP_TO_EDGE;
-			var format;
-			if(data.luminance != 0) format = gl.LUMINANCE; else format = gl.RGBA;
-			if(data.repeat) {
-				wrapS = gl.REPEAT;
-				wrapT = gl.REPEAT;
-			}
-			gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,data.flip);
-			if(data.width != 0) {
-				var width;
-				if(data.width != 0) width = data.width; else width = 512;
-				var height;
-				if(data.height != 0) height = data.height; else height = 2;
-				var border;
-				if(data.border != 0) border = data.border; else border = 0;
-				gl.texImage2D(gl.TEXTURE_2D,0,format,width,height,border,format,gl.UNSIGNED_BYTE,null);
-			} else gl.texImage2D(gl.TEXTURE_2D,0,format,gl.RGBA,gl.UNSIGNED_BYTE,uniform.value.baseTexture.source);
-			gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,magFilter);
-			gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,minFilter);
-			gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,wrapS);
-			gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,wrapT);
+	,getUniformLocation: function(uniform) {
+		if(this.program == null) throw "Shader isn't initialized";
+		if(this.uniforms.exists(uniform)) return this.uniforms.get(uniform); else {
+			var location = this.gl.getUniformLocation(this.program,uniform);
+			this.uniforms.set(uniform,location);
+			return location;
 		}
-		gl.uniform1i(uniform.uniformLocation,this.textureCount);
-		uniform._init = true;
-		this.textureCount++;
 	}
-	,initUniforms: function() {
-		this.textureCount = 1;
-		var gl = this.gl;
-		var uniform;
-		if(this.uniforms == null) return;
-		var $it0 = this.uniforms.keys();
-		while( $it0.hasNext() ) {
-			var key = $it0.next();
-			uniform = this.uniforms.get(key);
-			var type = uniform.type;
-			if(type == "sampler2D") {
-				uniform._init = false;
-				if(uniform.value != null) this.initSampler2D(uniform);
-			} else if(type == "mat2" || type == "mat3" || type == "mat4") {
-				uniform.glMatrix = true;
-				uniform.glValueLength = 1;
-				if(type == "mat2") uniform.glFunc = $bind(gl,gl.uniformMatrix2fv); else if(type == "mat3") uniform.glFunc = $bind(gl,gl.uniformMatrix3fv); else if(type == "mat4") uniform.glFunc = $bind(gl,gl.uniformMatrix4fv);
-			} else {
-				uniform.glFunc = Reflect.field(gl,"uniform" + type);
-				if(type == "2f" || type == "2i") uniform.glValueLength = 2; else if(type == "3f" || type == "3i") uniform.glValueLength = 3; else if(type == "4f" || type == "4i") uniform.glValueLength = 4; else uniform.glValueLength = 1;
+	,enableVertexAttribute: function(attribute,stride,offset) {
+		var location = this.getAttribLocation(attribute.name);
+		this.gl.enableVertexAttribArray(location);
+		this.gl.vertexAttribPointer(location,attribute.components,attribute.type,attribute.normalized,stride,offset * 4);
+	}
+	,disableVertexAttribute: function(attribute,setDefault) {
+		if(setDefault == null) setDefault = true;
+		var location = this.getAttribLocation(attribute.name);
+		this.gl.disableVertexAttribArray(location);
+		if(setDefault) {
+			var _g = attribute.components;
+			switch(_g) {
+			case 1:
+				this.gl.vertexAttrib1fv(location,attribute.defaultValue.subarray(0,1));
+				break;
+			case 2:
+				this.gl.vertexAttrib2fv(location,attribute.defaultValue.subarray(0,2));
+				break;
+			case 3:
+				this.gl.vertexAttrib3fv(location,attribute.defaultValue.subarray(0,3));
+				break;
+			default:
+				this.gl.vertexAttrib4fv(location,attribute.defaultValue.subarray(0,4));
 			}
 		}
 	}
-	,syncUniforms: function() {
-		this.textureCount = 1;
-		var uniform;
-		var gl = this.gl;
-		if(this.uniforms == null) return;
-		var $it0 = this.uniforms.keys();
-		while( $it0.hasNext() ) {
-			var key = $it0.next();
-			uniform = this.uniforms.get(key);
-			if(uniform.glValueLength == 1) {
-				if(uniform.glMatrix == true) uniform.glFunc.call(gl,uniform.uniformLocation,uniform.transpose,uniform.value); else uniform.glFunc.call(gl,uniform.uniformLocation,uniform.value);
-			} else if(uniform.glValueLength == 2) uniform.glFunc.call(gl,uniform.uniformLocation,uniform.value.x,uniform.value.y); else if(uniform.glValueLength == 3) uniform.glFunc.call(gl,uniform.uniformLocation,uniform.value.x,uniform.value.y,uniform.value.z); else if(uniform.glValueLength == 4) uniform.glFunc.call(gl,uniform.uniformLocation,uniform.value.x,uniform.value.y,uniform.value.z,uniform.value.w); else if(uniform.type == "sampler2D") {
-				if(uniform._init) {
-					gl.activeTexture(Reflect.field(gl,"TEXTURE" + this.textureCount));
-					var tex = uniform.value.getTexture();
-					gl.bindTexture(gl.TEXTURE_2D,tex);
-					gl.uniform1i(uniform.uniformLocation,this.textureCount);
-					this.textureCount++;
-				} else this.initSampler2D(uniform);
-			}
+	,bindVertexArray: function(va) {
+		var offset = 0;
+		var stride = va.get_stride();
+		var _g = 0;
+		var _g1 = va.attributes;
+		while(_g < _g1.length) {
+			var attribute = _g1[_g];
+			++_g;
+			if(attribute.enabled) {
+				this.enableVertexAttribute(attribute,stride,offset);
+				offset += Math.floor(attribute.components * attribute.getElementsBytes() / 4);
+			} else this.disableVertexAttribute(attribute,true);
 		}
 	}
-	,__class__: openfl._internal.renderer.opengl.shaders.DefaultShader
-});
-openfl._internal.renderer.opengl.shaders.DrawTrianglesShader = function(gl) {
-	openfl._internal.renderer.opengl.shaders.AbstractShader.call(this,gl);
-	this.vertexSrc = ["attribute vec2 aVertexPosition;","attribute vec2 aTextureCoord;","attribute vec4 aColor;","uniform mat3 translationMatrix;","uniform vec2 projectionVector;","uniform vec2 offsetVector;","varying vec2 vPos;","varying vec4 vColor;","void main(void) {","   vec3 v = vec3(aVertexPosition , 1.0);","   v -= offsetVector.xyx;","   gl_Position = vec4( v.x / projectionVector.x -1.0, v.y / -projectionVector.y + 1.0 , 0.0, 1.0);","   vPos = aTextureCoord;","   vColor = aColor;","}"];
-	this.fragmentSrc = ["precision mediump float;","uniform sampler2D sampler;","uniform vec3 color;","uniform bool useTexture;","uniform float alpha;","varying vec2 vPos;","varying vec4 vColor;","vec4 tmp;","void main(void) {","   if(useTexture) {","       tmp = texture2D(sampler, vPos);","   } else {","       tmp = vec4(color, 1.);","   }","   float a = tmp.a * vColor.a * alpha;","   gl_FragColor = vec4(vec3((tmp.rgb * vColor.rgb) * a), a);","}"];
+	,unbindVertexArray: function(va) {
+		var _g = 0;
+		var _g1 = va.attributes;
+		while(_g < _g1.length) {
+			var attribute = _g1[_g];
+			++_g;
+			this.disableVertexAttribute(attribute,false);
+		}
+	}
+	,__class__: openfl._internal.renderer.opengl.shaders2.Shader
+};
+openfl._internal.renderer.opengl.shaders2.DefaultShader = function(gl) {
+	openfl._internal.renderer.opengl.shaders2.Shader.call(this,gl);
+	this.vertexSrc = ["attribute vec2 " + Std.string("aPosition") + ";","attribute vec2 " + Std.string("aTexCoord0") + ";","attribute vec4 " + Std.string("aColor") + ";","uniform vec2 " + Std.string("uProjectionVector") + ";","uniform vec2 " + Std.string("uOffsetVector") + ";","varying vec2 vTexCoord;","varying vec4 vColor;","const vec2 center = vec2(-1.0, 1.0);","void main(void) {","   gl_Position = vec4( ((" + Std.string("aPosition") + " + " + Std.string("uOffsetVector") + ") / " + Std.string("uProjectionVector") + ") + center , 0.0, 1.0);","   vTexCoord = " + Std.string("aTexCoord0") + ";","   vColor = " + Std.string("aColor") + ";","}"];
+	this.fragmentSrc = ["#ifdef GL_ES","precision lowp float;","#endif","uniform sampler2D " + Std.string("uSampler0") + ";","uniform vec4 " + Std.string("uColorMultiplier") + ";","uniform vec4 " + Std.string("uColorOffset") + ";","varying vec2 vTexCoord;","varying vec4 vColor;","vec4 colorTransform(const vec4 color, const vec4 tint, const vec4 multiplier, const vec4 offset) {","   vec4 unmultiply = vec4(color.rgb / color.a, color.a);","   vec4 result = unmultiply * tint * multiplier;","   result = result + offset;","   result = clamp(result, 0., 1.);","   result = vec4(result.rgb * result.a, result.a);","   return result;","}","void main(void) {","   vec4 tc = texture2D(" + Std.string("uSampler0") + ", vTexCoord);","   gl_FragColor = colorTransform(tc, vColor, " + Std.string("uColorMultiplier") + ", " + Std.string("uColorOffset") + ");","}"];
 	this.init();
 };
-$hxClasses["openfl._internal.renderer.opengl.shaders.DrawTrianglesShader"] = openfl._internal.renderer.opengl.shaders.DrawTrianglesShader;
-openfl._internal.renderer.opengl.shaders.DrawTrianglesShader.__name__ = ["openfl","_internal","renderer","opengl","shaders","DrawTrianglesShader"];
-openfl._internal.renderer.opengl.shaders.DrawTrianglesShader.__super__ = openfl._internal.renderer.opengl.shaders.AbstractShader;
-openfl._internal.renderer.opengl.shaders.DrawTrianglesShader.prototype = $extend(openfl._internal.renderer.opengl.shaders.AbstractShader.prototype,{
+$hxClasses["openfl._internal.renderer.opengl.shaders2.DefaultShader"] = openfl._internal.renderer.opengl.shaders2.DefaultShader;
+openfl._internal.renderer.opengl.shaders2.DefaultShader.__name__ = ["openfl","_internal","renderer","opengl","shaders2","DefaultShader"];
+openfl._internal.renderer.opengl.shaders2.DefaultShader.__super__ = openfl._internal.renderer.opengl.shaders2.Shader;
+openfl._internal.renderer.opengl.shaders2.DefaultShader.prototype = $extend(openfl._internal.renderer.opengl.shaders2.Shader.prototype,{
 	init: function() {
-		openfl._internal.renderer.opengl.shaders.AbstractShader.prototype.init.call(this);
-		this.translationMatrix = this.gl.getUniformLocation(this.program,"translationMatrix");
-		this.projectionVector = this.gl.getUniformLocation(this.program,"projectionVector");
-		this.offsetVector = this.gl.getUniformLocation(this.program,"offsetVector");
-		this.sampler = this.gl.getUniformLocation(this.program,"sampler");
-		this.alpha = this.gl.getUniformLocation(this.program,"alpha");
-		this.color = this.gl.getUniformLocation(this.program,"color");
-		this.useTexture = this.gl.getUniformLocation(this.program,"useTexture");
-		this.aVertexPosition = this.gl.getAttribLocation(this.program,"aVertexPosition");
-		this.aTextureCoord = this.gl.getAttribLocation(this.program,"aTextureCoord");
-		this.colorAttribute = this.gl.getAttribLocation(this.program,"aColor");
-		this.attributes = [this.aVertexPosition,this.aTextureCoord,this.colorAttribute];
+		openfl._internal.renderer.opengl.shaders2.Shader.prototype.init.call(this);
+		this.getAttribLocation("aPosition");
+		this.getAttribLocation("aTexCoord0");
+		this.getAttribLocation("aColor");
+		this.getUniformLocation("uProjectionVector");
+		this.getUniformLocation("uOffsetVector");
+		this.getUniformLocation("uSampler0");
+		this.getUniformLocation("uColorMultiplier");
+		this.getUniformLocation("uColorOffset");
 	}
-	,__class__: openfl._internal.renderer.opengl.shaders.DrawTrianglesShader
+	,__class__: openfl._internal.renderer.opengl.shaders2.DefaultShader
 });
-openfl._internal.renderer.opengl.shaders.FastShader = function(gl) {
-	openfl._internal.renderer.opengl.shaders.AbstractShader.call(this,gl);
-	this.fragmentSrc = ["precision lowp float;","varying vec2 vTextureCoord;","varying float vColor;","uniform sampler2D uSampler;","void main(void) {","   gl_FragColor = texture2D(uSampler, vTextureCoord) * vColor ;","}"];
-	this.vertexSrc = ["attribute vec2 aVertexPosition;","attribute vec2 aPositionCoord;","attribute vec2 aScale;","attribute float aRotation;","attribute vec2 aTextureCoord;","attribute float aColor;","uniform vec2 projectionVector;","uniform vec2 offsetVector;","uniform mat3 uMatrix;","varying vec2 vTextureCoord;","varying float vColor;","const vec2 center = vec2(-1.0, 1.0);","void main(void) {","   vec2 v;","   vec2 sv = aVertexPosition * aScale;","   v.x = (sv.x) * cos(aRotation) - (sv.y) * sin(aRotation);","   v.y = (sv.x) * sin(aRotation) + (sv.y) * cos(aRotation);","   v = ( uMatrix * vec3(v + aPositionCoord , 1.0) ).xy ;","   gl_Position = vec4( ( v / projectionVector) + center , 0.0, 1.0);","   vTextureCoord = aTextureCoord;","   vColor = aColor;","}"];
-	this.textureCount = 0;
+openfl._internal.renderer.opengl.shaders2._DefaultShader = {};
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Attrib_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._DefaultShader.Attrib_Impl_"] = openfl._internal.renderer.opengl.shaders2._DefaultShader.Attrib_Impl_;
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Attrib_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_DefaultShader","Attrib_Impl_"];
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_"] = openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_;
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_DefaultShader","Uniform_Impl_"];
+openfl._internal.renderer.opengl.shaders2.DrawTrianglesShader = function(gl) {
+	openfl._internal.renderer.opengl.shaders2.Shader.call(this,gl);
+	this.vertexSrc = ["attribute vec2 " + Std.string("aPosition") + ";","attribute vec2 " + Std.string("aTexCoord0") + ";","attribute vec4 " + Std.string("aColor") + ";","uniform vec2 " + Std.string("uProjectionVector") + ";","uniform vec2 " + Std.string("uOffsetVector") + ";","varying vec2 vTexCoord;","varying vec4 vColor;","const vec2 center = vec2(-1.0, 1.0);","void main(void) {","   gl_Position = vec4( ((" + Std.string("aPosition") + " + " + Std.string("uOffsetVector") + ") / " + Std.string("uProjectionVector") + ") + center , 0.0, 1.0);","   vTexCoord = " + Std.string("aTexCoord0") + ";","   vColor = " + Std.string("aColor") + ".bgra;","}"];
+	this.fragmentSrc = ["#ifdef GL_ES","precision lowp float;","#endif","uniform sampler2D " + Std.string("uSampler0") + ";","uniform vec3 " + Std.string("uColor") + ";","uniform bool " + Std.string("uUseTexture") + ";","uniform float " + Std.string("uAlpha") + ";","uniform vec4 " + Std.string("uColorMultiplier") + ";","uniform vec4 " + Std.string("uColorOffset") + ";","varying vec2 vTexCoord;","varying vec4 vColor;","vec4 tmp;","vec4 colorTransform(const vec4 color, const vec4 tint, const vec4 multiplier, const vec4 offset) {","   vec4 unmultiply = vec4(color.rgb / color.a, color.a);","   vec4 result = unmultiply * tint * multiplier;","   result = result + offset;","   result = clamp(result, 0., 1.);","   result = vec4(result.rgb * result.a, result.a);","   return result;","}","void main(void) {","   if(" + Std.string("uUseTexture") + ") {","       tmp = texture2D(" + Std.string("uSampler0") + ", vTexCoord);","   } else {","       tmp = vec4(" + Std.string("uColor") + ", 1.);","   }","   gl_FragColor = colorTransform(tmp, vColor, " + Std.string("uColorMultiplier") + ", " + Std.string("uColorOffset") + ");","}"];
 	this.init();
 };
-$hxClasses["openfl._internal.renderer.opengl.shaders.FastShader"] = openfl._internal.renderer.opengl.shaders.FastShader;
-openfl._internal.renderer.opengl.shaders.FastShader.__name__ = ["openfl","_internal","renderer","opengl","shaders","FastShader"];
-openfl._internal.renderer.opengl.shaders.FastShader.__super__ = openfl._internal.renderer.opengl.shaders.AbstractShader;
-openfl._internal.renderer.opengl.shaders.FastShader.prototype = $extend(openfl._internal.renderer.opengl.shaders.AbstractShader.prototype,{
+$hxClasses["openfl._internal.renderer.opengl.shaders2.DrawTrianglesShader"] = openfl._internal.renderer.opengl.shaders2.DrawTrianglesShader;
+openfl._internal.renderer.opengl.shaders2.DrawTrianglesShader.__name__ = ["openfl","_internal","renderer","opengl","shaders2","DrawTrianglesShader"];
+openfl._internal.renderer.opengl.shaders2.DrawTrianglesShader.__super__ = openfl._internal.renderer.opengl.shaders2.Shader;
+openfl._internal.renderer.opengl.shaders2.DrawTrianglesShader.prototype = $extend(openfl._internal.renderer.opengl.shaders2.Shader.prototype,{
 	init: function() {
-		openfl._internal.renderer.opengl.shaders.AbstractShader.prototype.init.call(this);
-		var gl = this.gl;
-		this.uSampler = gl.getUniformLocation(this.program,"uSampler");
-		this.projectionVector = gl.getUniformLocation(this.program,"projectionVector");
-		this.offsetVector = gl.getUniformLocation(this.program,"offsetVector");
-		this.dimensions = gl.getUniformLocation(this.program,"dimensions");
-		this.uMatrix = gl.getUniformLocation(this.program,"uMatrix");
-		this.aVertexPosition = gl.getAttribLocation(this.program,"aVertexPosition");
-		this.aPositionCoord = gl.getAttribLocation(this.program,"aPositionCoord");
-		this.aScale = gl.getAttribLocation(this.program,"aScale");
-		this.aRotation = gl.getAttribLocation(this.program,"aRotation");
-		this.aTextureCoord = gl.getAttribLocation(this.program,"aTextureCoord");
-		this.colorAttribute = gl.getAttribLocation(this.program,"aColor");
-		if(this.colorAttribute == -1) this.colorAttribute = 2;
-		this.attributes = [this.aVertexPosition,this.aPositionCoord,this.aScale,this.aRotation,this.aTextureCoord,this.colorAttribute];
+		openfl._internal.renderer.opengl.shaders2.Shader.prototype.init.call(this);
+		this.getAttribLocation("aPosition");
+		this.getAttribLocation("aTexCoord0");
+		this.getAttribLocation("aColor");
+		this.getUniformLocation("uSampler0");
+		this.getUniformLocation("uProjectionVector");
+		this.getUniformLocation("uOffsetVector");
+		this.getUniformLocation("uColor");
+		this.getUniformLocation("uAlpha");
+		this.getUniformLocation("uUseTexture");
+		this.getUniformLocation("uColorMultiplier");
+		this.getUniformLocation("uColorOffset");
 	}
-	,__class__: openfl._internal.renderer.opengl.shaders.FastShader
+	,__class__: openfl._internal.renderer.opengl.shaders2.DrawTrianglesShader
 });
-openfl._internal.renderer.opengl.shaders.FillShader = function(gl) {
-	openfl._internal.renderer.opengl.shaders.AbstractShader.call(this,gl);
-	this.vertexSrc = ["attribute vec2 aVertexPosition;","uniform mat3 translationMatrix;","uniform vec2 projectionVector;","uniform vec2 offsetVector;","void main(void) {","   vec3 v = translationMatrix * vec3(aVertexPosition , 1.0);","   v -= offsetVector.xyx;","   gl_Position = vec4( v.x / projectionVector.x -1.0, v.y / -projectionVector.y + 1.0 , 0.0, 1.0);","}"];
-	this.fragmentSrc = ["precision mediump float;","uniform vec3 color;","uniform float alpha;","void main(void) {","   gl_FragColor = vec4((color * alpha), alpha);","}"];
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader = {};
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Attrib_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Attrib_Impl_"] = openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Attrib_Impl_;
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Attrib_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_DrawTrianglesShader","Attrib_Impl_"];
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_"] = openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_;
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_DrawTrianglesShader","Uniform_Impl_"];
+openfl._internal.renderer.opengl.shaders2.FillShader = function(gl) {
+	openfl._internal.renderer.opengl.shaders2.Shader.call(this,gl);
+	this.vertexSrc = ["attribute vec2 " + Std.string("aPosition") + ";","uniform mat3 " + Std.string("uTranslationMatrix") + ";","uniform vec2 " + Std.string("uProjectionVector") + ";","uniform vec2 " + Std.string("uOffsetVector") + ";","uniform vec4 " + Std.string("uColor") + ";","uniform float " + Std.string("uAlpha") + ";","uniform vec4 " + Std.string("uColorMultiplier") + ";","uniform vec4 " + Std.string("uColorOffset") + ";","varying vec4 vColor;","vec4 colorTransform(const vec4 color, const float alpha, const vec4 multiplier, const vec4 offset) {","   vec4 result = color * multiplier;","   result.a *= alpha;","   result = result + offset;","   result = clamp(result, 0., 1.);","   result = vec4(result.rgb * result.a, result.a);","   return result;","}","void main(void) {","   vec3 v = " + Std.string("uTranslationMatrix") + " * vec3(" + Std.string("aPosition") + ", 1.0);","   v -= " + Std.string("uOffsetVector") + ".xyx;","   gl_Position = vec4( v.x / " + Std.string("uProjectionVector") + ".x -1.0, v.y / - " + Std.string("uProjectionVector") + ".y + 1.0 , 0.0, 1.0);","   vColor = colorTransform(" + Std.string("uColor") + ", " + Std.string("uAlpha") + ", " + Std.string("uColorMultiplier") + ", " + Std.string("uColorOffset") + ");","}"];
+	this.fragmentSrc = ["#ifdef GL_ES","precision lowp float;","#endif","varying vec4 vColor;","void main(void) {","   gl_FragColor = vColor;","}"];
 	this.init();
 };
-$hxClasses["openfl._internal.renderer.opengl.shaders.FillShader"] = openfl._internal.renderer.opengl.shaders.FillShader;
-openfl._internal.renderer.opengl.shaders.FillShader.__name__ = ["openfl","_internal","renderer","opengl","shaders","FillShader"];
-openfl._internal.renderer.opengl.shaders.FillShader.__super__ = openfl._internal.renderer.opengl.shaders.AbstractShader;
-openfl._internal.renderer.opengl.shaders.FillShader.prototype = $extend(openfl._internal.renderer.opengl.shaders.AbstractShader.prototype,{
+$hxClasses["openfl._internal.renderer.opengl.shaders2.FillShader"] = openfl._internal.renderer.opengl.shaders2.FillShader;
+openfl._internal.renderer.opengl.shaders2.FillShader.__name__ = ["openfl","_internal","renderer","opengl","shaders2","FillShader"];
+openfl._internal.renderer.opengl.shaders2.FillShader.__super__ = openfl._internal.renderer.opengl.shaders2.Shader;
+openfl._internal.renderer.opengl.shaders2.FillShader.prototype = $extend(openfl._internal.renderer.opengl.shaders2.Shader.prototype,{
 	init: function() {
-		openfl._internal.renderer.opengl.shaders.AbstractShader.prototype.init.call(this);
-		this.translationMatrix = this.gl.getUniformLocation(this.program,"translationMatrix");
-		this.projectionVector = this.gl.getUniformLocation(this.program,"projectionVector");
-		this.offsetVector = this.gl.getUniformLocation(this.program,"offsetVector");
-		this.color = this.gl.getUniformLocation(this.program,"color");
-		this.alpha = this.gl.getUniformLocation(this.program,"alpha");
-		this.aVertexPosition = this.gl.getAttribLocation(this.program,"aVertexPosition");
-		this.attributes = [this.aVertexPosition];
+		openfl._internal.renderer.opengl.shaders2.Shader.prototype.init.call(this);
+		this.getAttribLocation("aPosition");
+		this.getUniformLocation("uTranslationMatrix");
+		this.getUniformLocation("uProjectionVector");
+		this.getUniformLocation("uOffsetVector");
+		this.getUniformLocation("uColor");
+		this.getUniformLocation("uColorMultiplier");
+		this.getUniformLocation("uColorOffset");
 	}
-	,__class__: openfl._internal.renderer.opengl.shaders.FillShader
+	,__class__: openfl._internal.renderer.opengl.shaders2.FillShader
 });
-openfl._internal.renderer.opengl.shaders.PatternFillShader = function(gl) {
-	openfl._internal.renderer.opengl.shaders.AbstractShader.call(this,gl);
-	this.vertexSrc = ["attribute vec2 aVertexPosition;","uniform mat3 translationMatrix;","uniform vec2 projectionVector;","uniform vec2 offsetVector;","uniform mat3 patternMatrix;","varying vec2 vPos;","void main(void) {","   vec3 v = translationMatrix * vec3(aVertexPosition , 1.0);","   v -= offsetVector.xyx;","   gl_Position = vec4( v.x / projectionVector.x -1.0, v.y / -projectionVector.y + 1.0 , 0.0, 1.0);","   vPos = (patternMatrix * vec3(aVertexPosition, 1)).xy;","}"];
-	this.fragmentSrc = ["precision mediump float;","uniform float alpha;","uniform vec2 patternTL;","uniform vec2 patternBR;","uniform sampler2D sampler;","varying vec2 vPos;","void main(void) {","   vec2 pos = mix(patternTL, patternBR, vPos);","   vec4 tcol = texture2D(sampler, pos);","   gl_FragColor = vec4(tcol.rgb * alpha, tcol.a * alpha);","}"];
+openfl._internal.renderer.opengl.shaders2._FillShader = {};
+openfl._internal.renderer.opengl.shaders2._FillShader.Attrib_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._FillShader.Attrib_Impl_"] = openfl._internal.renderer.opengl.shaders2._FillShader.Attrib_Impl_;
+openfl._internal.renderer.opengl.shaders2._FillShader.Attrib_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_FillShader","Attrib_Impl_"];
+openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_"] = openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_;
+openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_FillShader","Uniform_Impl_"];
+openfl._internal.renderer.opengl.shaders2.PatternFillShader = function(gl) {
+	openfl._internal.renderer.opengl.shaders2.Shader.call(this,gl);
+	this.vertexSrc = ["attribute vec2 " + Std.string("aPosition") + ";","uniform mat3 " + Std.string("uTranslationMatrix") + ";","uniform vec2 " + Std.string("uProjectionVector") + ";","uniform vec2 " + Std.string("uOffsetVector") + ";","uniform mat3 " + Std.string("uPatternMatrix") + ";","varying vec2 vPosition;","void main(void) {","   vec3 v = " + Std.string("uTranslationMatrix") + " * vec3(" + Std.string("aPosition") + " , 1.0);","   v -= " + Std.string("uOffsetVector") + ".xyx;","   gl_Position = vec4( v.x / " + Std.string("uProjectionVector") + ".x -1.0, v.y / - " + Std.string("uProjectionVector") + ".y + 1.0 , 0.0, 1.0);","   vPosition = (" + Std.string("uPatternMatrix") + " * vec3(" + Std.string("aPosition") + ", 1)).xy;","}"];
+	this.fragmentSrc = ["#ifdef GL_ES","precision lowp float;","#endif","uniform float " + Std.string("uAlpha") + ";","uniform vec2 " + Std.string("uPatternTL") + ";","uniform vec2 " + Std.string("uPatternBR") + ";","uniform sampler2D " + Std.string("uSampler0") + ";","uniform vec4 " + Std.string("uColorMultiplier") + ";","uniform vec4 " + Std.string("uColorOffset") + ";","varying vec2 vPosition;","vec4 colorTransform(const vec4 color, const float alpha, const vec4 multiplier, const vec4 offset) {","   vec4 unmultiply = vec4(color.rgb / color.a, color.a);","   vec4 result = unmultiply * multiplier;","   result.a *= alpha;","   result = result + offset;","   result = clamp(result, 0., 1.);","   result = vec4(result.rgb * result.a, result.a);","   return result;","}","void main(void) {","   vec2 pos = mix(" + Std.string("uPatternTL") + ", " + Std.string("uPatternBR") + ", vPosition);","   vec4 tcol = texture2D(" + Std.string("uSampler0") + ", pos);","   gl_FragColor = colorTransform(tcol, " + Std.string("uAlpha") + ", " + Std.string("uColorMultiplier") + ", " + Std.string("uColorOffset") + ");","}"];
 	this.init();
 };
-$hxClasses["openfl._internal.renderer.opengl.shaders.PatternFillShader"] = openfl._internal.renderer.opengl.shaders.PatternFillShader;
-openfl._internal.renderer.opengl.shaders.PatternFillShader.__name__ = ["openfl","_internal","renderer","opengl","shaders","PatternFillShader"];
-openfl._internal.renderer.opengl.shaders.PatternFillShader.__super__ = openfl._internal.renderer.opengl.shaders.AbstractShader;
-openfl._internal.renderer.opengl.shaders.PatternFillShader.prototype = $extend(openfl._internal.renderer.opengl.shaders.AbstractShader.prototype,{
+$hxClasses["openfl._internal.renderer.opengl.shaders2.PatternFillShader"] = openfl._internal.renderer.opengl.shaders2.PatternFillShader;
+openfl._internal.renderer.opengl.shaders2.PatternFillShader.__name__ = ["openfl","_internal","renderer","opengl","shaders2","PatternFillShader"];
+openfl._internal.renderer.opengl.shaders2.PatternFillShader.__super__ = openfl._internal.renderer.opengl.shaders2.Shader;
+openfl._internal.renderer.opengl.shaders2.PatternFillShader.prototype = $extend(openfl._internal.renderer.opengl.shaders2.Shader.prototype,{
 	init: function() {
-		openfl._internal.renderer.opengl.shaders.AbstractShader.prototype.init.call(this);
-		this.translationMatrix = this.gl.getUniformLocation(this.program,"translationMatrix");
-		this.projectionVector = this.gl.getUniformLocation(this.program,"projectionVector");
-		this.offsetVector = this.gl.getUniformLocation(this.program,"offsetVector");
-		this.patternMatrix = this.gl.getUniformLocation(this.program,"patternMatrix");
-		this.patternTL = this.gl.getUniformLocation(this.program,"patternTL");
-		this.patternBR = this.gl.getUniformLocation(this.program,"patternBR");
-		this.sampler = this.gl.getUniformLocation(this.program,"sampler");
-		this.alpha = this.gl.getUniformLocation(this.program,"alpha");
-		this.aVertexPosition = this.gl.getAttribLocation(this.program,"aVertexPosition");
-		this.attributes = [this.aVertexPosition];
+		openfl._internal.renderer.opengl.shaders2.Shader.prototype.init.call(this);
+		this.getAttribLocation("aPosition");
+		this.getUniformLocation("uTranslationMatrix");
+		this.getUniformLocation("uPatternMatrix");
+		this.getUniformLocation("uProjectionVector");
+		this.getUniformLocation("uOffsetVector");
+		this.getUniformLocation("uSampler0");
+		this.getUniformLocation("uPatternTL");
+		this.getUniformLocation("uPatternBR");
+		this.getUniformLocation("uAlpha");
+		this.getUniformLocation("uColorMultiplier");
+		this.getUniformLocation("uColorOffset");
 	}
-	,__class__: openfl._internal.renderer.opengl.shaders.PatternFillShader
+	,__class__: openfl._internal.renderer.opengl.shaders2.PatternFillShader
 });
-openfl._internal.renderer.opengl.shaders.PrimitiveShader = function(gl) {
-	openfl._internal.renderer.opengl.shaders.AbstractShader.call(this,gl);
-	this.fragmentSrc = ["precision mediump float;","varying vec4 vColor;","void main(void) {","   gl_FragColor = vColor;","}"];
-	this.vertexSrc = ["attribute vec2 aVertexPosition;","attribute vec4 aColor;","uniform mat3 translationMatrix;","uniform vec2 projectionVector;","uniform vec2 offsetVector;","uniform float alpha;","uniform vec3 tint;","varying vec4 vColor;","void main(void) {","   vec3 v = translationMatrix * vec3(aVertexPosition , 1.0);","   v -= offsetVector.xyx;","   gl_Position = vec4( v.x / projectionVector.x -1.0, v.y / -projectionVector.y + 1.0 , 0.0, 1.0);","   vColor = aColor;","}"];
+openfl._internal.renderer.opengl.shaders2._PatternFillShader = {};
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Attrib_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._PatternFillShader.Attrib_Impl_"] = openfl._internal.renderer.opengl.shaders2._PatternFillShader.Attrib_Impl_;
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Attrib_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_PatternFillShader","Attrib_Impl_"];
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_"] = openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_;
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_PatternFillShader","Uniform_Impl_"];
+openfl._internal.renderer.opengl.shaders2.PrimitiveShader = function(gl) {
+	openfl._internal.renderer.opengl.shaders2.Shader.call(this,gl);
+	this.vertexSrc = ["attribute vec2 " + Std.string("aPosition") + ";","attribute vec4 " + Std.string("aColor") + ";","uniform mat3 " + Std.string("uTranslationMatrix") + ";","uniform vec2 " + Std.string("uProjectionVector") + ";","uniform vec2 " + Std.string("uOffsetVector") + ";","uniform vec4 " + Std.string("uColorMultiplier") + ";","uniform vec4 " + Std.string("uColorOffset") + ";","uniform float " + Std.string("uAlpha") + ";","varying vec4 vColor;","vec4 colorTransform(const vec4 color, const float alpha, const vec4 multiplier, const vec4 offset) {","   vec4 result = color * multiplier;","   result.a *= alpha;","   result = result + offset;","   result = clamp(result, 0., 1.);","   result = vec4(result.rgb * result.a, result.a);","   return result;","}","void main(void) {","   vec3 v = " + Std.string("uTranslationMatrix") + " * vec3(" + Std.string("aPosition") + " , 1.0);","   v -= " + Std.string("uOffsetVector") + ".xyx;","   gl_Position = vec4( v.x / " + Std.string("uProjectionVector") + ".x -1.0, v.y / -" + Std.string("uProjectionVector") + ".y + 1.0 , 0.0, 1.0);","   vColor = colorTransform(" + Std.string("aColor") + ", " + Std.string("uAlpha") + ", " + Std.string("uColorMultiplier") + ", " + Std.string("uColorOffset") + ");","}"];
+	this.fragmentSrc = ["#ifdef GL_ES","precision lowp float;","#endif","varying vec4 vColor;","void main(void) {","   gl_FragColor = vColor;","}"];
 	this.init();
 };
-$hxClasses["openfl._internal.renderer.opengl.shaders.PrimitiveShader"] = openfl._internal.renderer.opengl.shaders.PrimitiveShader;
-openfl._internal.renderer.opengl.shaders.PrimitiveShader.__name__ = ["openfl","_internal","renderer","opengl","shaders","PrimitiveShader"];
-openfl._internal.renderer.opengl.shaders.PrimitiveShader.__super__ = openfl._internal.renderer.opengl.shaders.AbstractShader;
-openfl._internal.renderer.opengl.shaders.PrimitiveShader.prototype = $extend(openfl._internal.renderer.opengl.shaders.AbstractShader.prototype,{
+$hxClasses["openfl._internal.renderer.opengl.shaders2.PrimitiveShader"] = openfl._internal.renderer.opengl.shaders2.PrimitiveShader;
+openfl._internal.renderer.opengl.shaders2.PrimitiveShader.__name__ = ["openfl","_internal","renderer","opengl","shaders2","PrimitiveShader"];
+openfl._internal.renderer.opengl.shaders2.PrimitiveShader.__super__ = openfl._internal.renderer.opengl.shaders2.Shader;
+openfl._internal.renderer.opengl.shaders2.PrimitiveShader.prototype = $extend(openfl._internal.renderer.opengl.shaders2.Shader.prototype,{
 	init: function() {
-		openfl._internal.renderer.opengl.shaders.AbstractShader.prototype.init.call(this);
-		var gl = this.gl;
-		this.projectionVector = gl.getUniformLocation(this.program,"projectionVector");
-		this.offsetVector = gl.getUniformLocation(this.program,"offsetVector");
-		this.tintColor = gl.getUniformLocation(this.program,"tint");
-		this.aVertexPosition = gl.getAttribLocation(this.program,"aVertexPosition");
-		this.colorAttribute = gl.getAttribLocation(this.program,"aColor");
-		this.attributes = [this.aVertexPosition,this.colorAttribute];
-		this.translationMatrix = gl.getUniformLocation(this.program,"translationMatrix");
-		this.alpha = gl.getUniformLocation(this.program,"alpha");
+		openfl._internal.renderer.opengl.shaders2.Shader.prototype.init.call(this);
+		this.getAttribLocation("aPosition");
+		this.getAttribLocation("aColor");
+		this.getUniformLocation("uTranslationMatrix");
+		this.getUniformLocation("uProjectionVector");
+		this.getUniformLocation("uOffsetVector");
+		this.getUniformLocation("uAlpha");
+		this.getUniformLocation("uColorMultiplier");
+		this.getUniformLocation("uColorOffset");
 	}
-	,__class__: openfl._internal.renderer.opengl.shaders.PrimitiveShader
+	,__class__: openfl._internal.renderer.opengl.shaders2.PrimitiveShader
 });
-openfl._internal.renderer.opengl.shaders.StripShader = function(gl) {
-	openfl._internal.renderer.opengl.shaders.AbstractShader.call(this,gl);
-	this.fragmentSrc = ["precision mediump float;","varying vec2 vTextureCoord;","uniform float alpha;","uniform sampler2D uSampler;","void main(void) {","   gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.x, vTextureCoord.y));","}"];
-	this.vertexSrc = ["attribute vec2 aVertexPosition;","attribute vec2 aTextureCoord;","uniform mat3 translationMatrix;","uniform vec2 projectionVector;","uniform vec2 offsetVector;","varying vec2 vTextureCoord;","void main(void) {","   vec3 v = translationMatrix * vec3(aVertexPosition , 1.0);","   v -= offsetVector.xyx;","   gl_Position = vec4( v.x / projectionVector.x -1.0, v.y / -projectionVector.y + 1.0 , 0.0, 1.0);","   vTextureCoord = aTextureCoord;","}"];
-	this.init();
-};
-$hxClasses["openfl._internal.renderer.opengl.shaders.StripShader"] = openfl._internal.renderer.opengl.shaders.StripShader;
-openfl._internal.renderer.opengl.shaders.StripShader.__name__ = ["openfl","_internal","renderer","opengl","shaders","StripShader"];
-openfl._internal.renderer.opengl.shaders.StripShader.__super__ = openfl._internal.renderer.opengl.shaders.AbstractShader;
-openfl._internal.renderer.opengl.shaders.StripShader.prototype = $extend(openfl._internal.renderer.opengl.shaders.AbstractShader.prototype,{
-	init: function() {
-		openfl._internal.renderer.opengl.shaders.AbstractShader.prototype.init.call(this);
-		var gl = this.gl;
-		this.uSampler = gl.getUniformLocation(this.program,"uSampler");
-		this.projectionVector = gl.getUniformLocation(this.program,"projectionVector");
-		this.offsetVector = gl.getUniformLocation(this.program,"offsetVector");
-		this.colorAttribute = gl.getAttribLocation(this.program,"aColor");
-		this.aVertexPosition = gl.getAttribLocation(this.program,"aVertexPosition");
-		this.aTextureCoord = gl.getAttribLocation(this.program,"aTextureCoord");
-		this.attributes = [this.aVertexPosition,this.aTextureCoord];
-		this.translationMatrix = gl.getUniformLocation(this.program,"translationMatrix");
-		this.alpha = gl.getUniformLocation(this.program,"alpha");
-	}
-	,__class__: openfl._internal.renderer.opengl.shaders.StripShader
-});
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader = {};
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Attrib_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Attrib_Impl_"] = openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Attrib_Impl_;
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Attrib_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_PrimitiveShader","Attrib_Impl_"];
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_"] = openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_;
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_.__name__ = ["openfl","_internal","renderer","opengl","shaders2","_PrimitiveShader","Uniform_Impl_"];
 openfl._internal.renderer.opengl.utils = {};
 openfl._internal.renderer.opengl.utils.BlendModeManager = function(gl) {
 	this.gl = gl;
@@ -11432,6 +13872,7 @@ openfl._internal.renderer.opengl.utils.BlendModeManager.prototype = {
 openfl._internal.renderer.opengl.utils.DrawPath = function() {
 	this.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
 	this.points = [];
+	this.winding = 0;
 	this.isRemovable = true;
 	this.fillIndex = 0;
 	this.line = new openfl._internal.renderer.opengl.utils.LineStyle();
@@ -11443,14 +13884,15 @@ openfl._internal.renderer.opengl.utils.DrawPath.getStack = function(graphics,gl)
 	return openfl._internal.renderer.opengl.utils.PathBuiler.build(graphics,gl);
 };
 openfl._internal.renderer.opengl.utils.DrawPath.prototype = {
-	update: function(line,fill,fillIndex) {
+	update: function(line,fill,fillIndex,winding) {
 		this.updateLine(line);
 		this.fill = fill;
 		this.fillIndex = fillIndex;
+		this.winding = winding;
 	}
 	,updateLine: function(line) {
 		this.line.width = line.width;
-		this.line.color = line.color & 16777215;
+		this.line.color = line.color;
 		if(line.alpha == null) this.line.alpha = 1; else this.line.alpha = line.alpha;
 		if(line.scaleMode == null) this.line.scaleMode = openfl.display.LineScaleMode.NORMAL; else this.line.scaleMode = line.scaleMode;
 		if(line.caps == null) this.line.caps = openfl.display.CapsStyle.ROUND; else this.line.caps = line.caps;
@@ -11487,11 +13929,85 @@ openfl._internal.renderer.opengl.utils.PathBuiler.endFill = function() {
 openfl._internal.renderer.opengl.utils.PathBuiler.moveTo = function(x,y) {
 	if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
 	openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-	openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+	openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 	openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
 	openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(x);
 	openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(y);
 	openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
+};
+openfl._internal.renderer.opengl.utils.PathBuiler.lineTo = function(x,y) {
+	openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(x);
+	openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(y);
+};
+openfl._internal.renderer.opengl.utils.PathBuiler.curveTo = function(cx,cy,x,y) {
+	if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) {
+		if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(0);
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(0);
+		openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
+	}
+	var xa = 0;
+	var ya = 0;
+	var n = 20;
+	var points = openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points;
+	var fromX = points[points.length - 2];
+	var fromY = points[points.length - 1];
+	var px = 0;
+	var py = 0;
+	var tmp = 0;
+	var _g1 = 1;
+	var _g = n + 1;
+	while(_g1 < _g) {
+		var i = _g1++;
+		tmp = i / n;
+		xa = fromX + (cx - fromX) * tmp;
+		ya = fromY + (cy - fromY) * tmp;
+		px = xa + (cx + (x - cx) * tmp - xa) * tmp;
+		py = ya + (cy + (y - cy) * tmp - ya) * tmp;
+		points.push(px);
+		points.push(py);
+	}
+};
+openfl._internal.renderer.opengl.utils.PathBuiler.cubicCurveTo = function(cx,cy,cx2,cy2,x,y) {
+	if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) {
+		if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(0);
+		openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(0);
+		openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
+	}
+	var n = 20;
+	var dt = 0;
+	var dt2 = 0;
+	var dt3 = 0;
+	var t2 = 0;
+	var t3 = 0;
+	var points = openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points;
+	var fromX = points[points.length - 2];
+	var fromY = points[points.length - 1];
+	var px = 0;
+	var py = 0;
+	var tmp = 0;
+	var _g1 = 1;
+	var _g = n + 1;
+	while(_g1 < _g) {
+		var i = _g1++;
+		tmp = i / n;
+		dt = 1 - tmp;
+		dt2 = dt * dt;
+		dt3 = dt2 * dt;
+		t2 = tmp * tmp;
+		t3 = t2 * tmp;
+		px = dt3 * fromX + 3 * dt2 * tmp * cx + 3 * dt * t2 * cx2 + t3 * x;
+		py = dt3 * fromY + 3 * dt2 * tmp * cy + 3 * dt * t2 * cy2 + t3 * y;
+		points.push(px);
+		points.push(py);
+	}
 };
 openfl._internal.renderer.opengl.utils.PathBuiler.graphicDataPop = function() {
 	if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
@@ -11524,7 +14040,7 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) {
 					if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
 					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points = [];
 					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
 					openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
@@ -11538,112 +14054,64 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) {
 					if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
 					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points = [];
 					openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
 					openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
 				}
 				break;
-			case 2:
+			case 3:
 				var y = command[7];
 				var x = command[6];
 				var cy2 = command[5];
 				var cx2 = command[4];
 				var cy = command[3];
 				var cx = command[2];
-				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.moveTo(0,0);
-				var n = 20;
-				var dt = 0;
-				var dt2 = 0;
-				var dt3 = 0;
-				var t2 = 0;
-				var t3 = 0;
-				var points = openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points;
-				var fromX = points[points.length - 2];
-				var fromY = points[points.length - 1];
-				var px = 0;
-				var py = 0;
-				var tmp = 0;
-				var _g3 = 1;
-				var _g2 = n + 1;
-				while(_g3 < _g2) {
-					var i = _g3++;
-					tmp = i / n;
-					dt = 1 - tmp;
-					dt2 = dt * dt;
-					dt3 = dt2 * dt;
-					t2 = tmp * tmp;
-					t3 = t2 * tmp;
-					px = dt3 * fromX + 3 * dt2 * tmp * cx + 3 * dt * t2 * cx2 + t3 * x;
-					py = dt3 * fromY + 3 * dt2 * tmp * cy + 3 * dt * t2 * cy2 + t3 * y;
-					points.push(px);
-					points.push(py);
-				}
+				openfl._internal.renderer.opengl.utils.PathBuiler.cubicCurveTo(cx,cy,cx2,cy2,x,y);
 				break;
-			case 3:
+			case 4:
 				var y1 = command[5];
 				var x1 = command[4];
 				var cy1 = command[3];
 				var cx1 = command[2];
-				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.moveTo(0,0);
-				var xa = 0;
-				var ya = 0;
-				var n1 = 20;
-				var points1 = openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points;
-				var fromX1 = points1[points1.length - 2];
-				var fromY1 = points1[points1.length - 1];
-				var px1 = 0;
-				var py1 = 0;
-				var tmp1 = 0;
-				var _g31 = 1;
-				var _g21 = n1 + 1;
-				while(_g31 < _g21) {
-					var i1 = _g31++;
-					tmp1 = i1 / n1;
-					xa = fromX1 + (cx1 - fromX1) * tmp1;
-					ya = fromY1 + (cy1 - fromY1) * tmp1;
-					px1 = xa + (cx1 + (x1 - cx1) * tmp1 - xa) * tmp1;
-					py1 = ya + (cy1 + (y1 - cy1) * tmp1 - ya) * tmp1;
-					points1.push(px1);
-					points1.push(py1);
-				}
+				openfl._internal.renderer.opengl.utils.PathBuiler.curveTo(cx1,cy1,x1,y1);
 				break;
-			case 4:
+			case 5:
 				var radius = command[4];
 				var y2 = command[3];
 				var x2 = command[2];
 				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Circle;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points = [x2,y2,radius];
 				openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
 				break;
-			case 5:
+			case 6:
 				var height = command[5];
 				var width = command[4];
 				var y3 = command[3];
 				var x3 = command[2];
 				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Ellipse;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points = [x3,y3,width,height];
 				openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
 				break;
-			case 6:
+			case 7:
 				var height1 = command[5];
 				var width1 = command[4];
 				var y4 = command[3];
 				var x4 = command[2];
 				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Rectangle(false);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points = [x4,y4,width1,height1];
 				openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
 				break;
-			case 7:
+			case 8:
 				var ry = command[7];
 				var rx = command[6];
 				var height2 = command[5];
@@ -11657,15 +14125,15 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 				if(ry > height2 / 2) ry = height2 / 2;
 				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Rectangle(true);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points = [x5,y5,width2,height2,rx,ry];
 				openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
 				break;
-			case 10:
+			case 11:
 				openfl._internal.renderer.opengl.utils.PathBuiler.endFill();
 				break;
-			case 11:
+			case 12:
 				var miterLimit = command[9];
 				var joints = command[8];
 				var caps = command[7];
@@ -11675,32 +14143,38 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 				var color = command[3];
 				var thickness = command[2];
 				openfl._internal.renderer.opengl.utils.PathBuiler.__line = new openfl._internal.renderer.opengl.utils.LineStyle();
-				if(thickness == null || thickness == Math.NaN || thickness < 0) openfl._internal.renderer.opengl.utils.PathBuiler.__line.width = 0; else if(thickness == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__line.width = 1; else openfl._internal.renderer.opengl.utils.PathBuiler.__line.width = thickness;
+				if(thickness == null || Math.isNaN(thickness) || thickness < 0) openfl._internal.renderer.opengl.utils.PathBuiler.__line.width = 0; else if(thickness == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__line.width = 1; else openfl._internal.renderer.opengl.utils.PathBuiler.__line.width = thickness;
 				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
-				openfl._internal.renderer.opengl.utils.PathBuiler.__line.color = color;
-				openfl._internal.renderer.opengl.utils.PathBuiler.__line.alpha = alpha1;
+				if(color == null) openfl._internal.renderer.opengl.utils.PathBuiler.__line.color = 0; else openfl._internal.renderer.opengl.utils.PathBuiler.__line.color = color;
+				if(alpha1 == null) openfl._internal.renderer.opengl.utils.PathBuiler.__line.alpha = 1; else openfl._internal.renderer.opengl.utils.PathBuiler.__line.alpha = alpha1;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__line.scaleMode = scaleMode;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__line.caps = caps;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__line.joints = joints;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__line.miterLimit = miterLimit;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points = [];
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
 				break;
-			case 12:
+			case 13:
 				var y6 = command[3];
 				var x6 = command[2];
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(x6);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(y6);
 				break;
-			case 13:
+			case 14:
 				var y7 = command[3];
 				var x7 = command[2];
-				openfl._internal.renderer.opengl.utils.PathBuiler.moveTo(x7,y7);
+				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(x7);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(y7);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
 				break;
-			case 9:
+			case 10:
 				var blendMode = command[7];
 				var colors = command[6];
 				var culling = command[5];
@@ -11709,8 +14183,8 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 				var vertices = command[2];
 				var isColor;
 				{
-					var _g22 = openfl._internal.renderer.opengl.utils.PathBuiler.__fill;
-					switch(_g22[1]) {
+					var _g2 = openfl._internal.renderer.opengl.utils.PathBuiler.__fill;
+					switch(_g2[1]) {
 					case 1:
 						isColor = true;
 						break;
@@ -11721,7 +14195,7 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 				if(isColor && uvtData != null) continue;
 				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 				if(uvtData == null) {
 					var this1;
 					this1 = new openfl.VectorData();
@@ -11732,14 +14206,14 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 					this1.fixed = false;
 					uvtData = this1;
 					{
-						var _g23 = openfl._internal.renderer.opengl.utils.PathBuiler.__fill;
-						switch(_g23[1]) {
+						var _g21 = openfl._internal.renderer.opengl.utils.PathBuiler.__fill;
+						switch(_g21[1]) {
 						case 2:
-							var b = _g23[2];
+							var b = _g21[2];
 							var _g4 = 0;
-							var _g32 = vertices.length / 2 | 0;
-							while(_g4 < _g32) {
-								var i2 = _g4++;
+							var _g3 = vertices.length / 2 | 0;
+							while(_g4 < _g3) {
+								var i = _g4++;
 								if(!uvtData.fixed) {
 									uvtData.length++;
 									if(uvtData.data.length < uvtData.length) {
@@ -11750,7 +14224,7 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 										haxe.ds._Vector.Vector_Impl_.blit(uvtData.data,0,data,0,uvtData.data.length);
 										uvtData.data = data;
 									}
-									uvtData.data[uvtData.length - 1] = vertices.data[i2 * 2] / b.width;
+									uvtData.data[uvtData.length - 1] = vertices.data[i * 2] / b.width;
 								}
 								uvtData.length;
 								if(!uvtData.fixed) {
@@ -11763,7 +14237,7 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 										haxe.ds._Vector.Vector_Impl_.blit(uvtData.data,0,data1,0,uvtData.data.length);
 										uvtData.data = data1;
 									}
-									uvtData.data[uvtData.length - 1] = vertices.data[i2 * 2 + 1] / b.height;
+									uvtData.data[uvtData.length - 1] = vertices.data[i * 2 + 1] / b.height;
 								}
 								uvtData.length;
 							}
@@ -11776,7 +14250,7 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable = false;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
 				break;
-			case 8:
+			case 9:
 				var count = command[6];
 				var flags = command[5];
 				var smooth1 = command[4];
@@ -11785,11 +14259,111 @@ openfl._internal.renderer.opengl.utils.PathBuiler.build = function(graphics,gl) 
 				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
 				openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex++;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
-				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.DrawTiles(sheet,tileData,smooth1,flags,count);
 				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable = false;
 				openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
 				break;
+			case 15:
+				var winding = command[4];
+				var data2 = command[3];
+				var commands = command[2];
+				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
+				switch(winding) {
+				case openfl.display.GraphicsPathWinding.EVEN_ODD:
+					openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding = 0;
+					break;
+				case openfl.display.GraphicsPathWinding.NON_ZERO:
+					openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding = 1;
+					break;
+				default:
+					openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding = 0;
+				}
+				var command1;
+				var cx3;
+				var cy3;
+				var cx21;
+				var cy21;
+				var ax;
+				var ay;
+				var idx = 0;
+				var _g31 = 0;
+				var _g22 = commands.length;
+				while(_g31 < _g22) {
+					var i1 = _g31++;
+					command1 = commands.data[i1];
+					switch(command1) {
+					case 1:
+						ax = data2.data[idx];
+						ay = data2.data[idx + 1];
+						idx += 2;
+						if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(ax);
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(ay);
+						openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
+						break;
+					case 4:
+						ax = data2.data[idx + 2];
+						ay = data2.data[idx + 3];
+						idx += 4;
+						if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(ax);
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(ay);
+						openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
+						break;
+					case 2:
+						ax = data2.data[idx];
+						ay = data2.data[idx + 1];
+						idx += 2;
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(ax);
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(ay);
+						break;
+					case 5:
+						ax = data2.data[idx + 2];
+						ay = data2.data[idx + 3];
+						idx += 4;
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(ax);
+						openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.push(ay);
+						break;
+					case 3:
+						cx3 = data2.data[idx];
+						cy3 = data2.data[idx + 1];
+						ax = data2.data[idx + 2];
+						ay = data2.data[idx + 3];
+						idx += 4;
+						openfl._internal.renderer.opengl.utils.PathBuiler.curveTo(cx3,cy3,ax,ay);
+						break;
+					case 6:
+						cx3 = data2.data[idx];
+						cy3 = data2.data[idx + 1];
+						cx21 = data2.data[idx + 2];
+						cy21 = data2.data[idx + 3];
+						ax = data2.data[idx + 4];
+						ay = data2.data[idx + 5];
+						idx += 6;
+						openfl._internal.renderer.opengl.utils.PathBuiler.cubicCurveTo(cx3,cy3,cx21,cy21,ax,ay);
+						break;
+					default:
+					}
+				}
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding = 0;
+				break;
+			case 16:
+				var m = command[2];
+				if(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable && openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.points.length == 0) openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.pop(); else openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath = new openfl._internal.renderer.opengl.utils.DrawPath();
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.update(openfl._internal.renderer.opengl.utils.PathBuiler.__line,openfl._internal.renderer.opengl.utils.PathBuiler.__fill,openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex,openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.type = openfl._internal.renderer.opengl.utils.GraphicType.OverrideMatrix(m);
+				openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath.isRemovable = false;
+				openfl._internal.renderer.opengl.utils.PathBuiler.__drawPaths.push(openfl._internal.renderer.opengl.utils.PathBuiler.__currentPath);
+				break;
+			default:
 			}
 		}
 		openfl._internal.renderer.opengl.utils.PathBuiler.closePath();
@@ -11811,6 +14385,10 @@ openfl._internal.renderer.opengl.utils.LineStyle.__name__ = ["openfl","_internal
 openfl._internal.renderer.opengl.utils.LineStyle.prototype = {
 	__class__: openfl._internal.renderer.opengl.utils.LineStyle
 };
+openfl._internal.renderer.opengl.utils._DrawPath = {};
+openfl._internal.renderer.opengl.utils._DrawPath.WindingRule_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.utils._DrawPath.WindingRule_Impl_"] = openfl._internal.renderer.opengl.utils._DrawPath.WindingRule_Impl_;
+openfl._internal.renderer.opengl.utils._DrawPath.WindingRule_Impl_.__name__ = ["openfl","_internal","renderer","opengl","utils","_DrawPath","WindingRule_Impl_"];
 openfl._internal.renderer.opengl.utils.FillType = $hxClasses["openfl._internal.renderer.opengl.utils.FillType"] = { __ename__ : true, __constructs__ : ["None","Color","Texture","Gradient"] };
 openfl._internal.renderer.opengl.utils.FillType.None = ["None",0];
 openfl._internal.renderer.opengl.utils.FillType.None.toString = $estr;
@@ -11831,34 +14409,6 @@ $hxClasses["openfl._internal.renderer.opengl.utils.FilterManager"] = openfl._int
 openfl._internal.renderer.opengl.utils.FilterManager.__name__ = ["openfl","_internal","renderer","opengl","utils","FilterManager"];
 openfl._internal.renderer.opengl.utils.FilterManager.prototype = {
 	applyFilterPass: function(filter,filterArea,width,height) {
-		var gl = this.gl;
-		var shader = filter.shaders[openfl._internal.renderer.opengl.GLRenderer.glContextId];
-		if(shader == null) {
-			shader = new openfl._internal.renderer.opengl.shaders.DefaultShader(gl);
-			shader.fragmentSrc = filter.fragmentSrc;
-			shader.uniforms = filter.uniforms;
-			shader.init();
-			filter.shaders[openfl._internal.renderer.opengl.GLRenderer.glContextId] = shader;
-		}
-		this.renderSession.shaderManager.setShader(shader);
-		gl.uniform2f(shader.projectionVector,width / 2,-height / 2);
-		gl.uniform2f(shader.offsetVector,0,0);
-		if(filter.uniforms.dimensions != null) {
-			filter.uniforms.dimensions.value[0] = this.width + 0.0;
-			filter.uniforms.dimensions.value[1] = this.height + 0.0;
-			filter.uniforms.dimensions.value[2] = this.vertexArray[0];
-			filter.uniforms.dimensions.value[3] = this.vertexArray[5];
-		}
-		shader.syncUniforms();
-		gl.bindBuffer(gl.ARRAY_BUFFER,this.vertexBuffer);
-		gl.vertexAttribPointer(shader.aVertexPosition,2,gl.FLOAT,false,0,0);
-		gl.bindBuffer(gl.ARRAY_BUFFER,this.uvBuffer);
-		gl.vertexAttribPointer(shader.aTextureCoord,2,gl.FLOAT,false,0,0);
-		gl.bindBuffer(gl.ARRAY_BUFFER,this.colorBuffer);
-		gl.vertexAttribPointer(shader.colorAttribute,2,gl.FLOAT,false,0,0);
-		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.indexBuffer);
-		gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);
-		this.renderSession.drawCount++;
 	}
 	,begin: function(renderSession,buffer) {
 		this.renderSession = renderSession;
@@ -11905,140 +14455,8 @@ openfl._internal.renderer.opengl.utils.FilterManager.prototype = {
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array([0,1,2,1,3,2]),gl.STATIC_DRAW);
 	}
 	,popFilter: function() {
-		var gl = this.gl;
-		var filterBlock = this.filterStack.pop();
-		var filterArea = filterBlock._filterArea;
-		var texture = filterBlock._glFilterTexture;
-		var projection = this.renderSession.projection;
-		var offset = this.renderSession.offset;
-		if(filterBlock.filterPasses.length > 1) {
-			gl.viewport(0,0,filterArea.width | 0,filterArea.height | 0);
-			gl.bindBuffer(gl.ARRAY_BUFFER,this.vertexBuffer);
-			this.vertexArray[0] = 0;
-			this.vertexArray[1] = filterArea.height;
-			this.vertexArray[2] = filterArea.width;
-			this.vertexArray[3] = filterArea.height;
-			this.vertexArray[4] = 0;
-			this.vertexArray[5] = 0;
-			this.vertexArray[6] = filterArea.width;
-			this.vertexArray[7] = 0;
-			gl.bufferSubData(gl.ARRAY_BUFFER,0,this.vertexArray);
-			gl.bindBuffer(gl.ARRAY_BUFFER,this.uvBuffer);
-			this.uvArray[2] = filterArea.width / this.width;
-			this.uvArray[5] = filterArea.height / this.height;
-			this.uvArray[6] = filterArea.width / this.width;
-			this.uvArray[7] = filterArea.height / this.height;
-			gl.bufferSubData(gl.ARRAY_BUFFER,0,this.uvArray);
-			var inputTexture = texture;
-			var outputTexture = this.texturePool.pop();
-			if(outputTexture == null) outputTexture = new openfl._internal.renderer.opengl.utils.FilterTexture(gl,this.width,this.height);
-			outputTexture.resize(this.width,this.height);
-			gl.bindFramebuffer(gl.FRAMEBUFFER,outputTexture.frameBuffer);
-			gl.clear(gl.COLOR_BUFFER_BIT);
-			gl.disable(gl.BLEND);
-			var _g1 = 0;
-			var _g = filterBlock.filterPasses.length - 1 | 0;
-			while(_g1 < _g) {
-				var i = _g1++;
-				var filterPass = filterBlock.filterPasses[i];
-				gl.bindFramebuffer(gl.FRAMEBUFFER,outputTexture.frameBuffer);
-				gl.activeTexture(gl.TEXTURE0);
-				gl.bindTexture(gl.TEXTURE_2D,inputTexture.texture);
-				this.applyFilterPass(filterPass,filterArea,filterArea.width | 0,filterArea.height | 0);
-				var temp = inputTexture;
-				inputTexture = outputTexture;
-				outputTexture = temp;
-			}
-			gl.enable(gl.BLEND);
-			texture = inputTexture;
-			this.texturePool.push(outputTexture);
-		}
-		var filter = filterBlock.filterPasses[filterBlock.filterPasses.length - 1 | 0];
-		this.offsetX -= filterArea.x;
-		this.offsetY -= filterArea.y;
-		var sizeX = this.width;
-		var sizeY = this.height;
-		var offsetX = 0.0;
-		var offsetY = 0.0;
-		var buffer = this.buffer;
-		if(this.filterStack.length == 0) gl.colorMask(true,true,true,true); else {
-			var currentFilter = this.filterStack[this.filterStack.length - 1];
-			filterArea = currentFilter._filterArea;
-			sizeX = filterArea.width | 0;
-			sizeY = filterArea.height | 0;
-			offsetX = filterArea.x;
-			offsetY = filterArea.y;
-			buffer = currentFilter._glFilterTexture.frameBuffer;
-		}
-		projection.x = sizeX / 2;
-		projection.y = -sizeY / 2;
-		offset.x = offsetX;
-		offset.y = offsetY;
-		filterArea = filterBlock._filterArea;
-		var x = filterArea.x - offsetX;
-		var y = filterArea.y - offsetY;
-		gl.bindBuffer(gl.ARRAY_BUFFER,this.vertexBuffer);
-		this.vertexArray[0] = x;
-		this.vertexArray[1] = y + filterArea.height;
-		this.vertexArray[2] = x + filterArea.width;
-		this.vertexArray[3] = y + filterArea.height;
-		this.vertexArray[4] = x;
-		this.vertexArray[5] = y;
-		this.vertexArray[6] = x + filterArea.width;
-		this.vertexArray[7] = y;
-		gl.bufferSubData(gl.ARRAY_BUFFER,0,this.vertexArray);
-		gl.bindBuffer(gl.ARRAY_BUFFER,this.uvBuffer);
-		this.uvArray[2] = filterArea.width / this.width;
-		this.uvArray[5] = filterArea.height / this.height;
-		this.uvArray[6] = filterArea.width / this.width;
-		this.uvArray[7] = filterArea.height / this.height;
-		gl.bufferSubData(gl.ARRAY_BUFFER,0,this.uvArray);
-		gl.viewport(0,0,sizeX,sizeY);
-		gl.bindFramebuffer(gl.FRAMEBUFFER,buffer);
-		gl.activeTexture(gl.TEXTURE0);
-		gl.bindTexture(gl.TEXTURE_2D,texture.texture);
-		this.applyFilterPass(filter,filterArea,sizeX,sizeY);
-		this.renderSession.shaderManager.setShader(this.defaultShader);
-		gl.uniform2f(this.defaultShader.projectionVector,sizeX / 2,-sizeY / 2);
-		gl.uniform2f(this.defaultShader.offsetVector,-offsetX,-offsetY);
-		this.texturePool.push(texture);
-		filterBlock._glFilterTexture = null;
 	}
 	,pushFilter: function(filterBlock) {
-		var gl = this.gl;
-		var projection = this.renderSession.projection;
-		var offset = this.renderSession.offset;
-		if(filterBlock.target.filterArea != null) filterBlock._filterArea = filterBlock.target.filterArea; else filterBlock._filterArea = filterBlock.target.getBounds();
-		this.filterStack.push(filterBlock);
-		var filter = filterBlock.filterPasses[0];
-		this.offsetX += filterBlock._filterArea.x;
-		this.offsetY += filterBlock._filterArea.y;
-		var texture = this.texturePool.pop();
-		if(texture == null) texture = new openfl._internal.renderer.opengl.utils.FilterTexture(gl,this.width,this.height); else texture.resize(this.width,this.height);
-		gl.bindTexture(gl.TEXTURE_2D,texture.texture);
-		var filterArea = filterBlock._filterArea;
-		var padding = filter.padding;
-		filterArea.x -= padding;
-		filterArea.y -= padding;
-		filterArea.width += padding * 2;
-		filterArea.height += padding * 2;
-		if(filterArea.x < 0) filterArea.x = 0;
-		if(filterArea.width > this.width) filterArea.width = this.width;
-		if(filterArea.y < 0) filterArea.y = 0;
-		if(filterArea.height > this.height) filterArea.height = this.height;
-		gl.bindFramebuffer(gl.FRAMEBUFFER,texture.frameBuffer);
-		gl.viewport(0,0,filterArea.width | 0,filterArea.height | 0);
-		projection.x = filterArea.width / 2;
-		projection.y = -filterArea.height / 2;
-		offset.x = -filterArea.x;
-		offset.y = -filterArea.y;
-		this.renderSession.shaderManager.setShader(this.defaultShader);
-		gl.uniform2f(this.defaultShader.projectionVector,filterArea.width / 2,-filterArea.height / 2);
-		gl.uniform2f(this.defaultShader.offsetVector,-filterArea.x,-filterArea.y);
-		gl.colorMask(true,true,true,true);
-		gl.clearColor(0,0,0,0);
-		gl.clear(gl.COLOR_BUFFER_BIT);
-		filterBlock._glFilterTexture = texture;
 	}
 	,setContext: function(gl) {
 		this.gl = gl;
@@ -12068,14 +14486,12 @@ $hxClasses["openfl._internal.renderer.opengl.utils.FilterTexture"] = openfl._int
 openfl._internal.renderer.opengl.utils.FilterTexture.__name__ = ["openfl","_internal","renderer","opengl","utils","FilterTexture"];
 openfl._internal.renderer.opengl.utils.FilterTexture.prototype = {
 	clear: function() {
-		var gl = this.gl;
-		gl.clearColor(0,0,0,0);
-		gl.clear(gl.COLOR_BUFFER_BIT);
+		this.gl.clearColor(0,0,0,0);
+		this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 	}
 	,destroy: function() {
-		var gl = this.gl;
-		gl.deleteFramebuffer(this.frameBuffer);
-		gl.deleteTexture(this.texture);
+		this.gl.deleteFramebuffer(this.frameBuffer);
+		this.gl.deleteTexture(this.texture);
 		this.frameBuffer = null;
 		this.texture = null;
 	}
@@ -12083,13 +14499,45 @@ openfl._internal.renderer.opengl.utils.FilterTexture.prototype = {
 		if(this.width == width && this.height == height) return;
 		this.width = width;
 		this.height = height;
-		var gl = this.gl;
-		gl.bindTexture(gl.TEXTURE_2D,this.texture);
-		gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,width,height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
-		gl.bindRenderbuffer(gl.RENDERBUFFER,this.renderBuffer);
-		gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_STENCIL,width,height);
+		this.gl.bindTexture(this.gl.TEXTURE_2D,this.texture);
+		this.gl.texImage2D(this.gl.TEXTURE_2D,0,this.gl.RGBA,width,height,0,this.gl.RGBA,this.gl.UNSIGNED_BYTE,null);
+		this.gl.bindRenderbuffer(this.gl.RENDERBUFFER,this.renderBuffer);
+		this.gl.renderbufferStorage(this.gl.RENDERBUFFER,this.gl.DEPTH_STENCIL,width,height);
 	}
 	,__class__: openfl._internal.renderer.opengl.utils.FilterTexture
+};
+openfl._internal.renderer.opengl.utils.VertexAttribute = function(components,type,normalized,name,defaultValue) {
+	if(normalized == null) normalized = false;
+	this.enabled = true;
+	this.normalized = false;
+	this.components = components;
+	this.type = type;
+	this.normalized = normalized;
+	this.name = name;
+	if(defaultValue == null) this.defaultValue = new Float32Array(components); else this.defaultValue = defaultValue;
+};
+$hxClasses["openfl._internal.renderer.opengl.utils.VertexAttribute"] = openfl._internal.renderer.opengl.utils.VertexAttribute;
+openfl._internal.renderer.opengl.utils.VertexAttribute.__name__ = ["openfl","_internal","renderer","opengl","utils","VertexAttribute"];
+openfl._internal.renderer.opengl.utils.VertexAttribute.prototype = {
+	copy: function() {
+		return new openfl._internal.renderer.opengl.utils.VertexAttribute(this.components,this.type,this.normalized,this.name,this.defaultValue);
+	}
+	,getElementsBytes: function() {
+		var _g = this.type;
+		switch(_g) {
+		case 5120:case 5121:
+			return 1;
+		case 5122:case 5123:
+			return 2;
+		default:
+			return 4;
+		}
+	}
+	,get_elements: function() {
+		return Math.floor(this.components * this.getElementsBytes() / 4);
+	}
+	,__class__: openfl._internal.renderer.opengl.utils.VertexAttribute
+	,__properties__: {get_elements:"get_elements"}
 };
 openfl.geom.Rectangle = function(x,y,width,height) {
 	if(height == null) height = 0;
@@ -12304,6 +14752,7 @@ openfl.geom.Rectangle.prototype = {
 		return p.clone();
 	}
 	,__class__: openfl.geom.Rectangle
+	,__properties__: {set_topLeft:"set_topLeft",get_topLeft:"get_topLeft",set_top:"set_top",get_top:"get_top",set_size:"set_size",get_size:"get_size",set_right:"set_right",get_right:"get_right",set_left:"set_left",get_left:"get_left",set_bottomRight:"set_bottomRight",get_bottomRight:"get_bottomRight",set_bottom:"set_bottom",get_bottom:"get_bottom"}
 };
 openfl.geom.Point = function(x,y) {
 	if(y == null) y = 0;
@@ -12366,6 +14815,7 @@ openfl.geom.Point.prototype = {
 		return Math.sqrt(this.x * this.x + this.y * this.y);
 	}
 	,__class__: openfl.geom.Point
+	,__properties__: {get_length:"get_length"}
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer = function() { };
 $hxClasses["openfl._internal.renderer.opengl.utils.GraphicsRenderer"] = openfl._internal.renderer.opengl.utils.GraphicsRenderer;
@@ -12375,6 +14825,7 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.lastBucketMode = null;
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.lastTexture = null;
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.lastTextureRepeat = null;
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.lastTextureSmooth = null;
+openfl._internal.renderer.opengl.utils.GraphicsRenderer.overrideMatrix = null;
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildCircle = function(path,glStack,localCoords) {
 	if(localCoords == null) localCoords = false;
 	var rectData = path.points;
@@ -12396,9 +14847,10 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildCircle = function(p
 	var totalSegs = 40;
 	var seg = Math.PI * 2 / totalSegs;
 	var bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
-	if(bucket != null) {
-		var verts = bucket.verts;
-		var indices = bucket.indices;
+	var fill = bucket.getData(openfl._internal.renderer.opengl.utils.BucketDataType.Fill);
+	if(fill != null) {
+		var verts = fill.verts;
+		var indices = fill.indices;
 		var vertPos = verts.length / 2 | 0;
 		indices.push(vertPos);
 		var _g1 = 0;
@@ -12424,39 +14876,46 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildCircle = function(p
 			path.points.push(x + Math.sin(seg * i1) * width);
 			path.points.push(y + Math.cos(seg * i1) * height);
 		}
-		openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket.line);
+		openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket);
 		path.points = tempPoints;
 	}
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildComplexPoly = function(path,glStack,localCoords) {
 	if(localCoords == null) localCoords = false;
-	if(path.points.length < 6) return;
-	var points = path.points.slice();
-	if(localCoords) {
-		var _g1 = 0;
-		var _g = points.length / 2 | 0;
-		while(_g1 < _g) {
-			var i = _g1++;
-			points[i * 2] -= openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.x;
-			points[i * 2 + 1] -= openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.y;
+	var bucket = null;
+	if(path.points.length >= 6) {
+		var points = path.points.slice();
+		if(localCoords) {
+			var _g1 = 0;
+			var _g = points.length / 2 | 0;
+			while(_g1 < _g) {
+				var i = _g1++;
+				points[i * 2] -= openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.x;
+				points[i * 2 + 1] -= openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.y;
+			}
+		}
+		bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
+		var fill = bucket.getData(openfl._internal.renderer.opengl.utils.BucketDataType.Fill);
+		fill.drawMode = glStack.gl.TRIANGLE_FAN;
+		fill.verts = points;
+		var indices = fill.indices;
+		var length = points.length / 2 | 0;
+		var _g2 = 0;
+		while(_g2 < length) {
+			var i1 = _g2++;
+			indices.push(i1);
 		}
 	}
-	var bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
-	bucket.drawMode = glStack.gl.TRIANGLE_FAN;
-	bucket.verts = points;
-	var indices = bucket.indices;
-	var length = points.length / 2 | 0;
-	var _g2 = 0;
-	while(_g2 < length) {
-		var i1 = _g2++;
-		indices.push(i1);
+	if(path.line.width > 0) {
+		if(bucket == null) bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
+		openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket,localCoords);
 	}
-	if(path.line.width > 0) openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket.line,localCoords);
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine = function(path,bucket,localCoords) {
 	if(localCoords == null) localCoords = false;
 	var points = path.points;
 	if(points.length == 0) return;
+	var line = bucket.getData(openfl._internal.renderer.opengl.utils.BucketDataType.Line);
 	if(localCoords) {
 		var _g1 = 0;
 		var _g = points.length / 2 | 0;
@@ -12464,14 +14923,6 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine = function(pat
 			var i = _g1++;
 			points[i * 2] -= openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.x;
 			points[i * 2 + 1] -= openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.y;
-		}
-	}
-	if(path.line.width % 2 > 0) {
-		var _g11 = 0;
-		var _g2 = points.length;
-		while(_g11 < _g2) {
-			var i1 = _g11++;
-			points[i1] += 0.5;
 		}
 	}
 	var firstPoint = new openfl.geom.Point(points[0],points[1]);
@@ -12488,8 +14939,8 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine = function(pat
 		points.push(midPointX);
 		points.push(midPointY);
 	}
-	var verts = bucket.verts;
-	var indices = bucket.indices;
+	var verts = line.verts;
+	var indices = line.indices;
 	var length = points.length / 2 | 0;
 	var indexCount = points.length;
 	var indexStart = verts.length / 6 | 0;
@@ -12545,16 +14996,16 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine = function(pat
 	verts.push(g);
 	verts.push(b);
 	verts.push(alpha);
-	var _g12 = 1;
-	var _g3 = length - 1;
-	while(_g12 < _g3) {
-		var i2 = _g12++;
-		p1x = points[(i2 - 1) * 2];
-		p1y = points[(i2 - 1) * 2 + 1];
-		p2x = points[i2 * 2];
-		p2y = points[i2 * 2 + 1];
-		p3x = points[(i2 + 1) * 2];
-		p3y = points[(i2 + 1) * 2 + 1];
+	var _g11 = 1;
+	var _g2 = length - 1;
+	while(_g11 < _g2) {
+		var i1 = _g11++;
+		p1x = points[(i1 - 1) * 2];
+		p1y = points[(i1 - 1) * 2 + 1];
+		p2x = points[i1 * 2];
+		p2y = points[i1 * 2 + 1];
+		p3x = points[(i1 + 1) * 2];
+		p3y = points[(i1 + 1) * 2 + 1];
 		perpx = -(p1y - p2y);
 		perpy = p1x - p2x;
 		dist = Math.sqrt(Math.abs(perpx * perpx + perpy * perpy));
@@ -12644,7 +15095,7 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine = function(pat
 	perpx = -(p1y - p2y);
 	perpy = p1x - p2x;
 	dist = Math.sqrt(Math.abs(perpx * perpx + perpy * perpy));
-	if(!Math.isFinite(dist)) haxe.Log.trace(perpx * perpx + perpy * perpy,{ fileName : "GraphicsRenderer.hx", lineNumber : 372, className : "openfl._internal.renderer.opengl.utils.GraphicsRenderer", methodName : "buildLine"});
+	if(!Math.isFinite(dist)) haxe.Log.trace(perpx * perpx + perpy * perpy,{ fileName : "GraphicsRenderer.hx", lineNumber : 411, className : "openfl._internal.renderer.opengl.utils.GraphicsRenderer", methodName : "buildLine"});
 	perpx = perpx / dist;
 	perpy = perpy / dist;
 	perpx = perpx * width;
@@ -12662,9 +15113,9 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine = function(pat
 	verts.push(b);
 	verts.push(alpha);
 	indices.push(indexStart);
-	var _g4 = 0;
-	while(_g4 < indexCount) {
-		var i3 = _g4++;
+	var _g3 = 0;
+	while(_g3 < indexCount) {
+		var i2 = _g3++;
 		indices.push(indexStart++);
 	}
 	indices.push(indexStart - 1);
@@ -12683,9 +15134,10 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildPoly = function(pat
 	}
 	var length = points.length / 2 | 0;
 	var bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
-	var verts = bucket.verts;
-	var indices = bucket.indices;
-	if(bucket != null) {
+	var fill = bucket.getData(openfl._internal.renderer.opengl.utils.BucketDataType.Fill);
+	var verts = fill.verts;
+	var indices = fill.indices;
+	if(fill != null) {
 		var triangles = openfl._internal.renderer.opengl.utils.PolyK.triangulate(points);
 		var vertPos = verts.length / 2;
 		var i = 0;
@@ -12704,7 +15156,7 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildPoly = function(pat
 			verts.push(points[i1 * 2 + 1]);
 		}
 	}
-	if(path.line.width > 0) openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket.line);
+	if(path.line.width > 0) openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket);
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildRectangle = function(path,glStack,localCoords) {
 	if(localCoords == null) localCoords = false;
@@ -12718,9 +15170,10 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildRectangle = functio
 		y -= openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.y;
 	}
 	var bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
-	if(bucket != null) {
-		var verts = bucket.verts;
-		var indices = bucket.indices;
+	var fill = bucket.getData(openfl._internal.renderer.opengl.utils.BucketDataType.Fill);
+	if(fill != null) {
+		var verts = fill.verts;
+		var indices = fill.indices;
 		var vertPos = verts.length / 2 | 0;
 		verts.push(x);
 		verts.push(y);
@@ -12740,7 +15193,7 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildRectangle = functio
 	if(path.line.width > 0) {
 		var tempPoints = path.points;
 		path.points = [x,y,x + width,y,x + width,y + height,x,y + height,x,y];
-		openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket.line);
+		openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket);
 		path.points = tempPoints;
 	}
 };
@@ -12751,22 +15204,42 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildRoundedRectangle = 
 	var y = points[1];
 	var width = points[2];
 	var height = points[3];
-	var radius = points[4];
+	var rx = points[4];
+	var ry = points[5];
 	if(localCoords) {
 		x -= openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.x;
 		y -= openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.y;
 	}
+	var xe = x + width;
+	var ye = y + height;
+	var cx1 = -rx + rx * openfl._internal.renderer.opengl.utils.GraphicsRenderer.SIN45;
+	var cx2 = -rx + rx * openfl._internal.renderer.opengl.utils.GraphicsRenderer.TAN22;
+	var cy1 = -ry + ry * openfl._internal.renderer.opengl.utils.GraphicsRenderer.SIN45;
+	var cy2 = -ry + ry * openfl._internal.renderer.opengl.utils.GraphicsRenderer.TAN22;
 	var recPoints = [];
+	recPoints.push(xe);
+	recPoints.push(ye - ry);
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.curveTo(recPoints,xe,ye + cy2,xe + cx1,ye + cy1);
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.curveTo(recPoints,xe + cx2,ye,xe - rx,ye);
+	recPoints.push(x + rx);
+	recPoints.push(ye);
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.curveTo(recPoints,x - cx2,ye,x - cx1,ye + cy1);
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.curveTo(recPoints,x,ye + cy2,x,ye - ry);
 	recPoints.push(x);
-	recPoints.push(y + radius);
-	recPoints = recPoints.concat(openfl._internal.renderer.opengl.utils.GraphicsRenderer.quadraticBezierCurve(x,y + height - radius,x,y + height,x + radius,y + height));
-	recPoints = recPoints.concat(openfl._internal.renderer.opengl.utils.GraphicsRenderer.quadraticBezierCurve(x + width - radius,y + height,x + width,y + height,x + width,y + height - radius));
-	recPoints = recPoints.concat(openfl._internal.renderer.opengl.utils.GraphicsRenderer.quadraticBezierCurve(x + width,y + radius,x + width,y,x + width - radius,y));
-	recPoints = recPoints.concat(openfl._internal.renderer.opengl.utils.GraphicsRenderer.quadraticBezierCurve(x + radius,y,x,y,x,y + radius));
+	recPoints.push(y + ry);
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.curveTo(recPoints,x,y - cy2,x - cx1,y - cy1);
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.curveTo(recPoints,x - cx2,y,x + rx,y);
+	recPoints.push(xe - rx);
+	recPoints.push(y);
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.curveTo(recPoints,xe + cx2,y,xe + cx1,y - cy1);
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.curveTo(recPoints,xe,y - cy2,xe,y + ry);
+	recPoints.push(xe);
+	recPoints.push(ye - ry);
 	var bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
-	if(bucket != null) {
-		var verts = bucket.verts;
-		var indices = bucket.indices;
+	var fill = bucket.getData(openfl._internal.renderer.opengl.utils.BucketDataType.Fill);
+	if(fill != null) {
+		var verts = fill.verts;
+		var indices = fill.indices;
 		var vecPos = verts.length / 2;
 		var triangles = openfl._internal.renderer.opengl.utils.PolyK.triangulate(recPoints);
 		var i = 0;
@@ -12788,7 +15261,7 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildRoundedRectangle = 
 	if(path.line.width > 0) {
 		var tempPoints = path.points;
 		path.points = recPoints;
-		openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket.line);
+		openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildLine(path,bucket);
 		path.points = tempPoints;
 	}
 };
@@ -12824,15 +15297,20 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildDrawTriangles = fun
 	}
 	var hasColors = colors != null && colors.length > 0;
 	var bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
-	bucket.rawVerts = true;
-	bucket.glLength = indices.length;
-	bucket.stride = 8;
-	var vertsLength = bucket.glLength * bucket.stride;
+	var fill = bucket.getData(openfl._internal.renderer.opengl.utils.BucketDataType.Fill);
+	var colorAttrib = fill.vertexArray.attributes[2];
+	colorAttrib.enabled = hasColors;
+	colorAttrib.defaultValue = new Float32Array([1,1,1,1]);
+	fill.rawVerts = true;
+	fill.glLength = indices.length;
+	fill.stride = Std["int"](fill.vertexArray.get_stride() / 4);
+	var vertsLength = fill.glLength * fill.stride;
 	var verts;
-	if(bucket.glVerts == null || bucket.glVerts.length < vertsLength) {
+	if(fill.glVerts == null || fill.glVerts.length < vertsLength) {
 		verts = new Float32Array(vertsLength);
-		bucket.glVerts = verts;
-	} else verts = bucket.glVerts;
+		fill.glVerts = verts;
+	} else verts = fill.glVerts;
+	var glColors = new Uint32Array(verts.buffer);
 	var v0 = 0;
 	var v1 = 0;
 	var v2 = 0;
@@ -12846,8 +15324,6 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildDrawTriangles = fun
 	var x2 = 0.0;
 	var y2 = 0.0;
 	var idx = 0;
-	var color = [1.,1.,1.,1.];
-	var ctmp = color;
 	var _g1 = 0;
 	var _g = indices.length / 3 | 0;
 	while(_g1 < _g) {
@@ -12885,54 +15361,43 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildDrawTriangles = fun
 		verts[idx++] = b * x0 + d * y0 + ty;
 		verts[idx++] = uvtData.data[v0];
 		verts[idx++] = uvtData.data[v0 + 1];
-		if(hasColors) {
-			ctmp = openfl._internal.renderer.opengl.utils.GraphicsRenderer.hex2rgba(colors.data[i0]);
-			verts[idx++] = ctmp[0];
-			verts[idx++] = ctmp[1];
-			verts[idx++] = ctmp[2];
-			verts[idx++] = ctmp[3];
-		} else {
-			verts[idx++] = color[0];
-			verts[idx++] = color[1];
-			verts[idx++] = color[2];
-			verts[idx++] = color[3];
-		}
+		if(hasColors) glColors[idx++] = colors.data[i0];
 		verts[idx++] = a * x1 + c * y1 + tx;
 		verts[idx++] = b * x1 + d * y1 + ty;
 		verts[idx++] = uvtData.data[v1];
 		verts[idx++] = uvtData.data[v1 + 1];
-		if(hasColors) {
-			ctmp = openfl._internal.renderer.opengl.utils.GraphicsRenderer.hex2rgba(colors.data[i1]);
-			verts[idx++] = ctmp[0];
-			verts[idx++] = ctmp[1];
-			verts[idx++] = ctmp[2];
-			verts[idx++] = ctmp[3];
-		} else {
-			verts[idx++] = color[0];
-			verts[idx++] = color[1];
-			verts[idx++] = color[2];
-			verts[idx++] = color[3];
-		}
+		if(hasColors) glColors[idx++] = colors.data[i1];
 		verts[idx++] = a * x2 + c * y2 + tx;
 		verts[idx++] = b * x2 + d * y2 + ty;
 		verts[idx++] = uvtData.data[v2];
 		verts[idx++] = uvtData.data[v2 + 1];
-		if(hasColors) {
-			ctmp = openfl._internal.renderer.opengl.utils.GraphicsRenderer.hex2rgba(colors.data[i2]);
-			verts[idx++] = ctmp[0];
-			verts[idx++] = ctmp[1];
-			verts[idx++] = ctmp[2];
-			verts[idx++] = ctmp[3];
-		} else {
-			verts[idx++] = color[0];
-			verts[idx++] = color[1];
-			verts[idx++] = color[2];
-			verts[idx++] = color[3];
-		}
+		if(hasColors) glColors[idx++] = colors.data[i2];
 	}
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.buildDrawTiles = function(path,glStack) {
 	openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
+};
+openfl._internal.renderer.opengl.utils.GraphicsRenderer.curveTo = function(points,cx,cy,x,y) {
+	var xa = 0;
+	var ya = 0;
+	var n = 20;
+	var fromX = points[points.length - 2];
+	var fromY = points[points.length - 1];
+	var px = 0;
+	var py = 0;
+	var tmp = 0;
+	var _g1 = 1;
+	var _g = n + 1;
+	while(_g1 < _g) {
+		var i = _g1++;
+		tmp = i / n;
+		xa = fromX + (cx - fromX) * tmp;
+		ya = fromY + (cy - fromY) * tmp;
+		px = xa + (cx + (x - cx) * tmp - xa) * tmp;
+		py = ya + (cy + (y - cy) * tmp - ya) * tmp;
+		points.push(px);
+		points.push(py);
+	}
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.quadraticBezierCurve = function(fromX,fromY,cpX,cpY,toX,toY) {
 	var xa;
@@ -12969,29 +15434,8 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.render = function(object
 	var spritebatch = renderSession.spriteBatch;
 	var dirty = graphics.__dirty;
 	if(graphics.__commands.length <= 0) return;
-	if(dirty) openfl._internal.renderer.opengl.utils.GraphicsRenderer.updateGraphics(object,renderSession.gl,object.cacheAsBitmap);
-	if(object.cacheAsBitmap) {
-		if(dirty) {
-			var gl = renderSession.gl;
-			var bounds = graphics.__bounds;
-			var texture = graphics.__cachedTexture;
-			var w = Math.floor(bounds.width + 0.5);
-			var h = Math.floor(bounds.height + 0.5);
-			if(texture == null) {
-				texture = new openfl._internal.renderer.opengl.utils.FilterTexture(gl,w,h,false);
-				graphics.__cachedTexture = texture;
-			}
-			texture.resize(w,h);
-			gl.bindFramebuffer(gl.FRAMEBUFFER,texture.frameBuffer);
-			gl.viewport(0,0,w,h);
-			texture.clear();
-			openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderGraphics(object,renderSession,new openfl.geom.Point(w / 2,-h / 2),true);
-			gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-			gl.viewport(0,0,renderSession.renderer.width,renderSession.renderer.height);
-		}
-		if(!spritebatch.drawing) spritebatch.begin(renderSession);
-		spritebatch.renderCachedGraphics(object);
-	} else openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderGraphics(object,renderSession,renderSession.projection,false);
+	if(dirty) openfl._internal.renderer.opengl.utils.GraphicsRenderer.updateGraphics(object,object.__graphics,renderSession.gl,object.cacheAsBitmap);
+	openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderGraphics(object,renderSession,renderSession.projection,false);
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderGraphics = function(object,renderSession,projection,localCoords) {
 	if(localCoords == null) localCoords = false;
@@ -13002,6 +15446,7 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderGraphics = functio
 	var bucket;
 	var translationMatrix;
 	if(localCoords) translationMatrix = openfl.geom.Matrix.__identity; else translationMatrix = object.__worldTransform;
+	renderSession.blendModeManager.setBlendMode(object.blendMode);
 	var batchDrawing = renderSession.spriteBatch.drawing;
 	var _g1 = 0;
 	var _g = glStack.buckets.length;
@@ -13012,56 +15457,58 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderGraphics = functio
 		var _g2 = bucket.mode;
 		switch(_g2[1]) {
 		case 1:case 2:
-			if(batchDrawing && !localCoords) renderSession.spriteBatch.end();
+			if(batchDrawing && !localCoords) renderSession.spriteBatch.finish();
 			renderSession.stencilManager.pushBucket(bucket,renderSession,projection,translationMatrix.toArray(true));
-			var shader = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareShader(bucket,renderSession,object,projection,translationMatrix.toArray(false));
+			var shader = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareShader(bucket,renderSession,object,projection,translationMatrix.toArray(true));
 			openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderFill(bucket,shader,renderSession);
 			renderSession.stencilManager.popBucket(object,bucket,renderSession);
 			break;
 		case 5:
-			if(batchDrawing && !localCoords) renderSession.spriteBatch.end();
+			if(batchDrawing && !localCoords) renderSession.spriteBatch.finish();
 			var shader1 = openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareShader(bucket,renderSession,object,projection,null);
 			openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderDrawTriangles(bucket,shader1,renderSession);
 			break;
 		case 6:
 			if(!batchDrawing) renderSession.spriteBatch.begin(renderSession);
-			openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderDrawTiles(object,bucket,renderSession);
+			var args = bucket.graphicType.slice(2);
+			renderSession.spriteBatch.renderTiles(object,args[0],args[1],args[2],args[3],args[4]);
 			break;
 		default:
 		}
+		var ct = object.__worldColorTransform;
 		var _g21 = 0;
-		var _g3 = bucket.data;
+		var _g3 = bucket.lines;
 		while(_g21 < _g3.length) {
-			var data = _g3[_g21];
+			var line = _g3[_g21];
 			++_g21;
-			if(data.line != null && data.line.verts.length > 0) {
+			if(line != null && line.verts.length > 0) {
 				batchDrawing = renderSession.spriteBatch.drawing;
-				if(batchDrawing && !localCoords) renderSession.spriteBatch.end();
+				if(batchDrawing && !localCoords) renderSession.spriteBatch.finish();
 				var shader2 = renderSession.shaderManager.primitiveShader;
 				renderSession.shaderManager.setShader(shader2);
-				gl.uniformMatrix3fv(shader2.translationMatrix,false,translationMatrix.toArray(true));
-				gl.uniform2f(shader2.projectionVector,projection.x,-projection.y);
-				gl.uniform2f(shader2.offsetVector,-offset.x,-offset.y);
-				gl.uniform1f(shader2.alpha,object.__worldAlpha);
-				gl.bindBuffer(gl.ARRAY_BUFFER,data.line.vertsBuffer);
-				gl.vertexAttribPointer(shader2.aVertexPosition,2,gl.FLOAT,false,24,0);
-				gl.vertexAttribPointer(shader2.colorAttribute,4,gl.FLOAT,false,24,8);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,data.line.indexBuffer);
-				gl.drawElements(gl.TRIANGLE_STRIP,data.line.indices.length,gl.UNSIGNED_SHORT,0);
+				gl.uniformMatrix3fv(shader2.getUniformLocation("uTranslationMatrix"),false,translationMatrix.toArray(true));
+				gl.uniform2f(shader2.getUniformLocation("uProjectionVector"),projection.x,-projection.y);
+				gl.uniform2f(shader2.getUniformLocation("uOffsetVector"),-offset.x,-offset.y);
+				gl.uniform1f(shader2.getUniformLocation("uAlpha"),1);
+				gl.uniform4f(shader2.getUniformLocation("uColorMultiplier"),ct.redMultiplier,ct.greenMultiplier,ct.blueMultiplier,ct.alphaMultiplier);
+				gl.uniform4f(shader2.getUniformLocation("uColorOffset"),ct.redOffset / 255,ct.greenOffset / 255,ct.blueOffset / 255,ct.alphaOffset / 255);
+				line.vertexArray.bind();
+				shader2.bindVertexArray(line.vertexArray);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,line.indexBuffer);
+				gl.drawElements(gl.TRIANGLE_STRIP,line.indices.length,gl.UNSIGNED_SHORT,0);
 			}
 		}
 		batchDrawing = renderSession.spriteBatch.drawing;
 		if(!batchDrawing && !localCoords) renderSession.spriteBatch.begin(renderSession);
 	}
 };
-openfl._internal.renderer.opengl.utils.GraphicsRenderer.updateGraphics = function(object,gl,localCoords) {
+openfl._internal.renderer.opengl.utils.GraphicsRenderer.updateGraphics = function(object,graphics,gl,localCoords) {
 	if(localCoords == null) localCoords = false;
-	var graphics = object.__graphics;
 	openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectPosition.setTo(object.get_x(),object.get_y());
-	if(graphics.__bounds != null) openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.copyFrom(graphics.__bounds);
+	if(graphics.__bounds == null) openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds = new openfl.geom.Rectangle(); else openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.copyFrom(graphics.__bounds);
 	var glStack = null;
 	if(graphics.__dirty) glStack = openfl._internal.renderer.opengl.utils.DrawPath.getStack(graphics,gl);
-	graphics.__dirty = false;
+	graphics.set___dirty(false);
 	var _g = 0;
 	var _g1 = glStack.buckets;
 	while(_g < _g1.length) {
@@ -13095,9 +15542,21 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.updateGraphics = functio
 			case 5:
 				openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket(path,glStack);
 				break;
+			case 6:
+				var m = _g21[2];
+				openfl._internal.renderer.opengl.utils.GraphicsRenderer.overrideMatrix = m;
+				break;
 			}
 		}
 		glStack.lastIndex++;
+	}
+	var _g3 = 0;
+	var _g12 = glStack.buckets;
+	while(_g3 < _g12.length) {
+		var bucket = _g12[_g3];
+		++_g3;
+		if(bucket.uploadTileBuffer) bucket.uploadTile(Math.ceil(openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.get_left()),Math.ceil(openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.get_top()),Math.floor(openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.get_right()),Math.floor(openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds.get_bottom()));
+		bucket.optimize();
 	}
 	glStack.upload();
 };
@@ -13110,8 +15569,8 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket = function
 			var a = _g[3];
 			var c = _g[2];
 			bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.switchBucket(path.fillIndex,glStack,openfl._internal.renderer.opengl.utils.BucketMode.Fill);
-			if(c == null) bucket.color = [0,0,0]; else bucket.color = [(c >> 16 & 255) / 255,(c >> 8 & 255) / 255,(c & 255) / 255];
-			bucket.alpha = a;
+			if(c == null) bucket.color = [1,1,1]; else bucket.color = [(c >> 16 & 255) / 255,(c >> 8 & 255) / 255,(c & 255) / 255];
+			bucket.color[3] = a;
 			bucket.uploadTileBuffer = true;
 			break;
 		case 2:
@@ -13129,11 +15588,10 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket = function
 			tMatrix.identity();
 			var pMatrix;
 			if(m == null) pMatrix = new openfl.geom.Matrix(); else pMatrix = new openfl.geom.Matrix(m.a,m.b,m.c,m.d,m.tx,m.ty);
+			tMatrix.concat(pMatrix);
 			pMatrix = pMatrix.invert();
-			pMatrix.__translateTransformed(new openfl.geom.Point(-openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectPosition.x,-openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectPosition.y));
 			var tx = pMatrix.tx / b.width;
 			var ty = pMatrix.ty / b.height;
-			tMatrix.concat(pMatrix);
 			bucket.textureTL.x = tx;
 			bucket.textureTL.y = ty;
 			bucket.textureBR.x = tx + 1;
@@ -13161,8 +15619,8 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareBucket = function
 		}
 	}
 	bucket.graphicType = path.type;
-	var bucketData = bucket.getData();
-	return bucketData;
+	bucket.overrideMatrix = openfl._internal.renderer.opengl.utils.GraphicsRenderer.overrideMatrix;
+	return bucket;
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.getBucket = function(glStack,mode) {
 	var b = openfl._internal.renderer.opengl.utils.GraphicsRenderer.bucketPool.pop();
@@ -13172,11 +15630,18 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.getBucket = function(glS
 	return b;
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.switchBucket = function(fillIndex,glStack,mode) {
-	var bucket;
-	if(glStack.buckets.length == 0) bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.getBucket(glStack,mode); else {
-		bucket = glStack.buckets[glStack.buckets.length - 1];
-		if(bucket.fillIndex != fillIndex) bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.getBucket(glStack,mode);
+	var bucket = null;
+	var _g = 0;
+	var _g1 = glStack.buckets;
+	while(_g < _g1.length) {
+		var b = _g1[_g];
+		++_g;
+		if(b.fillIndex == fillIndex) {
+			bucket = b;
+			break;
+		}
 	}
+	if(bucket == null) bucket = openfl._internal.renderer.opengl.utils.GraphicsRenderer.getBucket(glStack,mode);
 	bucket.dirty = true;
 	bucket.fillIndex = fillIndex;
 	return bucket;
@@ -13201,29 +15666,30 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.prepareShader = function
 	}
 	if(shader == null) return null;
 	var newShader = renderSession.shaderManager.setShader(shader);
-	gl.uniform2f(shader.projectionVector,projection.x,-projection.y);
-	gl.uniform2f(shader.offsetVector,-offset.x,-offset.y);
-	gl.uniform1f(shader.alpha,object.__worldAlpha * bucket.alpha);
+	gl.uniform2f(shader.getUniformLocation("uOffsetVector"),-offset.x,-offset.y);
+	gl.uniform1f(shader.getUniformLocation("uAlpha"),object.__worldAlpha);
+	var ct = object.__worldColorTransform;
+	gl.uniform4f(shader.getUniformLocation("uColorMultiplier"),ct.redMultiplier,ct.greenMultiplier,ct.blueMultiplier,ct.alphaMultiplier);
+	gl.uniform4f(shader.getUniformLocation("uColorOffset"),ct.redOffset / 255,ct.greenOffset / 255,ct.blueOffset / 255,ct.alphaOffset / 255);
 	var _g1 = bucket.mode;
 	switch(_g1[1]) {
 	case 1:
-		gl.uniformMatrix3fv(shader.translationMatrix,false,translationMatrix);
-		gl.uniform3fv(shader.color,new Float32Array(bucket.color));
+		gl.uniform2f(shader.getUniformLocation("uProjectionVector"),projection.x,-projection.y);
+		gl.uniformMatrix3fv(shader.getUniformLocation("uTranslationMatrix"),false,translationMatrix);
+		gl.uniform4fv(shader.getUniformLocation("uColor"),new Float32Array(bucket.color));
 		break;
 	case 2:
-		gl.uniformMatrix3fv(shader.translationMatrix,false,translationMatrix);
-		gl.uniform1i(shader.sampler,0);
-		gl.uniform2f(shader.patternTL,bucket.textureTL.x,bucket.textureTL.y);
-		gl.uniform2f(shader.patternBR,bucket.textureBR.x,bucket.textureBR.y);
-		gl.uniformMatrix3fv(shader.patternMatrix,false,bucket.textureMatrix.toArray(false));
+		gl.uniform2f(shader.getUniformLocation("uProjectionVector"),projection.x,-projection.y);
+		gl.uniformMatrix3fv(shader.getUniformLocation("uTranslationMatrix"),false,translationMatrix);
+		gl.uniform2f(shader.getUniformLocation("uPatternTL"),bucket.textureTL.x,bucket.textureTL.y);
+		gl.uniform2f(shader.getUniformLocation("uPatternBR"),bucket.textureBR.x,bucket.textureBR.y);
+		gl.uniformMatrix3fv(shader.getUniformLocation("uPatternMatrix"),false,bucket.textureMatrix.toArray(false));
 		break;
 	case 5:
-		if(bucket.texture != null) {
-			gl.uniform1i(shader.useTexture,1);
-			gl.uniform1i(shader.sampler,0);
-		} else {
-			gl.uniform1i(shader.useTexture,0);
-			gl.uniform3fv(shader.color,new Float32Array(bucket.color));
+		gl.uniform2f(shader.getUniformLocation("uProjectionVector"),projection.x,projection.y);
+		if(bucket.texture != null) gl.uniform1i(shader.getUniformLocation("uUseTexture"),1); else {
+			gl.uniform1i(shader.getUniformLocation("uUseTexture"),0);
+			gl.uniform4fv(shader.getUniformLocation("uColor"),new Float32Array(bucket.color));
 		}
 		break;
 	default:
@@ -13234,33 +15700,22 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderFill = function(bu
 	var gl = renderSession.gl;
 	if(bucket.mode == openfl._internal.renderer.opengl.utils.BucketMode.PatternFill && bucket.texture != null) openfl._internal.renderer.opengl.utils.GraphicsRenderer.bindTexture(gl,bucket);
 	gl.bindBuffer(gl.ARRAY_BUFFER,bucket.tileBuffer);
-	gl.vertexAttribPointer(shader.aVertexPosition,4,gl.SHORT,false,0,0);
+	gl.vertexAttribPointer(shader.getAttribLocation("aPosition"),4,gl.SHORT,false,0,0);
 	gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderDrawTriangles = function(bucket,shader,renderSession) {
 	var gl = renderSession.gl;
 	var _g = 0;
-	var _g1 = bucket.data;
+	var _g1 = bucket.fills;
 	while(_g < _g1.length) {
-		var data = _g1[_g];
+		var fill = _g1[_g];
 		++_g;
-		if(data.destroyed) continue;
-		if(bucket.texture == null) {
-		} else openfl._internal.renderer.opengl.utils.GraphicsRenderer.bindTexture(gl,bucket);
-		openfl._internal.renderer.opengl.utils.GraphicsRenderer.bindDrawTrianglesBuffer(gl,shader,data);
-		gl.drawArrays(gl.TRIANGLES,data.glStart,data.glLength);
+		if(fill.available) continue;
+		openfl._internal.renderer.opengl.utils.GraphicsRenderer.bindTexture(gl,bucket);
+		fill.vertexArray.bind();
+		shader.bindVertexArray(fill.vertexArray);
+		gl.drawArrays(gl.TRIANGLES,fill.glStart,fill.glLength);
 	}
-};
-openfl._internal.renderer.opengl.utils.GraphicsRenderer.renderDrawTiles = function(object,bucket,renderSession) {
-	var args = bucket.graphicType.slice(2);
-	renderSession.spriteBatch.renderTiles(object,args[0],args[1],args[2],args[3],args[4]);
-};
-openfl._internal.renderer.opengl.utils.GraphicsRenderer.bindDrawTrianglesBuffer = function(gl,shader,data) {
-	gl.bindBuffer(gl.ARRAY_BUFFER,data.vertsBuffer);
-	var stride = data.stride * 4;
-	gl.vertexAttribPointer(shader.aVertexPosition,2,gl.FLOAT,false,stride,0);
-	gl.vertexAttribPointer(shader.aTextureCoord,2,gl.FLOAT,false,stride,8);
-	gl.vertexAttribPointer(shader.colorAttribute,4,gl.FLOAT,false,stride,16);
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.bindTexture = function(gl,bucket) {
 	gl.bindTexture(gl.TEXTURE_2D,bucket.texture);
@@ -13283,7 +15738,7 @@ openfl._internal.renderer.opengl.utils.GraphicsRenderer.isCCW = function(x1,y1,x
 	return (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1) < 0;
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.hex2rgb = function(hex) {
-	if(hex == null) return [0,0,0]; else return [(hex >> 16 & 255) / 255,(hex >> 8 & 255) / 255,(hex & 255) / 255];
+	if(hex == null) return [1,1,1]; else return [(hex >> 16 & 255) / 255,(hex >> 8 & 255) / 255,(hex & 255) / 255];
 };
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.hex2rgba = function(hex) {
 	if(hex == null) return [1,1,1,1]; else return [(hex >> 16 & 255) / 255,(hex >> 8 & 255) / 255,(hex & 255) / 255,(hex >> 24 & 255) / 255];
@@ -13316,8 +15771,9 @@ openfl._internal.renderer.opengl.utils.GLBucket = function(gl) {
 	this.uploadTileBuffer = true;
 	this.textureSmooth = true;
 	this.textureRepeat = false;
-	this.data = [];
-	this.fillIndex = 0;
+	this.lines = [];
+	this.fills = [];
+	this.fillIndex = -1;
 	this.gl = gl;
 	this.color = [0,0,0];
 	this.lastIndex = 0;
@@ -13331,64 +15787,165 @@ openfl._internal.renderer.opengl.utils.GLBucket = function(gl) {
 $hxClasses["openfl._internal.renderer.opengl.utils.GLBucket"] = openfl._internal.renderer.opengl.utils.GLBucket;
 openfl._internal.renderer.opengl.utils.GLBucket.__name__ = ["openfl","_internal","renderer","opengl","utils","GLBucket"];
 openfl._internal.renderer.opengl.utils.GLBucket.prototype = {
-	getData: function() {
+	getData: function(type) {
+		var data;
+		switch(type[1]) {
+		case 1:
+			data = this.fills;
+			break;
+		default:
+			data = this.lines;
+		}
 		var result = null;
 		var remove = false;
 		var _g = 0;
-		var _g1 = this.data;
-		while(_g < _g1.length) {
-			var d = _g1[_g];
+		while(_g < data.length) {
+			var d = data[_g];
 			++_g;
-			if(d.destroyed) {
+			if(d.available) {
 				result = d;
 				remove = true;
 				break;
 			}
 		}
 		if(result == null) result = new openfl._internal.renderer.opengl.utils.GLBucketData(this.gl);
-		result.destroyed = false;
+		result.available = false;
 		result.parent = this;
-		if(remove) HxOverrides.remove(this.data,result);
-		this.data.push(result);
+		result.type = type;
+		if(remove) HxOverrides.remove(data,result);
+		data.push(result);
+		switch(type[1]) {
+		case 1:
+			var _g1 = this.mode;
+			switch(_g1[1]) {
+			case 1:case 2:
+				result.vertexArray.attributes = openfl._internal.renderer.opengl.utils.GraphicsRenderer.fillVertexAttributes;
+				break;
+			case 5:
+				result.vertexArray.attributes = openfl._internal.renderer.opengl.utils.GraphicsRenderer.drawTrianglesVertexAttributes.slice();
+				result.vertexArray.attributes[2] = result.vertexArray.attributes[2].copy();
+				break;
+			default:
+			}
+			break;
+		case 0:
+			result.vertexArray.attributes = openfl._internal.renderer.opengl.utils.GraphicsRenderer.primitiveVertexAttributes;
+			break;
+		}
 		return result;
+	}
+	,optimize: function() {
+		var _g = this;
+		var data = this.lines;
+		if(data.length > 1) {
+			var result = [];
+			var tmp = null;
+			var last = null;
+			var idx = 0;
+			var vi = 0;
+			var ii = 0;
+			var before = data.length;
+			var _g1 = 0;
+			while(_g1 < data.length) {
+				var d = data[_g1];
+				++_g1;
+				if(d.available || d.rawVerts || d.rawIndices) {
+					if(tmp != null) {
+						result.push(tmp);
+						tmp = null;
+					}
+					result.push(d);
+					last = d;
+					continue;
+				}
+				if(last == null || last.drawMode == d.drawMode) {
+					if(tmp == null) tmp = d; else {
+						vi = tmp.verts.length;
+						ii = tmp.indices.length;
+						var _g2 = 0;
+						var _g11 = d.verts.length;
+						while(_g2 < _g11) {
+							var j = _g2++;
+							tmp.verts[j + vi] = d.verts[j];
+						}
+						var _g21 = 0;
+						var _g12 = d.indices.length;
+						while(_g21 < _g12) {
+							var j1 = _g21++;
+							tmp.indices[j1 + ii] = d.indices[j1] + idx;
+						}
+					}
+					idx = tmp.indices[tmp.indices.length - 1] + 1;
+					last = d;
+				} else {
+					if(tmp != null) {
+						result.push(tmp);
+						tmp = null;
+					}
+					result.push(d);
+					last = d;
+					continue;
+				}
+			}
+			if(result.length == 0 && tmp != null) result.push(tmp);
+			if(result.length > 0) switch(openfl._internal.renderer.opengl.utils.BucketDataType.Line[1]) {
+			case 1:
+				_g.fills = result;
+				break;
+			default:
+				_g.lines = result;
+			}
+		}
 	}
 	,reset: function() {
 		var _g = 0;
-		var _g1 = this.data;
+		var _g1 = this.fills;
 		while(_g < _g1.length) {
-			var d = _g1[_g];
+			var fill = _g1[_g];
 			++_g;
-			d.destroy();
+			fill.reset();
 		}
-		this.fillIndex = 0;
+		var _g2 = 0;
+		var _g11 = this.lines;
+		while(_g2 < _g11.length) {
+			var line = _g11[_g2];
+			++_g2;
+			line.reset();
+		}
+		this.fillIndex = -1;
 		this.uploadTileBuffer = true;
 		this.graphicType = openfl._internal.renderer.opengl.utils.GraphicType.Polygon;
 	}
+	,uploadTile: function(x,y,w,h) {
+		if(this.tileBuffer == null) this.tileBuffer = this.gl.createBuffer();
+		this.tile = [x,y,0,0,w,y,1,0,x,h,0,1,w,h,1,1];
+		this.glTile = new Int16Array(this.tile);
+		this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.tileBuffer);
+		this.gl.bufferData(this.gl.ARRAY_BUFFER,this.glTile,this.gl.STATIC_DRAW);
+	}
 	,upload: function() {
-		if(this.uploadTileBuffer) {
-			if(this.tileBuffer == null) {
-				this.tileBuffer = this.gl.createBuffer();
-				this.tile = [0,0,0,0,4096,0,1,0,0,4096,0,1,4096,4096,1,1];
-				this.glTile = new Int16Array(this.tile);
+		if(this.mode != openfl._internal.renderer.opengl.utils.BucketMode.Line) {
+			var _g = 0;
+			var _g1 = this.fills;
+			while(_g < _g1.length) {
+				var fill = _g1[_g];
+				++_g;
+				if(!fill.available) fill.upload();
 			}
-			this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.tileBuffer);
-			this.gl.bufferData(this.gl.ARRAY_BUFFER,this.glTile,this.gl.STATIC_DRAW);
-			this.uploadTileBuffer = false;
 		}
-		var _g = 0;
-		var _g1 = this.data;
-		while(_g < _g1.length) {
-			var d = _g1[_g];
-			++_g;
-			if(!d.destroyed) d.upload();
+		var _g2 = 0;
+		var _g11 = this.lines;
+		while(_g2 < _g11.length) {
+			var line = _g11[_g2];
+			++_g2;
+			if(!line.available) line.upload();
 		}
 		this.dirty = false;
 	}
 	,__class__: openfl._internal.renderer.opengl.utils.GLBucket
 };
-openfl._internal.renderer.opengl.utils.GLBucketData = function(gl,initLine) {
-	if(initLine == null) initLine = true;
-	this.destroyed = false;
+openfl._internal.renderer.opengl.utils.GLBucketData = function(gl) {
+	this.available = false;
 	this.rawIndices = false;
 	this.stride = 0;
 	this.rawVerts = false;
@@ -13398,16 +15955,14 @@ openfl._internal.renderer.opengl.utils.GLBucketData = function(gl,initLine) {
 	this.gl = gl;
 	this.drawMode = gl.TRIANGLE_STRIP;
 	this.verts = [];
-	this.vertsBuffer = gl.createBuffer();
 	this.indices = [];
-	this.indexBuffer = gl.createBuffer();
-	if(initLine) this.line = new openfl._internal.renderer.opengl.utils.GLBucketData(gl,false);
+	this.vertexArray = new openfl._internal.renderer.opengl.utils.VertexArray([]);
 };
 $hxClasses["openfl._internal.renderer.opengl.utils.GLBucketData"] = openfl._internal.renderer.opengl.utils.GLBucketData;
 openfl._internal.renderer.opengl.utils.GLBucketData.__name__ = ["openfl","_internal","renderer","opengl","utils","GLBucketData"];
 openfl._internal.renderer.opengl.utils.GLBucketData.prototype = {
-	destroy: function() {
-		this.destroyed = true;
+	reset: function() {
+		this.available = true;
 		this.verts = [];
 		this.indices = [];
 		this.glLength = 0;
@@ -13415,30 +15970,29 @@ openfl._internal.renderer.opengl.utils.GLBucketData.prototype = {
 		this.stride = 0;
 		this.rawVerts = false;
 		this.rawIndices = false;
-		if(this.line != null) this.line.destroy();
 	}
 	,upload: function() {
 		if(this.rawVerts && this.glVerts != null && this.glVerts.length > 0 || this.verts.length > 0) {
 			if(!this.rawVerts) this.glVerts = new Float32Array(this.verts);
-			this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.vertsBuffer);
+			this.vertexArray.buffer = this.glVerts.buffer;
 			if(this.glVerts.length <= this.lastVertsSize) {
+				this.vertexArray.bind();
 				var end = this.glLength * 4 * this.stride;
 				if(this.glLength > 0 && this.lastVertsSize > end) {
 					var view = this.glVerts.subarray(0,end);
-					this.gl.bufferSubData(this.gl.ARRAY_BUFFER,0,view);
-					view = null;
-				} else this.gl.bufferSubData(this.gl.ARRAY_BUFFER,0,this.glVerts);
+					this.vertexArray.upload(view);
+				} else this.vertexArray.upload(this.glVerts);
 			} else {
-				this.gl.bufferData(this.gl.ARRAY_BUFFER,this.glVerts,this.gl.STREAM_DRAW);
+				this.vertexArray.setContext(this.gl,this.glVerts);
 				this.lastVertsSize = this.glVerts.length;
 			}
 		}
 		if(this.glLength == 0 && (this.rawIndices && this.glIndices != null && this.glIndices.length > 0 || this.indices.length > 0)) {
+			if(this.indexBuffer == null) this.indexBuffer = this.gl.createBuffer();
 			if(!this.rawIndices) this.glIndices = new Uint16Array(this.indices);
 			this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER,this.indexBuffer);
 			this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER,this.glIndices,this.gl.STREAM_DRAW);
 		}
-		if(this.line != null) this.line.upload();
 	}
 	,__class__: openfl._internal.renderer.opengl.utils.GLBucketData
 };
@@ -13464,6 +16018,13 @@ openfl._internal.renderer.opengl.utils.BucketMode.DrawTriangles.__enum__ = openf
 openfl._internal.renderer.opengl.utils.BucketMode.DrawTiles = ["DrawTiles",6];
 openfl._internal.renderer.opengl.utils.BucketMode.DrawTiles.toString = $estr;
 openfl._internal.renderer.opengl.utils.BucketMode.DrawTiles.__enum__ = openfl._internal.renderer.opengl.utils.BucketMode;
+openfl._internal.renderer.opengl.utils.BucketDataType = $hxClasses["openfl._internal.renderer.opengl.utils.BucketDataType"] = { __ename__ : true, __constructs__ : ["Line","Fill"] };
+openfl._internal.renderer.opengl.utils.BucketDataType.Line = ["Line",0];
+openfl._internal.renderer.opengl.utils.BucketDataType.Line.toString = $estr;
+openfl._internal.renderer.opengl.utils.BucketDataType.Line.__enum__ = openfl._internal.renderer.opengl.utils.BucketDataType;
+openfl._internal.renderer.opengl.utils.BucketDataType.Fill = ["Fill",1];
+openfl._internal.renderer.opengl.utils.BucketDataType.Fill.toString = $estr;
+openfl._internal.renderer.opengl.utils.BucketDataType.Fill.__enum__ = openfl._internal.renderer.opengl.utils.BucketDataType;
 openfl._internal.renderer.opengl.utils.GLGraphicsData = function(gl) {
 	this.indices = [];
 	this.data = [];
@@ -13559,7 +16120,7 @@ openfl._internal.renderer.opengl.utils.PolyK.triangulate = function(p) {
 				al = n;
 				sign = false;
 			} else {
-				haxe.Log.trace("Warning: shape too complex to fill",{ fileName : "GraphicsRenderer.hx", lineNumber : 1506, className : "openfl._internal.renderer.opengl.utils.PolyK", methodName : "triangulate"});
+				haxe.Log.trace("Warning: shape too complex to fill",{ fileName : "GraphicsRenderer.hx", lineNumber : 1712, className : "openfl._internal.renderer.opengl.utils.PolyK", methodName : "triangulate"});
 				return [];
 			}
 		}
@@ -13589,7 +16150,7 @@ openfl._internal.renderer.opengl.utils.PolyK._PointInTriangle = function(px,py,a
 openfl._internal.renderer.opengl.utils.PolyK._convex = function(ax,ay,bx,by,cx,cy,sign) {
 	return (ay - by) * (cx - bx) + (bx - ax) * (cy - by) >= 0 == sign;
 };
-openfl._internal.renderer.opengl.utils.GraphicType = $hxClasses["openfl._internal.renderer.opengl.utils.GraphicType"] = { __ename__ : true, __constructs__ : ["Polygon","Rectangle","Circle","Ellipse","DrawTriangles","DrawTiles"] };
+openfl._internal.renderer.opengl.utils.GraphicType = $hxClasses["openfl._internal.renderer.opengl.utils.GraphicType"] = { __ename__ : true, __constructs__ : ["Polygon","Rectangle","Circle","Ellipse","DrawTriangles","DrawTiles","OverrideMatrix"] };
 openfl._internal.renderer.opengl.utils.GraphicType.Polygon = ["Polygon",0];
 openfl._internal.renderer.opengl.utils.GraphicType.Polygon.toString = $estr;
 openfl._internal.renderer.opengl.utils.GraphicType.Polygon.__enum__ = openfl._internal.renderer.opengl.utils.GraphicType;
@@ -13602,126 +16163,94 @@ openfl._internal.renderer.opengl.utils.GraphicType.Ellipse.toString = $estr;
 openfl._internal.renderer.opengl.utils.GraphicType.Ellipse.__enum__ = openfl._internal.renderer.opengl.utils.GraphicType;
 openfl._internal.renderer.opengl.utils.GraphicType.DrawTriangles = function(vertices,indices,uvtData,culling,colors,blendMode) { var $x = ["DrawTriangles",4,vertices,indices,uvtData,culling,colors,blendMode]; $x.__enum__ = openfl._internal.renderer.opengl.utils.GraphicType; $x.toString = $estr; return $x; };
 openfl._internal.renderer.opengl.utils.GraphicType.DrawTiles = function(sheet,tileData,smooth,flags,count) { var $x = ["DrawTiles",5,sheet,tileData,smooth,flags,count]; $x.__enum__ = openfl._internal.renderer.opengl.utils.GraphicType; $x.toString = $estr; return $x; };
+openfl._internal.renderer.opengl.utils.GraphicType.OverrideMatrix = function(matrix) { var $x = ["OverrideMatrix",6,matrix]; $x.__enum__ = openfl._internal.renderer.opengl.utils.GraphicType; $x.toString = $estr; return $x; };
 openfl._internal.renderer.opengl.utils._GraphicsRenderer = {};
 openfl._internal.renderer.opengl.utils._GraphicsRenderer.RenderMode_Impl_ = function() { };
 $hxClasses["openfl._internal.renderer.opengl.utils._GraphicsRenderer.RenderMode_Impl_"] = openfl._internal.renderer.opengl.utils._GraphicsRenderer.RenderMode_Impl_;
 openfl._internal.renderer.opengl.utils._GraphicsRenderer.RenderMode_Impl_.__name__ = ["openfl","_internal","renderer","opengl","utils","_GraphicsRenderer","RenderMode_Impl_"];
 openfl._internal.renderer.opengl.utils.MaskManager = function(gl) {
-	this.maskStack = [];
-	this.maskPosition = 0;
 	this.setContext(gl);
-	this.reverse = false;
-	this.count = 0;
 };
 $hxClasses["openfl._internal.renderer.opengl.utils.MaskManager"] = openfl._internal.renderer.opengl.utils.MaskManager;
 openfl._internal.renderer.opengl.utils.MaskManager.__name__ = ["openfl","_internal","renderer","opengl","utils","MaskManager"];
 openfl._internal.renderer.opengl.utils.MaskManager.prototype = {
 	destroy: function() {
-		this.maskStack = null;
 		this.gl = null;
-	}
-	,popMask: function(maskData,renderSession) {
-		var gl = this.gl;
-		renderSession.stencilManager.popStencil(maskData,maskData._webGL[openfl._internal.renderer.opengl.GLRenderer.glContextId].data[0],renderSession);
-	}
-	,pushMask: function(maskData,renderSession) {
-		var gl = renderSession.gl;
-		if(maskData.dirty) openfl._internal.renderer.opengl.utils.GraphicsRenderer.updateGraphics(maskData,gl);
-		if(maskData._webGL[openfl._internal.renderer.opengl.GLRenderer.glContextId].data.length == 0) return;
-		renderSession.stencilManager.pushStencil(maskData,maskData._webGL[openfl._internal.renderer.opengl.GLRenderer.glContextId].data[0],renderSession);
 	}
 	,setContext: function(gl) {
 		this.gl = gl;
 	}
+	,pushMask: function(object,renderSession) {
+		renderSession.stencilManager.pushMask(object,renderSession);
+	}
+	,popMask: function(object,renderSession) {
+		renderSession.stencilManager.popMask(object,renderSession);
+	}
 	,__class__: openfl._internal.renderer.opengl.utils.MaskManager
 };
 openfl._internal.renderer.opengl.utils.ShaderManager = function(gl) {
-	this.maxAttibs = 10;
-	this.attribState = [];
-	this.tempAttribState = [];
-	this.shaderMap = [];
-	var _g1 = 0;
-	var _g = this.maxAttibs;
-	while(_g1 < _g) {
-		var i = _g1++;
-		this.attribState[i] = false;
-	}
 	this.setContext(gl);
 };
 $hxClasses["openfl._internal.renderer.opengl.utils.ShaderManager"] = openfl._internal.renderer.opengl.utils.ShaderManager;
 openfl._internal.renderer.opengl.utils.ShaderManager.__name__ = ["openfl","_internal","renderer","opengl","utils","ShaderManager"];
 openfl._internal.renderer.opengl.utils.ShaderManager.prototype = {
-	destroy: function() {
-		this.attribState = null;
-		this.tempAttribState = null;
-		this.primitiveShader.destroy();
+	setContext: function(gl) {
+		this.gl = gl;
+		this.defaultShader = new openfl._internal.renderer.opengl.shaders2.DefaultShader(gl);
+		this.fillShader = new openfl._internal.renderer.opengl.shaders2.FillShader(gl);
+		this.patternFillShader = new openfl._internal.renderer.opengl.shaders2.PatternFillShader(gl);
+		this.drawTrianglesShader = new openfl._internal.renderer.opengl.shaders2.DrawTrianglesShader(gl);
+		this.primitiveShader = new openfl._internal.renderer.opengl.shaders2.PrimitiveShader(gl);
+		this.setShader(this.defaultShader,true);
+	}
+	,destroy: function() {
 		this.defaultShader.destroy();
-		this.fastShader.destroy();
-		this.stripShader.destroy();
 		this.fillShader.destroy();
 		this.patternFillShader.destroy();
 		this.drawTrianglesShader.destroy();
+		this.primitiveShader.destroy();
 		this.gl = null;
 	}
-	,setAttribs: function(attribs) {
-		var _g1 = 0;
-		var _g = this.tempAttribState.length;
-		while(_g1 < _g) {
-			var i = _g1++;
-			this.tempAttribState[i] = false;
-		}
-		var _g11 = 0;
-		var _g2 = attribs.length;
-		while(_g11 < _g2) {
-			var i1 = _g11++;
-			var attribId = attribs[i1];
-			this.tempAttribState[attribId] = true;
-		}
-		var gl = this.gl;
-		var _g12 = 0;
-		var _g3 = this.attribState.length;
-		while(_g12 < _g3) {
-			var i2 = _g12++;
-			if(this.attribState[i2] != this.tempAttribState[i2]) {
-				this.attribState[i2] = this.tempAttribState[i2];
-				if(this.tempAttribState[i2]) gl.enableVertexAttribArray(i2); else gl.disableVertexAttribArray(i2);
-			}
-		}
-	}
-	,setContext: function(gl) {
-		this.gl = gl;
-		this.primitiveShader = new openfl._internal.renderer.opengl.shaders.PrimitiveShader(gl);
-		this.complexPrimitiveShader = new openfl._internal.renderer.opengl.shaders.ComplexPrimitiveShader(gl);
-		this.defaultShader = new openfl._internal.renderer.opengl.shaders.DefaultShader(gl);
-		this.fastShader = new openfl._internal.renderer.opengl.shaders.FastShader(gl);
-		this.stripShader = new openfl._internal.renderer.opengl.shaders.StripShader(gl);
-		this.fillShader = new openfl._internal.renderer.opengl.shaders.FillShader(gl);
-		this.patternFillShader = new openfl._internal.renderer.opengl.shaders.PatternFillShader(gl);
-		this.drawTrianglesShader = new openfl._internal.renderer.opengl.shaders.DrawTrianglesShader(gl);
-		this.setShader(this.defaultShader);
-	}
-	,setShader: function(shader) {
-		if(this._currentId == shader._UID) return false;
-		this._currentId = shader._UID;
+	,setShader: function(shader,force) {
+		if(force == null) force = false;
+		if(!force && this.currentShader.ID == shader.ID) return false;
 		this.currentShader = shader;
 		this.gl.useProgram(shader.program);
-		this.setAttribs(shader.attributes);
 		return true;
 	}
 	,__class__: openfl._internal.renderer.opengl.utils.ShaderManager
 };
-openfl._internal.renderer.opengl.utils.SpriteBatch = function(gl) {
+openfl._internal.renderer.opengl.utils.SpriteBatch = function(gl,maxSprites) {
+	if(maxSprites == null) maxSprites = 2000;
+	this.lastEnableColor = true;
+	this.enableColor = true;
+	this.attributes = [];
+	this.writtenVertexBytes = 0;
+	this.drawing = false;
+	this.dirty = true;
 	this.states = [];
-	this.vertSize = 6;
-	this.size = Math.floor(Math.pow(2,16) / this.vertSize);
-	var numVerts = this.size * 4 * this.vertSize;
-	var numIndices = this.size * 6;
-	this.vertices = new Float32Array(numVerts);
-	this.indices = new Uint16Array(numIndices);
-	this.lastIndexCount = 0;
+	this.maxSprites = maxSprites;
+	this.attributes.push(new openfl._internal.renderer.opengl.utils.VertexAttribute(2,5126,false,"aPosition"));
+	this.attributes.push(new openfl._internal.renderer.opengl.utils.VertexAttribute(2,5126,false,"aTexCoord0"));
+	this.attributes.push(new openfl._internal.renderer.opengl.utils.VertexAttribute(4,5121,true,"aColor"));
+	this.attributes[2].defaultValue = new Float32Array([1,1,1,1]);
+	this.maxElementsPerVertex = 0;
+	var _g = 0;
+	var _g1 = this.attributes;
+	while(_g < _g1.length) {
+		var a = _g1[_g];
+		++_g;
+		this.maxElementsPerVertex += Math.floor(a.components * a.getElementsBytes() / 4);
+	}
+	this.vertexArraySize = maxSprites * this.maxElementsPerVertex * 4 * 4;
+	this.indexArraySize = maxSprites * 6;
+	this.vertexArray = new openfl._internal.renderer.opengl.utils.VertexArray(this.attributes,this.vertexArraySize,false);
+	this.positions = new Float32Array(this.vertexArray.buffer);
+	this.colors = new Uint32Array(this.vertexArray.buffer);
+	this.indices = new Uint16Array(this.indexArraySize);
 	var i = 0;
 	var j = 0;
-	while(i < numIndices) {
+	while(i < this.indexArraySize) {
 		this.indices[i] = j;
 		this.indices[i + 1] = j + 1;
 		this.indices[i + 2] = j + 2;
@@ -13731,124 +16260,68 @@ openfl._internal.renderer.opengl.utils.SpriteBatch = function(gl) {
 		i += 6;
 		j += 4;
 	}
-	this.drawing = false;
-	this.currentBatchSize = 0;
-	this.currentBaseTexture = null;
-	this.setContext(gl);
-	this.dirty = true;
 	this.currentState = new openfl._internal.renderer.opengl.utils._SpriteBatch.State();
+	this.dirty = true;
+	this.drawing = false;
+	this.batchedSprites = 0;
+	this.setContext(gl);
 };
 $hxClasses["openfl._internal.renderer.opengl.utils.SpriteBatch"] = openfl._internal.renderer.opengl.utils.SpriteBatch;
 openfl._internal.renderer.opengl.utils.SpriteBatch.__name__ = ["openfl","_internal","renderer","opengl","utils","SpriteBatch"];
 openfl._internal.renderer.opengl.utils.SpriteBatch.prototype = {
-	begin: function(renderSession) {
+	destroy: function() {
+		this.vertexArray.destroy();
+		this.vertexArray = null;
+		this.indices = null;
+		this.gl.deleteBuffer(this.indexBuffer);
+		this.currentState.destroy();
+		var _g = 0;
+		var _g1 = this.states;
+		while(_g < _g1.length) {
+			var state = _g1[_g];
+			++_g;
+			state.destroy();
+		}
+		this.gl = null;
+	}
+	,begin: function(renderSession,clipRect) {
 		this.renderSession = renderSession;
 		this.shader = renderSession.shaderManager.defaultShader;
 		this.drawing = true;
-		this.start();
+		this.start(clipRect);
 	}
-	,destroy: function() {
-		this.vertices = null;
-		this.indices = null;
-		this.gl.deleteBuffer(this.vertexBuffer);
-		this.gl.deleteBuffer(this.indexBuffer);
-		this.currentBaseTexture = null;
-		this.gl = null;
-	}
-	,end: function() {
+	,finish: function() {
 		this.flush();
+		this.clipRect = null;
 		this.drawing = false;
 	}
-	,flush: function() {
-		if(this.currentBatchSize == 0) return;
-		var gl = this.gl;
-		this.renderSession.shaderManager.setShader(this.renderSession.shaderManager.defaultShader);
-		if(this.dirty) {
-			this.dirty = false;
-			gl.activeTexture(gl.TEXTURE0);
-			gl.bindBuffer(gl.ARRAY_BUFFER,this.vertexBuffer);
-			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.indexBuffer);
-			var projection = this.renderSession.projection;
-			gl.uniform2f(this.shader.projectionVector,projection.x,projection.y);
-			var stride = this.vertSize * 4;
-			gl.vertexAttribPointer(this.shader.aVertexPosition,2,gl.FLOAT,false,stride,0);
-			gl.vertexAttribPointer(this.shader.aTextureCoord,2,gl.FLOAT,false,stride,8);
-			gl.vertexAttribPointer(this.shader.colorAttribute,2,gl.FLOAT,false,stride,16);
-		}
-		if(this.currentBatchSize > this.size * 0.5) gl.bufferSubData(gl.ARRAY_BUFFER,0,this.vertices); else {
-			var view = this.vertices.subarray(0,this.currentBatchSize * 4 * this.vertSize);
-			gl.bufferSubData(gl.ARRAY_BUFFER,0,view);
-		}
-		var nextState;
-		var batchSize = 0;
-		var start = 0;
-		this.currentState.texture = null;
-		this.currentState.textureSmooth = true;
-		this.currentState.blendMode = this.renderSession.blendModeManager.currentBlendMode;
-		var j = this.currentBatchSize;
-		var _g = 0;
-		while(_g < j) {
-			var i = _g++;
-			nextState = this.states[i];
-			if(this.currentState.texture != nextState.texture || this.currentState.blendMode != nextState.blendMode) {
-				this.renderBatch(this.currentState,batchSize,start);
-				start = i;
-				batchSize = 0;
-				this.currentState.texture = nextState.texture;
-				this.currentState.textureSmooth = nextState.textureSmooth;
-				this.currentState.blendMode = nextState.blendMode;
-				this.renderSession.blendModeManager.setBlendMode(this.currentState.blendMode);
-			}
-			batchSize++;
-		}
-		this.renderBatch(this.currentState,batchSize,start);
-		this.currentBatchSize = 0;
+	,start: function(clipRect) {
+		if(!this.drawing) throw "Call Spritebatch.begin() before start()";
+		this.dirty = true;
+		this.clipRect = clipRect;
 	}
-	,render: function(sprite) {
-		var bitmapData = sprite.bitmapData;
-		var texture = bitmapData.getTexture(this.gl);
+	,stop: function() {
+		this.flush();
+	}
+	,renderBitmapData: function(bitmapData,smoothing,matrix,ct,alpha,blendMode) {
+		if(alpha == null) alpha = 1;
 		if(bitmapData == null) return;
-		if(this.currentBatchSize >= this.size) {
-			this.flush();
-			this.currentState.texture = texture;
-		}
+		var texture = bitmapData.getTexture(this.gl);
+		if(this.batchedSprites >= this.maxSprites) this.flush();
 		var uvs = bitmapData.__uvData;
 		if(uvs == null) return;
-		var alpha = sprite.__worldAlpha;
-		var tint = 16777215;
-		var aX = 0;
-		var aY = 0;
-		var index = this.currentBatchSize * 4 * this.vertSize;
-		this.fillVertices(index,aX,aY,bitmapData.width,bitmapData.height,tint,alpha,uvs,sprite.__worldTransform);
-		this.setState(this.currentBatchSize,texture,null,sprite.blendMode);
-		this.currentBatchSize++;
-	}
-	,renderCachedGraphics: function(object) {
-		var cachedTexture = object.__graphics.__cachedTexture;
-		if(cachedTexture == null) return;
-		if(this.currentBatchSize >= this.size) {
+		var color = ((alpha * 255 | 0) & 255) << 24 | 16777215;
+		this.enableColor = true;
+		if(this.enableColor != this.lastEnableColor) {
 			this.flush();
-			this.currentBaseTexture = cachedTexture.texture;
+			this.lastEnableColor = this.enableColor;
 		}
-		var alpha = object.__worldAlpha;
-		var tint = 16777215;
-		var aX = 0;
-		var aY = 0;
-		var uvs = new openfl.display.TextureUvs();
-		uvs.x0 = 0;
-		uvs.y0 = 1;
-		uvs.x1 = 1;
-		uvs.y1 = 1;
-		uvs.x2 = 1;
-		uvs.y2 = 0;
-		uvs.x3 = 0;
-		uvs.y3 = 0;
-		var index = this.currentBatchSize * 4 * this.vertSize;
-		var worldTransform = object.__worldTransform.clone();
-		worldTransform.__translateTransformed(new openfl.geom.Point(object.__graphics.__bounds.x,object.__graphics.__bounds.y));
-		this.fillVertices(index,aX,aY,cachedTexture.width,cachedTexture.height,tint,alpha,uvs,worldTransform);
-		this.setState(this.currentBatchSize,cachedTexture.texture,null,object.blendMode);
-		this.currentBatchSize++;
+		this.attributes[2].enabled = this.lastEnableColor;
+		this.elementsPerVertex = this.getElementsPerVertex();
+		var index = this.batchedSprites * 4 * this.elementsPerVertex;
+		this.fillVertices(index,bitmapData.width,bitmapData.height,matrix,uvs,null,color);
+		this.setState(this.batchedSprites,texture,smoothing,blendMode,ct,true);
+		this.batchedSprites++;
 	}
 	,renderTiles: function(object,sheet,tileData,smooth,flags,count) {
 		if(count == null) count = -1;
@@ -13921,6 +16394,7 @@ openfl._internal.renderer.opengl.utils.SpriteBatch.prototype = {
 		var y = 0.0;
 		var alpha = 1.0;
 		var tint = 16777215;
+		var color = -1;
 		var scale = 1.0;
 		var rotation = 0.0;
 		var cosTheta = 1.0;
@@ -13937,11 +16411,15 @@ openfl._internal.renderer.opengl.utils.SpriteBatch.prototype = {
 		var oMatrix = object.__worldTransform;
 		var uvs = new openfl.display.TextureUvs();
 		var bIndex = 0;
+		this.enableColor = true;
+		if(this.enableColor != this.lastEnableColor) {
+			this.flush();
+			this.lastEnableColor = this.enableColor;
+		}
+		this.attributes[2].enabled = this.lastEnableColor;
+		this.elementsPerVertex = this.getElementsPerVertex();
 		while(iIndex < totalCount) {
-			if(this.currentBatchSize >= this.size) {
-				this.flush();
-				this.currentBaseTexture = texture;
-			}
+			if(this.batchedSprites >= this.maxSprites) this.flush();
 			x = tileData[iIndex];
 			y = tileData[iIndex + 1];
 			if(useRect) {
@@ -13978,7 +16456,7 @@ openfl._internal.renderer.opengl.utils.SpriteBatch.prototype = {
 				cosTheta = 1.0;
 				sinTheta = 0.0;
 				matrix.identity();
-				if(useAlpha) alpha = tileData[iIndex + alphaIndex];
+				if(useAlpha) alpha = tileData[iIndex + alphaIndex] * object.__worldAlpha; else alpha = object.__worldAlpha;
 				if(useRGB) tint = (tileData[iIndex + rgbIndex] * 255 | 0) << 16 | (tileData[iIndex + rgbIndex + 1] * 255 | 0) << 8 | (tileData[iIndex + rgbIndex + 2] * 255 | 0);
 				if(useScale) scale = tileData[iIndex + scaleIndex];
 				if(useRotation) {
@@ -14005,8 +16483,8 @@ openfl._internal.renderer.opengl.utils.SpriteBatch.prototype = {
 				matrix.b = a * oMatrix.b + b * oMatrix.d;
 				matrix.c = c * oMatrix.a + d * oMatrix.c;
 				matrix.d = c * oMatrix.b + d * oMatrix.d;
-				matrix.tx = tx * oMatrix.a + ty * oMatrix.c;
-				matrix.ty = tx * oMatrix.b + ty * oMatrix.d;
+				matrix.tx = tx * oMatrix.a + ty * oMatrix.c + oMatrix.tx;
+				matrix.ty = tx * oMatrix.b + ty * oMatrix.d + oMatrix.ty;
 				uvs.x0 = tileUV.x;
 				uvs.y0 = tileUV.y;
 				uvs.x1 = tileUV.width;
@@ -14015,64 +16493,165 @@ openfl._internal.renderer.opengl.utils.SpriteBatch.prototype = {
 				uvs.y2 = tileUV.height;
 				uvs.x3 = tileUV.x;
 				uvs.y3 = tileUV.height;
-				bIndex = this.currentBatchSize * 4 * this.vertSize;
-				this.fillVertices(bIndex,0,0,rect.width,rect.height,tint,alpha,uvs,matrix);
-				this.setState(this.currentBatchSize,texture,smooth,blendMode);
-				this.currentBatchSize++;
+				bIndex = this.batchedSprites * 4 * this.elementsPerVertex;
+				color = ((alpha * 255 | 0) & 255) << 24 | (tint & 255) << 16 | (tint >> 8 & 255) << 8 | tint >> 16 & 255;
+				this.fillVertices(bIndex,rect.width,rect.height,matrix,uvs,null,color);
+				this.setState(this.batchedSprites,texture,smooth,blendMode,object.__worldColorTransform,false);
+				this.batchedSprites++;
 			}
 			iIndex += numValues;
 		}
 	}
-	,fillVertices: function(index,aX,aY,width,height,tint,alpha,uvs,matrix) {
+	,renderCachedGraphics: function(object) {
+		var cachedTexture = object.__graphics.__cachedTexture;
+		if(cachedTexture == null) return;
+		if(this.batchedSprites >= this.maxSprites) this.flush();
+		var alpha = object.__worldAlpha;
+		var color = ((alpha * 255 | 0) & 255) << 24 | 16777215;
+		var uvs = new openfl.display.TextureUvs();
+		uvs.x0 = 0;
+		uvs.y0 = 1;
+		uvs.x1 = 1;
+		uvs.y1 = 1;
+		uvs.x2 = 1;
+		uvs.y2 = 0;
+		uvs.x3 = 0;
+		uvs.y3 = 0;
+		var worldTransform = object.__worldTransform.clone();
+		worldTransform.__translateTransformed(new openfl.geom.Point(object.__graphics.__bounds.x,object.__graphics.__bounds.y));
+		this.enableColor = color != -1;
+		if(this.enableColor != this.lastEnableColor) {
+			this.flush();
+			this.lastEnableColor = this.enableColor;
+		}
+		this.attributes[2].enabled = this.lastEnableColor;
+		this.elementsPerVertex = this.getElementsPerVertex();
+		var index = this.batchedSprites * 4 * this.elementsPerVertex;
+		this.fillVertices(index,cachedTexture.width,cachedTexture.height,worldTransform,uvs,null,color);
+		this.setState(this.batchedSprites,cachedTexture.texture,null,object.blendMode,object.__worldColorTransform);
+		this.batchedSprites++;
+	}
+	,fillVertices: function(index,width,height,matrix,uvs,pivot,color) {
+		if(color == null) color = -1;
 		var w0;
 		var w1;
 		var h0;
 		var h1;
-		w0 = width * (1 - aX);
-		w1 = width * -aX;
-		h0 = height * (1 - aY);
-		h1 = height * -aY;
+		if(pivot == null) {
+			w0 = width;
+			w1 = 0;
+			h0 = height;
+			h1 = 0;
+		} else {
+			w0 = width * (1 - pivot.x);
+			w1 = width * -pivot.x;
+			h0 = height * (1 - pivot.y);
+			h1 = height * -pivot.y;
+		}
 		var a = matrix.a;
 		var b = matrix.b;
 		var c = matrix.c;
 		var d = matrix.d;
 		var tx = matrix.tx;
 		var ty = matrix.ty;
-		this.vertices[index++] = a * w1 + c * h1 + tx;
-		this.vertices[index++] = d * h1 + b * w1 + ty;
-		this.vertices[index++] = uvs.x0;
-		this.vertices[index++] = uvs.y0;
-		this.vertices[index++] = alpha;
-		this.vertices[index++] = tint;
-		this.vertices[index++] = a * w0 + c * h1 + tx;
-		this.vertices[index++] = d * h1 + b * w0 + ty;
-		this.vertices[index++] = uvs.x1;
-		this.vertices[index++] = uvs.y1;
-		this.vertices[index++] = alpha;
-		this.vertices[index++] = tint;
-		this.vertices[index++] = a * w0 + c * h0 + tx;
-		this.vertices[index++] = d * h0 + b * w0 + ty;
-		this.vertices[index++] = uvs.x2;
-		this.vertices[index++] = uvs.y2;
-		this.vertices[index++] = alpha;
-		this.vertices[index++] = tint;
-		this.vertices[index++] = a * w1 + c * h0 + tx;
-		this.vertices[index++] = d * h0 + b * w1 + ty;
-		this.vertices[index++] = uvs.x3;
-		this.vertices[index++] = uvs.y3;
-		this.vertices[index++] = alpha;
-		this.vertices[index++] = tint;
+		var cOffsetIndex = 0;
+		this.positions[index++] = a * w1 + c * h1 + tx;
+		this.positions[index++] = d * h1 + b * w1 + ty;
+		this.positions[index++] = uvs.x0;
+		this.positions[index++] = uvs.y0;
+		if(this.enableColor) this.colors[index++] = color;
+		this.positions[index++] = a * w0 + c * h1 + tx;
+		this.positions[index++] = d * h1 + b * w0 + ty;
+		this.positions[index++] = uvs.x1;
+		this.positions[index++] = uvs.y1;
+		if(this.enableColor) this.colors[index++] = color;
+		this.positions[index++] = a * w0 + c * h0 + tx;
+		this.positions[index++] = d * h0 + b * w0 + ty;
+		this.positions[index++] = uvs.x2;
+		this.positions[index++] = uvs.y2;
+		if(this.enableColor) this.colors[index++] = color;
+		this.positions[index++] = a * w1 + c * h0 + tx;
+		this.positions[index++] = d * h0 + b * w1 + ty;
+		this.positions[index++] = uvs.x3;
+		this.positions[index++] = uvs.y3;
+		if(this.enableColor) this.colors[index++] = color;
+		this.writtenVertexBytes = index;
 	}
-	,setState: function(index,texture,smooth,blendMode) {
-		if(smooth == null) smooth = true;
-		var state = this.states[this.currentBatchSize];
-		if(state == null) state = this.states[this.currentBatchSize] = new openfl._internal.renderer.opengl.utils._SpriteBatch.State();
-		state.texture = texture;
-		state.textureSmooth = smooth;
-		state.blendMode = blendMode;
+	,enableAttributes: function(color) {
+		if(color == null) color = -1;
+		this.enableColor = color != -1;
+		if(this.enableColor != this.lastEnableColor) {
+			this.flush();
+			this.lastEnableColor = this.enableColor;
+		}
+		this.attributes[2].enabled = this.lastEnableColor;
+		this.elementsPerVertex = this.getElementsPerVertex();
 	}
-	,renderBatch: function(state,size,startIndex) {
-		if(size == 0) return;
+	,flush: function() {
+		if(this.batchedSprites == 0) return;
+		if(this.clipRect == null) this.gl.disable(this.gl.SCISSOR_TEST); else {
+			this.gl.enable(this.gl.SCISSOR_TEST);
+			this.gl.scissor(Math.floor(this.clipRect.x),Math.floor(this.clipRect.y),Math.floor(this.clipRect.width),Math.floor(this.clipRect.height));
+		}
+		if(this.dirty) {
+			this.dirty = false;
+			this.gl.activeTexture(this.gl.TEXTURE0);
+			this.vertexArray.bind();
+			this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER,this.indexBuffer);
+		}
+		if(this.writtenVertexBytes > this.vertexArraySize * 0.5) this.vertexArray.upload(this.positions); else {
+			var view = this.positions.subarray(0,this.writtenVertexBytes);
+			this.vertexArray.upload(view);
+		}
+		var nextState;
+		var batchSize = 0;
+		var start = 0;
+		this.currentState.shader = this.renderSession.shaderManager.defaultShader;
+		this.currentState.texture = null;
+		this.currentState.textureSmooth = false;
+		this.currentState.blendMode = this.renderSession.blendModeManager.currentBlendMode;
+		this.currentState.colorTransform = null;
+		this.currentState.skipColorTransformAlpha = false;
+		var _g1 = 0;
+		var _g = this.batchedSprites;
+		while(_g1 < _g) {
+			var i = _g1++;
+			nextState = this.states[i];
+			this.currentState.skipColorTransformAlpha = nextState.skipColorTransformAlpha;
+			if(!nextState.equals(this.currentState)) {
+				this.renderBatch(this.currentState,batchSize,start);
+				start = i;
+				batchSize = 0;
+				this.currentState.shader = nextState.shader;
+				this.currentState.texture = nextState.texture;
+				this.currentState.textureSmooth = nextState.textureSmooth;
+				this.currentState.blendMode = nextState.blendMode;
+				this.currentState.colorTransform = nextState.colorTransform;
+			}
+			batchSize++;
+		}
+		this.renderBatch(this.currentState,batchSize,start);
+		this.batchedSprites = 0;
+		this.writtenVertexBytes = 0;
+		if(this.clipRect != null) this.gl.disable(this.gl.SCISSOR_TEST);
+	}
+	,renderBatch: function(state,size,start) {
+		if(size == 0 || state.texture == null) return;
+		var shader;
+		if(state.shader == null) shader = this.renderSession.shaderManager.defaultShader; else shader = state.shader;
+		this.renderSession.shaderManager.setShader(shader);
+		shader.bindVertexArray(this.vertexArray);
+		var projection = this.renderSession.projection;
+		this.gl.uniform2f(shader.getUniformLocation("uProjectionVector"),projection.x,projection.y);
+		if(state.colorTransform != null) {
+			var ct = state.colorTransform;
+			this.gl.uniform4f(shader.getUniformLocation("uColorMultiplier"),ct.redMultiplier,ct.greenMultiplier,ct.blueMultiplier,state.skipColorTransformAlpha?1:ct.alphaMultiplier);
+			this.gl.uniform4f(shader.getUniformLocation("uColorOffset"),ct.redOffset / 255.,ct.greenOffset / 255.,ct.blueOffset / 255.,ct.alphaOffset / 255.);
+		} else {
+			this.gl.uniform4f(shader.getUniformLocation("uColorMultiplier"),1,1,1,1);
+			this.gl.uniform4f(shader.getUniformLocation("uColorOffset"),0,0,0,0);
+		}
+		this.renderSession.blendModeManager.setBlendMode(state.blendMode);
 		this.gl.bindTexture(this.gl.TEXTURE_2D,state.texture);
 		if(state.textureSmooth) {
 			this.gl.texParameteri(this.gl.TEXTURE_2D,this.gl.TEXTURE_MAG_FILTER,this.gl.LINEAR);
@@ -14081,41 +16660,60 @@ openfl._internal.renderer.opengl.utils.SpriteBatch.prototype = {
 			this.gl.texParameteri(this.gl.TEXTURE_2D,this.gl.TEXTURE_MAG_FILTER,this.gl.NEAREST);
 			this.gl.texParameteri(this.gl.TEXTURE_2D,this.gl.TEXTURE_MIN_FILTER,this.gl.NEAREST);
 		}
-		this.gl.drawElements(this.gl.TRIANGLES,size * 6,this.gl.UNSIGNED_SHORT,startIndex * 6 * 2);
+		this.gl.drawElements(this.gl.TRIANGLES,size * 6,this.gl.UNSIGNED_SHORT,start * 6 * 2);
 		this.renderSession.drawCount++;
 	}
-	,renderTilingSprite: function(tilingSprite) {
+	,setState: function(index,texture,smooth,blendMode,colorTransform,skipAlpha) {
+		if(skipAlpha == null) skipAlpha = false;
+		if(smooth == null) smooth = false;
+		var state = this.states[index];
+		if(state == null) state = this.states[index] = new openfl._internal.renderer.opengl.utils._SpriteBatch.State();
+		state.texture = texture;
+		state.textureSmooth = smooth;
+		state.blendMode = blendMode;
+		state.colorTransform = colorTransform;
+		state.skipColorTransformAlpha = skipAlpha;
 	}
 	,setContext: function(gl) {
 		this.gl = gl;
-		this.vertexBuffer = gl.createBuffer();
+		this.vertexArray.setContext(gl,this.positions);
 		this.indexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.indexBuffer);
 		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,this.indices,gl.STATIC_DRAW);
-		gl.bindBuffer(gl.ARRAY_BUFFER,this.vertexBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER,this.vertices,gl.DYNAMIC_DRAW);
-		this.currentBlendMode = null;
 	}
-	,start: function() {
-		this.dirty = true;
-	}
-	,stop: function() {
-		this.flush();
+	,getElementsPerVertex: function() {
+		var r = 0;
+		var _g = 0;
+		var _g1 = this.attributes;
+		while(_g < _g1.length) {
+			var a = _g1[_g];
+			++_g;
+			if(a.enabled) r += Math.floor(a.components * a.getElementsBytes() / 4);
+		}
+		return r;
 	}
 	,__class__: openfl._internal.renderer.opengl.utils.SpriteBatch
 };
 openfl._internal.renderer.opengl.utils._SpriteBatch = {};
 openfl._internal.renderer.opengl.utils._SpriteBatch.State = function() {
+	this.skipColorTransformAlpha = false;
 	this.textureSmooth = true;
 };
 $hxClasses["openfl._internal.renderer.opengl.utils._SpriteBatch.State"] = openfl._internal.renderer.opengl.utils._SpriteBatch.State;
 openfl._internal.renderer.opengl.utils._SpriteBatch.State.__name__ = ["openfl","_internal","renderer","opengl","utils","_SpriteBatch","State"];
 openfl._internal.renderer.opengl.utils._SpriteBatch.State.prototype = {
-	__class__: openfl._internal.renderer.opengl.utils._SpriteBatch.State
+	equals: function(other) {
+		return (this.shader == null || other.shader == null || this.shader.ID == other.shader.ID) && this.texture == other.texture && this.textureSmooth == other.textureSmooth && this.blendMode == other.blendMode && (this.colorTransform != null && this.colorTransform.__equals(other.colorTransform,this.skipColorTransformAlpha));
+	}
+	,destroy: function() {
+		this.texture = null;
+		this.colorTransform = null;
+	}
+	,__class__: openfl._internal.renderer.opengl.utils._SpriteBatch.State
 };
 openfl._internal.renderer.opengl.utils.StencilManager = function(gl) {
+	this.stencilMask = 0;
 	this.stencilStack = [];
-	this.bucketStack = [];
 	this.setContext(gl);
 	this.reverse = true;
 	this.count = 0;
@@ -14123,78 +16721,97 @@ openfl._internal.renderer.opengl.utils.StencilManager = function(gl) {
 $hxClasses["openfl._internal.renderer.opengl.utils.StencilManager"] = openfl._internal.renderer.opengl.utils.StencilManager;
 openfl._internal.renderer.opengl.utils.StencilManager.__name__ = ["openfl","_internal","renderer","opengl","utils","StencilManager"];
 openfl._internal.renderer.opengl.utils.StencilManager.prototype = {
-	prepareGraphics: function(bucketData,renderSession,projection,translationMatrix) {
+	prepareGraphics: function(fill,renderSession,projection,translationMatrix) {
 		var offset = renderSession.offset;
 		var shader = renderSession.shaderManager.fillShader;
 		renderSession.shaderManager.setShader(shader);
-		this.gl.uniformMatrix3fv(shader.translationMatrix,false,translationMatrix);
-		this.gl.uniform2f(shader.projectionVector,projection.x,-projection.y);
-		this.gl.uniform2f(shader.offsetVector,-offset.x,-offset.y);
-		this.gl.bindBuffer(this.gl.ARRAY_BUFFER,bucketData.vertsBuffer);
-		this.gl.vertexAttribPointer(shader.aVertexPosition,2,this.gl.FLOAT,false,8,0);
-		this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER,bucketData.indexBuffer);
+		this.gl.uniformMatrix3fv(shader.getUniformLocation("uTranslationMatrix"),false,translationMatrix);
+		this.gl.uniform2f(shader.getUniformLocation("uProjectionVector"),projection.x,-projection.y);
+		this.gl.uniform2f(shader.getUniformLocation("uOffsetVector"),-offset.x,-offset.y);
+		fill.vertexArray.bind();
+		shader.bindVertexArray(fill.vertexArray);
+		this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER,fill.indexBuffer);
 	}
-	,pushBucket: function(bucket,renderSession,projection,translationMatrix) {
-		if(this.bucketStack.length == 0) {
+	,pushBucket: function(bucket,renderSession,projection,translationMatrix,isMask) {
+		if(isMask == null) isMask = false;
+		if(!isMask) {
 			this.gl.enable(this.gl.STENCIL_TEST);
 			this.gl.clear(this.gl.STENCIL_BUFFER_BIT);
 			this.gl.stencilMask(255);
+			this.gl.colorMask(false,false,false,false);
+			this.gl.stencilFunc(this.gl.NEVER,1,255);
+			this.gl.stencilOp(this.gl.INVERT,this.gl.KEEP,this.gl.KEEP);
+			this.gl.clear(this.gl.STENCIL_BUFFER_BIT);
 		}
-		this.bucketStack.push(bucket);
-		this.gl.colorMask(false,false,false,false);
-		this.gl.stencilFunc(this.gl.NEVER,1,255);
-		this.gl.stencilOp(this.gl.INVERT,this.gl.KEEP,this.gl.KEEP);
-		this.gl.clear(this.gl.STENCIL_BUFFER_BIT);
 		var _g = 0;
-		var _g1 = bucket.data;
+		var _g1 = bucket.fills;
 		while(_g < _g1.length) {
-			var bucketData = _g1[_g];
+			var fill = _g1[_g];
 			++_g;
-			if(bucketData.destroyed) continue;
-			this.prepareGraphics(bucketData,renderSession,projection,translationMatrix);
-			this.gl.drawElements(bucketData.drawMode,bucketData.glIndices.length,this.gl.UNSIGNED_SHORT,0);
+			if(fill.available) continue;
+			this.prepareGraphics(fill,renderSession,projection,translationMatrix);
+			this.gl.drawElements(fill.drawMode,fill.glIndices.length,this.gl.UNSIGNED_SHORT,0);
 		}
-		this.gl.colorMask(true,true,true,true);
-		this.gl.stencilOp(this.gl.KEEP,this.gl.KEEP,this.gl.KEEP);
-		this.gl.stencilFunc(this.gl.EQUAL,255,255);
+		if(!isMask) {
+			this.gl.colorMask(true,true,true,renderSession.renderer.transparent);
+			this.gl.stencilOp(this.gl.KEEP,this.gl.KEEP,this.gl.KEEP);
+			this.gl.stencilFunc(this.gl.EQUAL,255,255);
+		}
 	}
 	,popBucket: function(object,bucket,renderSession) {
-		this.bucketStack.pop();
-		if(this.bucketStack.length == 0) this.gl.disable(this.gl.STENCIL_TEST);
+		this.gl.disable(this.gl.STENCIL_TEST);
+	}
+	,pushMask: function(object,renderSession) {
+		var maskGraphics = object.__maskGraphics;
+		if(maskGraphics == null || maskGraphics.__commands.length <= 0) return;
+		if(this.stencilMask == 0) {
+			this.gl.enable(this.gl.STENCIL_TEST);
+			this.gl.clear(this.gl.STENCIL_BUFFER_BIT);
+		}
+		this.stencilMask++;
+		if(maskGraphics.__dirty) openfl._internal.renderer.opengl.utils.GraphicsRenderer.updateGraphics(object,maskGraphics,renderSession.gl);
+		var func;
+		if(this.stencilMask == 1) func = this.gl.NEVER; else func = this.gl.EQUAL;
+		var ref = this.stencilMask;
+		var mask = 255 - this.stencilMask;
+		this.gl.stencilMask(255);
+		this.gl.colorMask(false,false,false,false);
+		this.gl.stencilFunc(func,ref,mask);
+		this.gl.stencilOp(this.gl.REPLACE,this.gl.KEEP,this.gl.KEEP);
+		var glStack = maskGraphics.__glStack[openfl._internal.renderer.opengl.GLRenderer.glContextId];
+		var bucket;
+		var translationMatrix = object.__worldTransform;
+		var _g1 = 0;
+		var _g = glStack.buckets.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			bucket = glStack.buckets[i];
+			if(bucket.overrideMatrix != null) translationMatrix = bucket.overrideMatrix; else translationMatrix = object.__worldTransform;
+			var _g2 = bucket.mode;
+			switch(_g2[1]) {
+			case 1:case 2:
+				this.pushBucket(bucket,renderSession,renderSession.projection,translationMatrix.toArray(true),true);
+				break;
+			default:
+			}
+		}
+		this.gl.colorMask(true,true,true,renderSession.renderer.transparent);
+		this.gl.stencilOp(this.gl.KEEP,this.gl.KEEP,this.gl.KEEP);
+		this.gl.stencilFunc(this.gl.EQUAL,this.stencilMask,255);
+	}
+	,popMask: function(object,renderSession) {
+		var maskGraphics = object.__maskGraphics;
+		if(maskGraphics == null || maskGraphics.__commands.length <= 0) return;
+		this.stencilMask--;
+		if(this.stencilMask <= 0) {
+			this.gl.disable(this.gl.STENCIL_TEST);
+			this.stencilMask = 0;
+		}
 	}
 	,bindGraphics: function(object,glData,renderSession) {
-		var graphics = object.__graphics;
-		var projection = renderSession.projection;
-		var offset = renderSession.offset;
-		if(glData.mode == 1) {
-			var shader = renderSession.shaderManager.complexPrimitiveShader;
-			renderSession.shaderManager.setShader(shader);
-			this.gl.uniformMatrix3fv(shader.translationMatrix,false,object.__worldTransform.toArray(true));
-			this.gl.uniform2f(shader.projectionVector,projection.x,-projection.y);
-			this.gl.uniform2f(shader.offsetVector,-offset.x,-offset.y);
-			this.gl.uniform3fv(shader.tintColor,new Float32Array([1.,1.,1.]));
-			this.gl.uniform3fv(shader.color,new Float32Array(glData.tint));
-			this.gl.uniform1f(shader.alpha,object.__worldAlpha * glData.alpha);
-			this.gl.bindBuffer(this.gl.ARRAY_BUFFER,glData.dataBuffer);
-			this.gl.vertexAttribPointer(shader.aVertexPosition,2,this.gl.FLOAT,false,8,0);
-			this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER,glData.indexBuffer);
-		} else {
-			var shader1 = renderSession.shaderManager.primitiveShader;
-			renderSession.shaderManager.setShader(shader1);
-			this.gl.uniformMatrix3fv(shader1.translationMatrix,false,object.__worldTransform.toArray(true));
-			this.gl.uniform2f(shader1.projectionVector,projection.x,-projection.y);
-			this.gl.uniform2f(shader1.offsetVector,-offset.x,-offset.y);
-			this.gl.uniform3fv(shader1.tintColor,new Float32Array([1.,1.,1.]));
-			this.gl.uniform1f(shader1.alpha,object.__worldAlpha);
-			this.gl.bindBuffer(this.gl.ARRAY_BUFFER,glData.dataBuffer);
-			this.gl.vertexAttribPointer(shader1.aVertexPosition,2,this.gl.FLOAT,false,24,0);
-			this.gl.vertexAttribPointer(shader1.colorAttribute,4,this.gl.FLOAT,false,24,8);
-			this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER,glData.indexBuffer);
-		}
 	}
 	,destroy: function() {
 		this.stencilStack = null;
-		this.bucketStack = null;
 		this.gl = null;
 	}
 	,popStencil: function(object,glData,renderSession) {
@@ -14278,416 +16895,57 @@ openfl._internal.renderer.opengl.utils.StencilManager.prototype = {
 	}
 	,__class__: openfl._internal.renderer.opengl.utils.StencilManager
 };
-openfl.display.Application = function() {
-	this.__mouseOutStack = [];
-	lime.app.Application.call(this);
-	openfl.Lib.application = this;
+openfl._internal.renderer.opengl.utils.VertexArray = function(attributes,size,isStatic) {
+	if(isStatic == null) isStatic = false;
+	if(size == null) size = 0;
+	this.isStatic = false;
+	this.size = 0;
+	this.attributes = [];
+	this.size = size;
+	this.attributes = attributes;
+	if(size > 0) this.buffer = new ArrayBuffer(size);
+	this.isStatic = isStatic;
 };
-$hxClasses["openfl.display.Application"] = openfl.display.Application;
-openfl.display.Application.__name__ = ["openfl","display","Application"];
-openfl.display.Application.__super__ = lime.app.Application;
-openfl.display.Application.prototype = $extend(lime.app.Application.prototype,{
-	convertKeyCode: function(keyCode) {
-		switch(keyCode) {
-		case 8:
-			return 8;
-		case 9:
-			return 9;
-		case 13:
-			return 13;
-		case 27:
-			return 27;
-		case 32:
-			return 32;
-		case 39:
-			return 222;
-		case 44:
-			return 188;
-		case 45:
-			return 189;
-		case 46:
-			return 190;
-		case 47:
-			return 191;
-		case 48:
-			return 48;
-		case 49:
-			return 49;
-		case 50:
-			return 50;
-		case 51:
-			return 51;
-		case 52:
-			return 52;
-		case 53:
-			return 53;
-		case 54:
-			return 54;
-		case 55:
-			return 55;
-		case 56:
-			return 56;
-		case 57:
-			return 57;
-		case 59:
-			return 186;
-		case 61:
-			return 187;
-		case 91:
-			return 219;
-		case 92:
-			return 220;
-		case 93:
-			return 221;
-		case 96:
-			return 192;
-		case 97:
-			return 65;
-		case 98:
-			return 66;
-		case 99:
-			return 67;
-		case 100:
-			return 68;
-		case 101:
-			return 69;
-		case 102:
-			return 70;
-		case 103:
-			return 71;
-		case 104:
-			return 72;
-		case 105:
-			return 73;
-		case 106:
-			return 74;
-		case 107:
-			return 75;
-		case 108:
-			return 76;
-		case 109:
-			return 77;
-		case 110:
-			return 78;
-		case 111:
-			return 79;
-		case 112:
-			return 80;
-		case 113:
-			return 81;
-		case 114:
-			return 82;
-		case 115:
-			return 83;
-		case 116:
-			return 84;
-		case 117:
-			return 85;
-		case 118:
-			return 86;
-		case 119:
-			return 87;
-		case 120:
-			return 88;
-		case 121:
-			return 89;
-		case 122:
-			return 90;
-		case 127:
-			return 46;
-		case 1073741881:
-			return 20;
-		case 1073741882:
-			return 112;
-		case 1073741883:
-			return 113;
-		case 1073741884:
-			return 114;
-		case 1073741885:
-			return 115;
-		case 1073741886:
-			return 116;
-		case 1073741887:
-			return 117;
-		case 1073741888:
-			return 118;
-		case 1073741889:
-			return 119;
-		case 1073741890:
-			return 120;
-		case 1073741891:
-			return 121;
-		case 1073741892:
-			return 122;
-		case 1073741893:
-			return 123;
-		case 1073741897:
-			return 45;
-		case 1073741898:
-			return 36;
-		case 1073741899:
-			return 33;
-		case 1073741901:
-			return 35;
-		case 1073741902:
-			return 34;
-		case 1073741903:
-			return 39;
-		case 1073741904:
-			return 37;
-		case 1073741905:
-			return 40;
-		case 1073741906:
-			return 38;
-		case 1073741908:
-			return 111;
-		case 1073741909:
-			return 106;
-		case 1073741910:
-			return 109;
-		case 1073741911:
-			return 107;
-		case 1073741912:
-			return 108;
-		case 1073741913:
-			return 97;
-		case 1073741914:
-			return 98;
-		case 1073741915:
-			return 99;
-		case 1073741916:
-			return 100;
-		case 1073741917:
-			return 101;
-		case 1073741918:
-			return 102;
-		case 1073741919:
-			return 103;
-		case 1073741920:
-			return 104;
-		case 1073741921:
-			return 105;
-		case 1073741922:
-			return 96;
-		case 1073741923:
-			return 110;
-		case 1073741928:
-			return 124;
-		case 1073741929:
-			return 125;
-		case 1073741930:
-			return 126;
-		case 1073742048:
-			return 17;
-		case 1073742049:
-			return 16;
-		case 1073742050:
-			return 18;
-		case 1073742052:
-			return 17;
-		case 1073742053:
-			return 16;
-		case 1073742054:
-			return 18;
-		default:
-			return keyCode;
-		}
+$hxClasses["openfl._internal.renderer.opengl.utils.VertexArray"] = openfl._internal.renderer.opengl.utils.VertexArray;
+openfl._internal.renderer.opengl.utils.VertexArray.__name__ = ["openfl","_internal","renderer","opengl","utils","VertexArray"];
+openfl._internal.renderer.opengl.utils.VertexArray.prototype = {
+	bind: function() {
+		this.gl.bindBuffer(this.gl.ARRAY_BUFFER,this.glBuffer);
 	}
-	,create: function(config) {
-		lime.app.Application.prototype.create.call(this,config);
-		this.stage = new openfl.display.Stage(this.windows[0].width,this.windows[0].height,config.background);
-		this.stage.addChild(openfl.Lib.current);
-		this.stage.align = openfl.display.StageAlign.TOP_LEFT;
-		this.stage.scaleMode = openfl.display.StageScaleMode.NO_SCALE;
+	,unbind: function() {
+		this.gl.bindBuffer(this.gl.ARRAY_BUFFER,null);
 	}
-	,onKey: function(event) {
-		var stack = new Array();
-		if(this.stage.__focus == null) this.stage.__getInteractive(stack); else this.stage.__focus.__getInteractive(stack);
-		if(stack.length > 0) {
-			stack.reverse();
-			this.stage.__fireEvent(event,stack);
-		}
+	,upload: function(view) {
+		this.gl.bufferSubData(this.gl.ARRAY_BUFFER,0,view);
 	}
-	,onKeyDown: function(keyCode,modifier) {
-		var keyCode1 = this.convertKeyCode(keyCode);
-		var charCode = keyCode1;
-		this.onKey(new openfl.events.KeyboardEvent(openfl.events.KeyboardEvent.KEY_DOWN,true,false,charCode,keyCode1,null,lime.ui._KeyModifier.KeyModifier_Impl_.get_ctrlKey(modifier),lime.ui._KeyModifier.KeyModifier_Impl_.get_altKey(modifier),lime.ui._KeyModifier.KeyModifier_Impl_.get_shiftKey(modifier),lime.ui._KeyModifier.KeyModifier_Impl_.get_metaKey(modifier)));
+	,destroy: function() {
+		this.gl.deleteBuffer(this.glBuffer);
+		this.buffer = null;
 	}
-	,onKeyUp: function(keyCode,modifier) {
-		var keyCode1 = this.convertKeyCode(keyCode);
-		var charCode = keyCode1;
-		this.onKey(new openfl.events.KeyboardEvent(openfl.events.KeyboardEvent.KEY_UP,true,false,charCode,keyCode1,null,lime.ui._KeyModifier.KeyModifier_Impl_.get_ctrlKey(modifier),lime.ui._KeyModifier.KeyModifier_Impl_.get_altKey(modifier),lime.ui._KeyModifier.KeyModifier_Impl_.get_shiftKey(modifier),lime.ui._KeyModifier.KeyModifier_Impl_.get_metaKey(modifier)));
+	,setContext: function(gl,view) {
+		this.gl = gl;
+		this.glBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER,this.glBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER,view,this.isStatic?gl.STATIC_DRAW:gl.DYNAMIC_DRAW);
 	}
-	,onMouse: function(type,x,y,button) {
-		if(button > 2) return;
-		this.stage.__mouseX = x;
-		this.stage.__mouseY = y;
-		var stack = [];
-		var target = null;
-		var targetPoint = new openfl.geom.Point(x,y);
-		if(this.stage.__hitTest(x,y,false,stack,true)) target = stack[stack.length - 1]; else {
-			target = this.stage;
-			stack = [this.stage];
-		}
-		this.stage.__fireEvent(openfl.events.MouseEvent.__create(type,button,target == this.stage?targetPoint:target.globalToLocal(targetPoint),target),stack);
-		var clickType;
-		switch(type) {
-		case openfl.events.MouseEvent.MOUSE_UP:
-			clickType = openfl.events.MouseEvent.CLICK;
-			break;
-		case openfl.events.MouseEvent.MIDDLE_MOUSE_UP:
-			clickType = openfl.events.MouseEvent.MIDDLE_CLICK;
-			break;
-		case openfl.events.MouseEvent.RIGHT_MOUSE_UP:
-			clickType = openfl.events.MouseEvent.RIGHT_CLICK;
-			break;
-		default:
-			clickType = null;
-		}
-		if(clickType != null) {
-			this.stage.__fireEvent(openfl.events.MouseEvent.__create(clickType,button,target == this.stage?targetPoint:target.globalToLocal(targetPoint),target),stack);
-			if(type == openfl.events.MouseEvent.MOUSE_UP && (js.Boot.__cast(target , openfl.display.InteractiveObject)).doubleClickEnabled) {
-				var currentTime = openfl.Lib.getTimer();
-				if(currentTime - this.__lastClickTime < 500) {
-					this.stage.__fireEvent(openfl.events.MouseEvent.__create(openfl.events.MouseEvent.DOUBLE_CLICK,button,target == this.stage?targetPoint:target.globalToLocal(targetPoint),target),stack);
-					this.__lastClickTime = 0;
-				} else this.__lastClickTime = currentTime;
-			}
-		}
-		if(js.Boot.__instanceof(target,openfl.display.Sprite)) {
-			var targetSprite = target;
-			if(targetSprite.buttonMode && targetSprite.useHandCursor) lime.ui.Mouse.set_cursor(lime.ui.MouseCursor.POINTER); else lime.ui.Mouse.set_cursor(lime.ui.MouseCursor.ARROW);
-		} else if(js.Boot.__instanceof(target,openfl.display.SimpleButton)) {
-			var targetButton = target;
-			if(targetButton.useHandCursor) lime.ui.Mouse.set_cursor(lime.ui.MouseCursor.POINTER); else lime.ui.Mouse.set_cursor(lime.ui.MouseCursor.ARROW);
-		} else if(js.Boot.__instanceof(target,openfl.text.TextField)) {
-			var targetTextField = target;
-			if(targetTextField.type == openfl.text.TextFieldType.INPUT) lime.ui.Mouse.set_cursor(lime.ui.MouseCursor.TEXT); else lime.ui.Mouse.set_cursor(lime.ui.MouseCursor.ARROW);
-		} else lime.ui.Mouse.set_cursor(lime.ui.MouseCursor.ARROW);
+	,get_stride: function() {
+		var s = 0;
 		var _g = 0;
-		var _g1 = this.__mouseOutStack;
+		var _g1 = this.attributes;
 		while(_g < _g1.length) {
-			var target1 = _g1[_g];
+			var a = _g1[_g];
 			++_g;
-			if(HxOverrides.indexOf(stack,target1,0) == -1) {
-				HxOverrides.remove(this.__mouseOutStack,target1);
-				var localPoint = target1.globalToLocal(targetPoint);
-				target1.dispatchEvent(new openfl.events.MouseEvent(openfl.events.MouseEvent.MOUSE_OUT,false,false,localPoint.x,localPoint.y,target1));
-			}
+			if(a.enabled) s += Math.floor(a.components * a.getElementsBytes() / 4) * 4;
 		}
-		var _g2 = 0;
-		while(_g2 < stack.length) {
-			var target2 = stack[_g2];
-			++_g2;
-			if(HxOverrides.indexOf(this.__mouseOutStack,target2,0) == -1) {
-				if(target2.hasEventListener(openfl.events.MouseEvent.MOUSE_OVER)) {
-					var localPoint1 = target2.globalToLocal(targetPoint);
-					target2.dispatchEvent(new openfl.events.MouseEvent(openfl.events.MouseEvent.MOUSE_OVER,false,false,localPoint1.x,localPoint1.y,target2));
-				}
-				if(target2.hasEventListener(openfl.events.MouseEvent.MOUSE_OUT)) this.__mouseOutStack.push(target2);
-			}
-		}
-		if(this.stage.__dragObject != null) this.stage.__drag(targetPoint);
+		return s;
 	}
-	,onMouseDown: function(x,y,button) {
-		var type;
-		switch(button) {
-		case 1:
-			type = openfl.events.MouseEvent.MIDDLE_MOUSE_DOWN;
-			break;
-		case 2:
-			type = openfl.events.MouseEvent.RIGHT_MOUSE_DOWN;
-			break;
-		default:
-			type = openfl.events.MouseEvent.MOUSE_DOWN;
-		}
-		this.onMouse(type,x,y,button);
-	}
-	,onMouseMove: function(x,y,button) {
-		this.onMouse(openfl.events.MouseEvent.MOUSE_MOVE,x,y,0);
-	}
-	,onMouseUp: function(x,y,button) {
-		var type;
-		switch(button) {
-		case 1:
-			type = openfl.events.MouseEvent.MIDDLE_MOUSE_UP;
-			break;
-		case 2:
-			type = openfl.events.MouseEvent.RIGHT_MOUSE_UP;
-			break;
-		default:
-			type = openfl.events.MouseEvent.MOUSE_UP;
-		}
-		this.onMouse(type,x,y,button);
-	}
-	,onTouch: function(type,x,y,id) {
-		var point = new openfl.geom.Point(x,y);
-		this.stage.__mouseX = point.x;
-		this.stage.__mouseY = point.y;
-		var __stack = [];
-		var mouseType;
-		switch(type) {
-		case "touchBegin":
-			mouseType = openfl.events.MouseEvent.MOUSE_DOWN;
-			break;
-		case "touchMove":
-			mouseType = openfl.events.MouseEvent.MOUSE_MOVE;
-			break;
-		case "touchEnd":
-			mouseType = openfl.events.MouseEvent.MOUSE_UP;
-			break;
-		default:
-			mouseType = null;
-		}
-		if(this.stage.__hitTest(x,y,false,__stack,true)) {
-			var target = __stack[__stack.length - 1];
-			var localPoint = target.globalToLocal(point);
-			var touchEvent = openfl.events.TouchEvent.__create(type,null,localPoint,target);
-			touchEvent.touchPointID = id;
-			touchEvent.isPrimaryTouchPoint = true;
-			var mouseEvent = openfl.events.MouseEvent.__create(mouseType,0,localPoint,target);
-			mouseEvent.buttonDown = type != "touchEnd";
-			this.stage.__fireEvent(touchEvent,__stack);
-			this.stage.__fireEvent(mouseEvent,__stack);
-		} else {
-			var touchEvent1 = openfl.events.TouchEvent.__create(type,null,point,this.stage);
-			touchEvent1.touchPointID = id;
-			touchEvent1.isPrimaryTouchPoint = true;
-			var mouseEvent1 = openfl.events.MouseEvent.__create(mouseType,0,point,this.stage);
-			mouseEvent1.buttonDown = type != "touchEnd";
-			this.stage.__fireEvent(touchEvent1,[this.stage]);
-			this.stage.__fireEvent(mouseEvent1,[this.stage]);
-		}
-		if(type == "touchMove" && this.stage.__dragObject != null) this.stage.__drag(point);
-	}
-	,onTouchMove: function(x,y,id) {
-		this.onTouch("touchMove",x,y,id);
-	}
-	,onTouchEnd: function(x,y,id) {
-		this.onTouch("touchEnd",x,y,id);
-	}
-	,onTouchStart: function(x,y,id) {
-		this.onTouch("touchBegin",x,y,id);
-	}
-	,onWindowActivate: function() {
-		var event = new openfl.events.Event(openfl.events.Event.ACTIVATE);
-		this.stage.__broadcast(event,true);
-	}
-	,onWindowDeactivate: function() {
-		var event = new openfl.events.Event(openfl.events.Event.DEACTIVATE);
-		this.stage.__broadcast(event,true);
-	}
-	,onWindowResize: function(width,height) {
-		this.stage.stageWidth = width;
-		this.stage.stageHeight = height;
-		var event = new openfl.events.Event(openfl.events.Event.RESIZE);
-		this.stage.__broadcast(event,false);
-	}
-	,render: function(context) {
-		this.stage.__render(context);
-	}
-	,__class__: openfl.display.Application
-});
+	,__class__: openfl._internal.renderer.opengl.utils.VertexArray
+	,__properties__: {get_stride:"get_stride"}
+};
+openfl._internal.renderer.opengl.utils._VertexAttribute = {};
+openfl._internal.renderer.opengl.utils._VertexAttribute.ElementType_Impl_ = function() { };
+$hxClasses["openfl._internal.renderer.opengl.utils._VertexAttribute.ElementType_Impl_"] = openfl._internal.renderer.opengl.utils._VertexAttribute.ElementType_Impl_;
+openfl._internal.renderer.opengl.utils._VertexAttribute.ElementType_Impl_.__name__ = ["openfl","_internal","renderer","opengl","utils","_VertexAttribute","ElementType_Impl_"];
 openfl.display.Bitmap = function(bitmapData,pixelSnapping,smoothing) {
 	if(smoothing == null) smoothing = false;
 	openfl.display.DisplayObjectContainer.call(this);
@@ -14736,10 +16994,18 @@ openfl.display.Bitmap.prototype = $extend(openfl.display.DisplayObjectContainer.
 		}
 	}
 	,__renderGL: function(renderSession) {
-		openfl._internal.renderer.opengl.GLBitmap.render(this,renderSession);
+		if(!this.__renderable || this.__worldAlpha <= 0 || this.bitmapData == null || !this.bitmapData.__isValid) null; else renderSession.spriteBatch.renderBitmapData(this.bitmapData,this.smoothing,this.__worldTransform,this.__worldColorTransform,this.__worldAlpha,this.blendMode);
 	}
 	,__renderMask: function(renderSession) {
 		renderSession.context.rect(0,0,this.get_width(),this.get_height());
+	}
+	,__updateMask: function(maskGraphics) {
+		maskGraphics.__commands.push(openfl.display.DrawCommand.OverrideMatrix(this.__worldTransform));
+		maskGraphics.beginFill(0);
+		maskGraphics.drawRect(0,0,this.bitmapData.width,this.bitmapData.height);
+		if(maskGraphics.__bounds == null) maskGraphics.__bounds = new openfl.geom.Rectangle();
+		this.__getBounds(maskGraphics.__bounds,openfl.geom.Matrix.__identity);
+		openfl.display.DisplayObjectContainer.prototype.__updateMask.call(this,maskGraphics);
 	}
 	,get_height: function() {
 		if(this.bitmapData != null) return this.bitmapData.height * this.get_scaleY();
@@ -14781,10 +17047,14 @@ openfl.display.BitmapData = function(width,height,transparent,fillColor) {
 	if(fillColor == null) fillColor = -1;
 	if(transparent == null) transparent = true;
 	this.transparent = transparent;
+	if(width == null) width = 0; else width = width;
+	if(height == null) height = 0; else height = height;
+	if(width < 0) width = 0; else width = width;
+	if(height < 0) height = 0; else height = height;
+	this.width = width;
+	this.height = height;
+	this.rect = new openfl.geom.Rectangle(0,0,width,height);
 	if(width > 0 && height > 0) {
-		this.width = width;
-		this.height = height;
-		this.rect = new openfl.geom.Rectangle(0,0,width,height);
 		if(transparent) {
 			if((function($this) {
 				var $r;
@@ -14793,6 +17063,7 @@ openfl.display.BitmapData = function(width,height,transparent,fillColor) {
 				return $r;
 			}(this)) == 0) fillColor = 0;
 		} else fillColor = -16777216 | fillColor & 16777215;
+		fillColor = fillColor << 8 | fillColor >> 24 & 255;
 		this.__image = new lime.graphics.Image(null,0,0,width,height,fillColor);
 		this.__image.set_transparent(transparent);
 		this.__isValid = true;
@@ -14804,30 +17075,30 @@ openfl.display.BitmapData.__name__ = ["openfl","display","BitmapData"];
 openfl.display.BitmapData.__interfaces__ = [openfl.display.IBitmapDrawable];
 openfl.display.BitmapData.fromBase64 = function(base64,type,onload) {
 	var bitmapData = new openfl.display.BitmapData(0,0,true);
-	bitmapData.__loadFromBase64(base64,type,onload);
+	bitmapData.__fromBase64(base64,type,onload);
 	return bitmapData;
 };
 openfl.display.BitmapData.fromBytes = function(bytes,rawAlpha,onload) {
 	var bitmapData = new openfl.display.BitmapData(0,0,true);
-	bitmapData.__loadFromBytes(bytes,rawAlpha,onload);
+	bitmapData.__fromBytes(bytes,rawAlpha,onload);
 	return bitmapData;
 };
 openfl.display.BitmapData.fromCanvas = function(canvas,transparent) {
 	if(transparent == null) transparent = true;
 	var bitmapData = new openfl.display.BitmapData(0,0,transparent);
-	bitmapData.__loadFromImage(lime.graphics.Image.fromCanvas(canvas));
+	bitmapData.__fromImage(lime.graphics.Image.fromCanvas(canvas));
 	bitmapData.__image.set_transparent(transparent);
 	return bitmapData;
 };
 openfl.display.BitmapData.fromFile = function(path,onload,onerror) {
 	var bitmapData = new openfl.display.BitmapData(0,0,true);
-	bitmapData.__loadFromFile(path,onload,onerror);
+	bitmapData.__fromFile(path,onload,onerror);
 	return bitmapData;
 };
 openfl.display.BitmapData.fromImage = function(image,transparent) {
 	if(transparent == null) transparent = true;
 	var bitmapData = new openfl.display.BitmapData(0,0,transparent);
-	bitmapData.__loadFromImage(image);
+	bitmapData.__fromImage(image);
 	bitmapData.__image.set_transparent(transparent);
 	return bitmapData;
 };
@@ -14867,6 +17138,7 @@ openfl.display.BitmapData.prototype = {
 		if(!this.__isValid) return new openfl.display.BitmapData(this.width,this.height,this.transparent); else return openfl.display.BitmapData.fromImage(this.__image.clone(),this.transparent);
 	}
 	,colorTransform: function(rect,colorTransform) {
+		if(!this.__isValid) return;
 		this.__image.colorTransform(rect.__toLimeRectangle(),colorTransform.__toLimeColorMatrix());
 	}
 	,copyChannel: function(sourceBitmapData,sourceRect,destPoint,sourceChannel,destChannel) {
@@ -14949,8 +17221,78 @@ openfl.display.BitmapData.prototype = {
 			}
 			buffer.__srcContext.setTransform(1,0,0,1,0,0);
 			break;
+		case 1:
+			var renderer = openfl.Lib.current.stage.__renderer;
+			if(renderer == null) return;
+			var renderSession1 = renderer.renderSession;
+			var gl = renderSession1.gl;
+			if(gl == null) return;
+			var mainSpritebatch = renderSession1.spriteBatch;
+			var mainProjection = renderSession1.projection;
+			var renderTransparent = renderSession1.renderer.transparent;
+			if(clipRect == null) clipRect = new openfl.geom.Rectangle(0,0,this.width,this.height);
+			var tmpRect = clipRect.clone();
+			tmpRect.y = this.height - tmpRect.get_bottom();
+			var drawSelf = false;
+			if(this.__spritebatch == null) {
+				this.__spritebatch = new openfl._internal.renderer.opengl.utils.SpriteBatch(gl);
+				drawSelf = true;
+			}
+			renderSession1.spriteBatch = this.__spritebatch;
+			renderSession1.projection = new openfl.geom.Point(this.width / 2,-(this.height / 2));
+			renderSession1.renderer.transparent = this.transparent;
+			if(this.__framebuffer == null) this.__framebuffer = new openfl._internal.renderer.opengl.utils.FilterTexture(gl,this.width,this.height,smoothing);
+			this.__framebuffer.resize(this.width,this.height);
+			gl.bindFramebuffer(gl.FRAMEBUFFER,this.__framebuffer.frameBuffer);
+			gl.viewport(0,0,this.width,this.height);
+			this.__spritebatch.begin(renderSession1,drawSelf?null:tmpRect);
+			gl.colorMask(true,true,true,true);
+			renderSession1.blendModeManager.setBlendMode(openfl.display.BlendMode.NORMAL);
+			if(drawSelf) {
+				this.__framebuffer.clear();
+				this.__renderGL(renderSession1);
+				this.__spritebatch.stop();
+				this.__spritebatch.start(tmpRect);
+			}
+			var ctCache = source.__worldColorTransform;
+			var matrixCache1 = source.__worldTransform;
+			var blendModeCache = source.blendMode;
+			if(matrix == null) matrix = new openfl.geom.Matrix();
+			this.invertMatrix(matrix);
+			source.__worldTransform = matrix;
+			if(colorTransform != null) source.__worldColorTransform = colorTransform; else source.__worldColorTransform = new openfl.geom.ColorTransform();
+			source.blendMode = blendMode;
+			source.__updateChildren(false);
+			source.__renderGL(renderSession1);
+			source.__worldColorTransform = ctCache;
+			source.__worldTransform = matrixCache1;
+			source.blendMode = blendModeCache;
+			source.__updateChildren(true);
+			this.__spritebatch.finish();
+			gl.readPixels(0,0,this.width,this.height,gl.RGBA,gl.UNSIGNED_BYTE,this.__image.buffer.data);
+			gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+			gl.viewport(0,0,renderSession1.renderer.width,renderSession1.renderer.height);
+			renderSession1.spriteBatch = mainSpritebatch;
+			renderSession1.projection = mainProjection;
+			renderSession1.renderer.transparent = renderTransparent;
+			gl.colorMask(true,true,true,renderSession1.renderer.transparent);
+			this.__texture = this.__framebuffer.texture;
+			this.__image.dirty = false;
+			this.__createUVs();
+			this.invertMatrix(matrix);
+			break;
 		default:
 		}
+	}
+	,invertMatrix: function(matrix) {
+		var tx = matrix.tx;
+		var ty = matrix.ty;
+		matrix.tx = 0;
+		matrix.ty = 0;
+		matrix.scale(1,-1);
+		matrix.translate(0,this.height);
+		matrix.tx += tx;
+		matrix.ty -= ty;
 	}
 	,encode: function(rect,compressor,byteArray) {
 		if(!this.__isValid || rect == null) return byteArray = null;
@@ -14959,11 +17301,11 @@ openfl.display.BitmapData.prototype = {
 	}
 	,fillRect: function(rect,color) {
 		if(!this.__isValid || rect == null) return;
-		this.__image.fillRect(rect.__toLimeRectangle(),color);
+		this.__image.fillRect(rect.__toLimeRectangle(),color,lime.graphics.PixelFormat.ARGB);
 	}
 	,floodFill: function(x,y,color) {
 		if(!this.__isValid) return;
-		this.__image.floodFill(x,y,color);
+		this.__image.floodFill(x,y,color,lime.graphics.PixelFormat.ARGB);
 	}
 	,generateFilterRect: function(sourceRect,filter) {
 		return sourceRect.clone();
@@ -14980,22 +17322,24 @@ openfl.display.BitmapData.prototype = {
 	}
 	,getColorBoundsRect: function(mask,color,findColor) {
 		if(findColor == null) findColor = true;
+		if(!this.__isValid) return new openfl.geom.Rectangle(0,0,this.width,this.height);
 		return this.__image.get_rect().__toFlashRectangle();
 	}
 	,getPixel: function(x,y) {
 		if(!this.__isValid) return 0;
-		return this.__image.getPixel(x,y);
+		return this.__image.getPixel(x,y,lime.graphics.PixelFormat.ARGB);
 	}
 	,getPixel32: function(x,y) {
 		if(!this.__isValid) return 0;
-		return this.__image.getPixel32(x,y);
+		return this.__image.getPixel32(x,y,lime.graphics.PixelFormat.ARGB);
 	}
 	,getPixels: function(rect) {
 		if(!this.__isValid) return null;
 		if(rect == null) rect = this.rect;
-		return this.__image.getPixels(rect.__toLimeRectangle());
+		return this.__image.getPixels(rect.__toLimeRectangle(),lime.graphics.PixelFormat.ARGB);
 	}
 	,getTexture: function(gl) {
+		if(!this.__isValid) return null;
 		if(this.__texture == null) {
 			this.__texture = gl.createTexture();
 			gl.bindTexture(gl.TEXTURE_2D,this.__texture);
@@ -15006,10 +17350,12 @@ openfl.display.BitmapData.prototype = {
 			this.__image.dirty = true;
 		}
 		if(this.__image.dirty) {
+			var format;
+			if(this.__image.buffer.bitsPerPixel == 1) format = gl.ALPHA; else format = gl.RGBA;
 			gl.bindTexture(gl.TEXTURE_2D,this.__texture);
 			var textureImage = this.__image.clone();
 			textureImage.set_premultiplied(true);
-			gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,this.width,this.height,0,gl.RGBA,gl.UNSIGNED_BYTE,textureImage.get_data());
+			gl.texImage2D(gl.TEXTURE_2D,0,format,this.width,this.height,0,format,gl.UNSIGNED_BYTE,textureImage.get_data());
 			gl.bindTexture(gl.TEXTURE_2D,null);
 			this.__image.dirty = false;
 		}
@@ -15148,15 +17494,15 @@ openfl.display.BitmapData.prototype = {
 	}
 	,setPixel: function(x,y,color) {
 		if(!this.__isValid) return;
-		this.__image.setPixel(x,y,color);
+		this.__image.setPixel(x,y,color,lime.graphics.PixelFormat.ARGB);
 	}
 	,setPixel32: function(x,y,color) {
 		if(!this.__isValid) return;
-		this.__image.setPixel32(x,y,color);
+		this.__image.setPixel32(x,y,color,lime.graphics.PixelFormat.ARGB);
 	}
 	,setPixels: function(rect,byteArray) {
 		if(!this.__isValid || rect == null) return;
-		this.__image.setPixels(rect.__toLimeRectangle(),byteArray);
+		this.__image.setPixels(rect.__toLimeRectangle(),byteArray,lime.graphics.PixelFormat.ARGB);
 	}
 	,setVector: function(rect,inputVector) {
 		var byteArray = new lime.utils.ByteArray();
@@ -15200,9 +17546,7 @@ openfl.display.BitmapData.prototype = {
 				while(_g3 < _g2) {
 					var xx = _g3++;
 					position = (width_yy + xx) * 4;
-					pixelValue = openfl.Memory._setPositionTemporarily(position,function() {
-						return openfl.Memory.gcRef.readInt();
-					});
+					pixelValue = openfl.Memory.getI32(position);
 					pixelMask = pixelValue & mask;
 					i = openfl.display.BitmapData.__ucompare(pixelMask,thresholdMask);
 					test = false;
@@ -15238,7 +17582,7 @@ openfl.display.BitmapData.prototype = {
 			if(copySource) sourceMemory = sw * sh * 4;
 			var totalMemory = canvasMemory + sourceMemory;
 			var memory1 = new lime.utils.ByteArray();
-			if(memory1.allocated < totalMemory) memory1.___resizeBuffer(memory1.allocated = Std["int"](Math.max(totalMemory,memory1.allocated * 2))); else if(memory1.allocated > totalMemory) memory1.___resizeBuffer(memory1.allocated = totalMemory);
+			if(memory1.allocated < totalMemory) memory1.___resizeBuffer(memory1.allocated = Std["int"](Math.max(totalMemory,memory1.allocated * 2))); else if(memory1.allocated > totalMemory * 2) memory1.___resizeBuffer(memory1.allocated = totalMemory);
 			memory1.length = totalMemory;
 			totalMemory;
 			memory1.position = 0;
@@ -15262,9 +17606,7 @@ openfl.display.BitmapData.prototype = {
 				while(_g11 < dw) {
 					var xx1 = _g11++;
 					position1 = (xx1 + sx + (yy1 + sy) * sw) * 4;
-					pixelValue1 = openfl.Memory._setPositionTemporarily(position1,function() {
-						return openfl.Memory.gcRef.readInt();
-					});
+					pixelValue1 = openfl.Memory.getI32(position1);
 					pixelMask1 = pixelValue1 & mask;
 					i1 = openfl.display.BitmapData.__ucompare(pixelMask1,thresholdMask1);
 					test1 = false;
@@ -15272,9 +17614,7 @@ openfl.display.BitmapData.prototype = {
 					if(test1) {
 						openfl.Memory.setI32(position1,color);
 						hits1++;
-					} else if(copySource) openfl.Memory.setI32(position1,openfl.Memory._setPositionTemporarily(canvasMemory + position1,function() {
-						return openfl.Memory.gcRef.readInt();
-					}));
+					} else if(copySource) openfl.Memory.setI32(position1,openfl.Memory.getI32(canvasMemory + position1));
 				}
 			}
 			memory1.position = 0;
@@ -15297,17 +17637,17 @@ openfl.display.BitmapData.prototype = {
 		this.__uvData.x3 = 0;
 		this.__uvData.y3 = 1;
 	}
-	,__loadFromBase64: function(base64,type,onload) {
+	,__fromBase64: function(base64,type,onload) {
 		var _g = this;
 		lime.graphics.Image.fromBase64(base64,type,function(image) {
-			_g.__loadFromImage(image);
+			_g.__fromImage(image);
 			if(onload != null) onload(_g);
 		});
 	}
-	,__loadFromBytes: function(bytes,rawAlpha,onload) {
+	,__fromBytes: function(bytes,rawAlpha,onload) {
 		var _g = this;
 		lime.graphics.Image.fromBytes(bytes,function(image) {
-			_g.__loadFromImage(image);
+			_g.__fromImage(image);
 			if(rawAlpha != null) {
 				lime.graphics.utils.ImageCanvasUtil.convertToCanvas(_g.__image);
 				lime.graphics.utils.ImageCanvasUtil.createImageData(_g.__image);
@@ -15323,14 +17663,14 @@ openfl.display.BitmapData.prototype = {
 			if(onload != null) onload(_g);
 		});
 	}
-	,__loadFromFile: function(path,onload,onerror) {
+	,__fromFile: function(path,onload,onerror) {
 		var _g = this;
 		lime.graphics.Image.fromFile(path,function(image) {
-			_g.__loadFromImage(image);
+			_g.__fromImage(image);
 			if(onload != null) onload(_g);
 		},onerror);
 	}
-	,__loadFromImage: function(image) {
+	,__fromImage: function(image) {
 		this.__image = image;
 		this.width = image.width;
 		this.height = image.height;
@@ -15347,7 +17687,14 @@ openfl.display.BitmapData.prototype = {
 		if(renderSession.roundPixels) context.setTransform(transform.a,transform.b,transform.c,transform.d,transform.tx | 0,transform.ty | 0); else context.setTransform(transform.a,transform.b,transform.c,transform.d,transform.tx,transform.ty);
 		context.drawImage(this.__image.buffer.get_src(),0,0);
 	}
+	,__renderGL: function(renderSession) {
+		if(this.__worldTransform == null) this.__worldTransform = new openfl.geom.Matrix();
+		if(this.__worldColorTransform == null) this.__worldColorTransform = new openfl.geom.ColorTransform();
+		renderSession.spriteBatch.renderBitmapData(this,true,this.__worldTransform,this.__worldColorTransform,this.__worldColorTransform.alphaMultiplier,this.blendMode);
+	}
 	,__renderMask: function(renderSession) {
+	}
+	,__updateMask: function(maskGraphics) {
 	}
 	,__sync: function() {
 		lime.graphics.utils.ImageCanvasUtil.sync(this.__image);
@@ -15439,6 +17786,805 @@ openfl.display.DirectRenderer.prototype = $extend(openfl.display.DisplayObject.p
 		return this.__render = value;
 	}
 	,__class__: openfl.display.DirectRenderer
+	,__properties__: $extend(openfl.display.DisplayObject.prototype.__properties__,{set_render:"set_render",get_render:"get_render"})
+});
+openfl.text = {};
+openfl.text.TextField = function() {
+	openfl.display.InteractiveObject.call(this);
+	this.__width = 100;
+	this.__height = 100;
+	this.__text = "";
+	this.set_type(openfl.text.TextFieldType.DYNAMIC);
+	this.set_autoSize(openfl.text.TextFieldAutoSize.NONE);
+	this.displayAsPassword = false;
+	this.embedFonts = false;
+	this.selectable = true;
+	this.set_borderColor(0);
+	this.set_border(false);
+	this.set_backgroundColor(16777215);
+	this.set_background(false);
+	this.gridFitType = openfl.text.GridFitType.PIXEL;
+	this.maxChars = 0;
+	this.multiline = false;
+	this.sharpness = 0;
+	this.scrollH = 0;
+	this.scrollV = 1;
+	this.set_wordWrap(false);
+	if(openfl.text.TextField.__defaultTextFormat == null) {
+		openfl.text.TextField.__defaultTextFormat = new openfl.text.TextFormat("Times New Roman",12,0,false,false,false,"","",openfl.text.TextFormatAlign.LEFT,0,0,0,0);
+		openfl.text.TextField.__defaultTextFormat.blockIndent = 0;
+		openfl.text.TextField.__defaultTextFormat.bullet = false;
+		openfl.text.TextField.__defaultTextFormat.letterSpacing = 0;
+		openfl.text.TextField.__defaultTextFormat.kerning = false;
+	}
+	this.__textFormat = openfl.text.TextField.__defaultTextFormat.clone();
+};
+$hxClasses["openfl.text.TextField"] = openfl.text.TextField;
+openfl.text.TextField.__name__ = ["openfl","text","TextField"];
+openfl.text.TextField.__defaultTextFormat = null;
+openfl.text.TextField.__super__ = openfl.display.InteractiveObject;
+openfl.text.TextField.prototype = $extend(openfl.display.InteractiveObject.prototype,{
+	appendText: function(text) {
+		var _g = this;
+		_g.set_text(_g.get_text() + text);
+	}
+	,getCharBoundaries: function(a) {
+		openfl.Lib.notImplemented("TextField.getCharBoundaries");
+		return null;
+	}
+	,getCharIndexAtPoint: function(x,y) {
+		openfl.Lib.notImplemented("TextField.getCharIndexAtPoint");
+		return 0;
+	}
+	,getLineIndexAtPoint: function(x,y) {
+		openfl.Lib.notImplemented("TextField.getLineIndexAtPoint");
+		return 0;
+	}
+	,getLineMetrics: function(lineIndex) {
+		var height = this.get_textHeight();
+		var lineWidth = this.__getLineWidth(lineIndex);
+		var lineHeight = this.__getLineMetric(lineIndex,2);
+		var ascender = this.__getLineMetric(lineIndex,0);
+		var descender = this.__getLineMetric(lineIndex,1);
+		var leading = this.__getLineMetric(lineIndex,3);
+		var margin;
+		var _g = this.__textFormat.align;
+		switch(_g[1]) {
+		case 0:case 2:
+			margin = 2;
+			break;
+		case 1:
+			margin = this.get_width() - lineWidth - 2;
+			break;
+		case 3:
+			margin = (this.get_width() - lineWidth) / 2;
+			break;
+		}
+		return new openfl.text.TextLineMetrics(margin,lineWidth,lineHeight,ascender,descender,leading);
+	}
+	,getLineOffset: function(lineIndex) {
+		openfl.Lib.notImplemented("TextField.getLineOffset");
+		return 0;
+	}
+	,getLineText: function(lineIndex) {
+		openfl.Lib.notImplemented("TextField.getLineText");
+		return "";
+	}
+	,getTextFormat: function(beginIndex,endIndex) {
+		if(endIndex == null) endIndex = 0;
+		if(beginIndex == null) beginIndex = 0;
+		return this.__textFormat.clone();
+	}
+	,setSelection: function(beginIndex,endIndex) {
+		openfl.Lib.notImplemented("TextField.setSelection");
+	}
+	,setTextFormat: function(format,beginIndex,endIndex) {
+		if(endIndex == null) endIndex = 0;
+		if(beginIndex == null) beginIndex = 0;
+		if(format.font != null) this.__textFormat.font = format.font;
+		if(format.size != null) this.__textFormat.size = format.size;
+		if(format.color != null) this.__textFormat.color = format.color;
+		if(format.bold != null) this.__textFormat.bold = format.bold;
+		if(format.italic != null) this.__textFormat.italic = format.italic;
+		if(format.underline != null) this.__textFormat.underline = format.underline;
+		if(format.url != null) this.__textFormat.url = format.url;
+		if(format.target != null) this.__textFormat.target = format.target;
+		if(format.align != null) this.__textFormat.align = format.align;
+		if(format.leftMargin != null) this.__textFormat.leftMargin = format.leftMargin;
+		if(format.rightMargin != null) this.__textFormat.rightMargin = format.rightMargin;
+		if(format.indent != null) this.__textFormat.indent = format.indent;
+		if(format.leading != null) this.__textFormat.leading = format.leading;
+		if(format.blockIndent != null) this.__textFormat.blockIndent = format.blockIndent;
+		if(format.bullet != null) this.__textFormat.bullet = format.bullet;
+		if(format.kerning != null) this.__textFormat.kerning = format.kerning;
+		if(format.letterSpacing != null) this.__textFormat.letterSpacing = format.letterSpacing;
+		if(format.tabStops != null) this.__textFormat.tabStops = format.tabStops;
+		this.__dirty = true;
+	}
+	,__clipText: function(value) {
+		var textWidth = this.__getTextWidth(value);
+		var fillPer = textWidth / this.__width;
+		this.set_text(fillPer > 1?(function($this) {
+			var $r;
+			var _this = $this.get_text();
+			var pos = -1 * Math.floor($this.get_text().length / fillPer);
+			$r = HxOverrides.substr(_this,pos,null);
+			return $r;
+		}(this)):this.get_text());
+		return this.get_text() + "";
+	}
+	,__disableInputMode: function() {
+		this.this_onRemovedFromStage(null);
+	}
+	,__enableInputMode: function() {
+		this.__cursorPosition = -1;
+		if(this.__hiddenInput == null) {
+			this.__hiddenInput = window.document.createElement("input");
+			this.__hiddenInput.type = "text";
+			this.__hiddenInput.style.position = "absolute";
+			this.__hiddenInput.style.opacity = "0";
+			this.__hiddenInput.style.pointerEvents = "none";
+			this.__hiddenInput.style.left = this.get_x() + (this.__canvas != null?this.__canvas.offsetLeft:0) + "px";
+			this.__hiddenInput.style.top = this.get_y() + (this.__canvas != null?this.__canvas.offsetTop:0) + "px";
+			this.__hiddenInput.style.width = this.__width + "px";
+			this.__hiddenInput.style.height = this.__height + "px";
+			this.__hiddenInput.style.zIndex = "0";
+			if(this.maxChars > 0) this.__hiddenInput.maxLength = this.maxChars;
+			window.document.body.appendChild(this.__hiddenInput);
+			this.__hiddenInput.value = this.__text;
+		}
+		if(this.stage != null) this.this_onAddedToStage(null); else {
+			this.addEventListener(openfl.events.Event.ADDED_TO_STAGE,$bind(this,this.this_onAddedToStage));
+			this.addEventListener(openfl.events.Event.REMOVED_FROM_STAGE,$bind(this,this.this_onRemovedFromStage));
+		}
+	}
+	,__findFont: function(name) {
+		return null;
+	}
+	,__getBounds: function(rect,matrix) {
+		var bounds = new openfl.geom.Rectangle(0,0,this.__width,this.__height);
+		bounds.transform(this.__worldTransform);
+		rect.__expand(bounds.x,bounds.y,bounds.width,bounds.height);
+	}
+	,__getCursor: function() {
+		if(this.type == openfl.text.TextFieldType.INPUT) return lime.ui.MouseCursor.TEXT; else return null;
+	}
+	,__getFont: function(format) {
+		var font;
+		if(format.italic) font = "italic "; else font = "normal ";
+		font += "normal ";
+		if(format.bold) font += "bold "; else font += "normal ";
+		font += format.size + "px";
+		font += "/" + (format.size + format.leading) + "px ";
+		font += "'" + (function($this) {
+			var $r;
+			var _g = format.font;
+			$r = (function($this) {
+				var $r;
+				switch(_g) {
+				case "_sans":
+					$r = "sans-serif";
+					break;
+				case "_serif":
+					$r = "serif";
+					break;
+				case "_typewriter":
+					$r = "monospace";
+					break;
+				default:
+					$r = format.font;
+				}
+				return $r;
+			}($this));
+			return $r;
+		}(this));
+		font += "'";
+		return font;
+	}
+	,__getFontInstance: function(format) {
+		return null;
+	}
+	,__getLineBreaks: function() {
+		var lines = 0;
+		var _g1 = 0;
+		var _g;
+		var s = this.get_text();
+		_g = s.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			var $char = haxe.Utf8.charCodeAt(this.get_text(),i);
+			if($char == openfl.text.TextField.__utf8_endline_code) lines++;
+		}
+		return lines;
+	}
+	,__getLineBreakIndeces: function() {
+		var breaks = [];
+		var _g1 = 0;
+		var _g;
+		var s = this.get_text();
+		_g = s.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			var $char = haxe.Utf8.charCodeAt(this.get_text(),i);
+			if($char == openfl.text.TextField.__utf8_endline_code) breaks.push(i);
+		}
+		return breaks;
+	}
+	,__getLineBreaksInRange: function(i) {
+		var lines = 0;
+		if(this.__ranges.length > i && i >= 0) {
+			var range = this.__ranges[i];
+			if(range.start > 0 && range.end < this.get_text().length) {
+				var _g1 = range.start;
+				var _g = range.end + 1;
+				while(_g1 < _g) {
+					var j = _g1++;
+					var $char = haxe.Utf8.charCodeAt(this.get_text(),i);
+					if($char == openfl.text.TextField.__utf8_endline_code) lines++;
+				}
+			}
+		}
+		return lines;
+	}
+	,__getLineIndeces: function(line) {
+		var breaks = this.__getLineBreakIndeces();
+		var i = 0;
+		var first_char = 0;
+		var last_char = this.get_text().length - 1;
+		var _g = 0;
+		while(_g < breaks.length) {
+			var br = breaks[_g];
+			++_g;
+			if(i == line) {
+				first_char = br + 1;
+				if(i != breaks.length - 1) last_char = breaks[i + 1] - 1;
+			}
+			i++;
+		}
+		return [first_char,last_char];
+	}
+	,__getLineWidth: function(line) {
+		var measurements = this.__measureTextSub(false);
+		var currWidth = 0.0;
+		var bestWidth = 0.0;
+		var linebreaks = this.__getLineBreakIndeces();
+		var currLine = 0;
+		var _g1 = 0;
+		var _g = measurements.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			var measure = measurements[i];
+			if(HxOverrides.indexOf(linebreaks,i,0) != -1) {
+				if(currLine == line) return currWidth; else if(line == -1 && currWidth > bestWidth) bestWidth = currWidth;
+				currWidth = 0;
+				currLine++;
+			} else currWidth += measurements[i];
+		}
+		if(currLine == line) bestWidth = currWidth; else if(line == -1 && currWidth > bestWidth) bestWidth = currWidth;
+		return bestWidth;
+	}
+	,__getLineMetric: function(line,metric) {
+		if(this.__ranges == null) return this.__getLineMetricSubRangesNull(true,metric); else return this.__getLineMetricSubRangesNotNull(line,metric);
+	}
+	,__getLineMetricSubRangesNull: function(singleLine,metric) {
+		if(singleLine == null) singleLine = false;
+		var font = this.__getFontInstance(this.__textFormat);
+		if(font != null) switch(metric) {
+		case 2:
+			return this.__getLineMetricSubRangesNull(singleLine,0) + this.__getLineMetricSubRangesNull(singleLine,1) + this.__getLineMetricSubRangesNull(singleLine,3);
+		case 0:
+			return font.get_ascender() / font.get_unitsPerEM() * this.__textFormat.size;
+		case 1:
+			return Math.abs(font.get_descender() / font.get_unitsPerEM() * this.__textFormat.size);
+		case 3:
+			return this.__textFormat.leading;
+		default:
+			return 0;
+		}
+		return 0;
+	}
+	,__getLineMetricSubRangesNotNull: function(specificLine,metric) {
+		var lineChars = this.__getLineIndeces(specificLine);
+		var m = 0.0;
+		var best_m = 0.0;
+		var _g = 0;
+		var _g1 = this.__ranges;
+		while(_g < _g1.length) {
+			var range = _g1[_g];
+			++_g;
+			if(range.start >= lineChars[0]) {
+				var font = this.__getFontInstance(range.format);
+				if(font != null) switch(metric) {
+				case 2:
+					m = this.__getLineMetricSubRangesNotNull(specificLine,0) + this.__getLineMetricSubRangesNotNull(specificLine,1) + this.__getLineMetricSubRangesNotNull(specificLine,3);
+					break;
+				case 0:
+					m = font.get_ascender() / font.get_unitsPerEM() * this.__textFormat.size;
+					break;
+				case 1:
+					m = Math.abs(font.get_descender() / font.get_unitsPerEM() * this.__textFormat.size);
+					break;
+				case 3:
+					m = this.__textFormat.leading;
+					break;
+				default:
+					m = 0;
+				}
+			}
+			if(m > best_m) best_m = m;
+			m = 0;
+		}
+		return best_m;
+	}
+	,__getPosition: function(x,y) {
+		var value = this.get_text();
+		var text = value;
+		var totalW = 0;
+		var pos = text.length;
+		if(x < this.__getTextWidth(text)) {
+			var _g1 = 0;
+			var _g = text.length;
+			while(_g1 < _g) {
+				var i = _g1++;
+				totalW += this.__getTextWidth(text.charAt(i));
+				if(totalW >= x) {
+					pos = i;
+					break;
+				}
+			}
+		}
+		return pos;
+	}
+	,__getTextWidth: function(text) {
+		if(this.__context == null) {
+			this.__canvas = window.document.createElement("canvas");
+			this.__context = this.__canvas.getContext("2d");
+		}
+		this.__context.font = this.__getFont(this.__textFormat);
+		this.__context.textAlign = "left";
+		return this.__context.measureText(text).width;
+	}
+	,__hitTest: function(x,y,shapeFlag,stack,interactiveOnly) {
+		if(!this.get_visible() || interactiveOnly && !this.mouseEnabled) return false;
+		var point = this.globalToLocal(new openfl.geom.Point(x,y));
+		if(point.x > 0 && point.y > 0 && point.x <= this.__width && point.y <= this.__height) {
+			if(stack != null) stack.push(this);
+			return true;
+		}
+		return false;
+	}
+	,__measureText: function(condense) {
+		if(condense == null) condense = true;
+		if(this.__context == null) {
+			this.__canvas = window.document.createElement("canvas");
+			this.__context = this.__canvas.getContext("2d");
+		}
+		if(this.__ranges == null) {
+			this.__context.font = this.__getFont(this.__textFormat);
+			return [this.__context.measureText(this.__text).width];
+		} else {
+			var measurements = [];
+			var _g = 0;
+			var _g1 = this.__ranges;
+			while(_g < _g1.length) {
+				var range = _g1[_g];
+				++_g;
+				this.__context.font = this.__getFont(range.format);
+				measurements.push(this.__context.measureText(this.get_text().substring(range.start,range.end)).width);
+			}
+			return measurements;
+		}
+	}
+	,__measureTextSub: function(condense) {
+		if(this.__textLayout == null) this.__textLayout = new lime.text.TextLayout();
+		if(this.__ranges == null) return this.__measureTextSubRangesNull(condense); else return this.__measureTextSubRangesNotNull(condense);
+		return null;
+	}
+	,__measureTextSubRangesNull: function(condense) {
+		var font = this.__getFontInstance(this.__textFormat);
+		var width = 0.0;
+		var widths = [];
+		if(font != null && this.__textFormat.size != null) {
+			this.__textLayout.set_text(null);
+			this.__textLayout.set_font(font);
+			this.__textLayout.set_size(this.__textFormat.size | 0);
+			this.__textLayout.set_text(this.__text);
+			var _g = 0;
+			var _g1 = this.__textLayout.positions;
+			while(_g < _g1.length) {
+				var position = _g1[_g];
+				++_g;
+				if(condense) width += position.advance.x; else widths.push(position.advance.x);
+			}
+		}
+		if(condense) widths.push(width);
+		return widths;
+	}
+	,__measureTextSubRangesNotNull: function(condense) {
+		var measurements = [];
+		var _g = 0;
+		var _g1 = this.__ranges;
+		while(_g < _g1.length) {
+			var range = _g1[_g];
+			++_g;
+			var font = this.__getFontInstance(range.format);
+			var width = 0.0;
+			if(font != null && range.format.size != null) {
+				this.__textLayout.set_text(null);
+				this.__textLayout.set_font(font);
+				this.__textLayout.set_size(range.format.size | 0);
+				this.__textLayout.set_text(this.get_text().substring(range.start,range.end));
+				var _g2 = 0;
+				var _g3 = this.__textLayout.positions;
+				while(_g2 < _g3.length) {
+					var position = _g3[_g2];
+					++_g2;
+					if(condense) width += position.advance.x; else measurements.push(position.advance.x);
+				}
+			}
+			if(condense) measurements.push(width);
+		}
+		return measurements;
+	}
+	,__measureTextWithDOM: function() {
+		var div = this.__div;
+		if(this.__div == null) {
+			div = window.document.createElement("div");
+			div.innerHTML = new EReg("\n","g").replace(this.__text,"<br>");
+			div.style.setProperty("font",this.__getFont(this.__textFormat),null);
+			div.style.position = "absolute";
+			div.style.top = "110%";
+			window.document.body.appendChild(div);
+		}
+		this.__measuredWidth = div.clientWidth;
+		if(this.__div == null) div.style.width = Std.string(this.__width) + "px";
+		this.__measuredHeight = div.clientHeight;
+		if(this.__div == null) window.document.body.removeChild(div);
+	}
+	,__renderCanvas: function(renderSession) {
+		openfl._internal.renderer.canvas.CanvasTextField.render(this,renderSession);
+	}
+	,__renderDOM: function(renderSession) {
+		openfl._internal.renderer.dom.DOMTextField.render(this,renderSession);
+	}
+	,__renderGL: function(renderSession) {
+		openfl._internal.renderer.opengl.GLTextField.render(this,renderSession);
+	}
+	,__startCursorTimer: function() {
+		this.__cursorTimer = haxe.Timer.delay($bind(this,this.__startCursorTimer),500);
+		this.__showCursor = !this.__showCursor;
+		this.__dirty = true;
+	}
+	,__stopCursorTimer: function() {
+		if(this.__cursorTimer != null) this.__cursorTimer.stop();
+	}
+	,input_onKeyUp: function(event) {
+		this.__isKeyDown = false;
+		if(event == null) event == window.event;
+		this.__text = this.__hiddenInput.value;
+		this.__ranges = null;
+		this.__isHTML = false;
+		this.__cursorPosition = this.__hiddenInput.selectionStart;
+		this.__selectionStart = this.__cursorPosition;
+		this.__dirty = true;
+		this.dispatchEvent(new openfl.events.Event(openfl.events.Event.CHANGE,true));
+	}
+	,input_onKeyDown: function(event) {
+		this.__isKeyDown = true;
+		if(event == null) event == window.event;
+		var keyCode = event.which;
+		var isShift = event.shiftKey;
+		if(keyCode == 65 && (event.ctrlKey || event.metaKey)) {
+			this.__hiddenInput.selectionStart = 0;
+			this.__hiddenInput.selectionEnd = this.get_text().length;
+			event.preventDefault();
+			this.__dirty = true;
+			return;
+		}
+		if(keyCode == 17 || event.metaKey || event.ctrlKey) return;
+		this.__text = this.__hiddenInput.value;
+		this.__ranges = null;
+		this.__isHTML = false;
+		this.__selectionStart = this.__hiddenInput.selectionStart;
+		this.__dirty = true;
+	}
+	,stage_onMouseMove: function(event) {
+		if(this.__hasFocus && this.__selectionStart >= 0) {
+			this.__cursorPosition = this.__getPosition(event.localX,event.localY);
+			this.__dirty = true;
+		}
+	}
+	,stage_onMouseUp: function(event) {
+		this.stage.removeEventListener(openfl.events.MouseEvent.MOUSE_MOVE,$bind(this,this.stage_onMouseMove));
+		this.stage.removeEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.stage_onMouseUp));
+		if(this.stage.get_focus() == this) {
+			var upPos = this.__getPosition(event.localX,event.localY);
+			var leftPos;
+			var rightPos;
+			leftPos = Std["int"](Math.min(this.__selectionStart,upPos));
+			rightPos = Std["int"](Math.max(this.__selectionStart,upPos));
+			this.__selectionStart = leftPos;
+			this.__cursorPosition = rightPos;
+			this.this_onFocusIn(null);
+		}
+	}
+	,this_onAddedToStage: function(event) {
+		this.addEventListener(openfl.events.FocusEvent.FOCUS_IN,$bind(this,this.this_onFocusIn));
+		this.addEventListener(openfl.events.FocusEvent.FOCUS_OUT,$bind(this,this.this_onFocusOut));
+		this.__hiddenInput.addEventListener("keydown",$bind(this,this.input_onKeyDown));
+		this.__hiddenInput.addEventListener("keyup",$bind(this,this.input_onKeyUp));
+		this.__hiddenInput.addEventListener("input",$bind(this,this.input_onKeyUp));
+		this.addEventListener(openfl.events.MouseEvent.MOUSE_DOWN,$bind(this,this.this_onMouseDown));
+		if(this.stage.get_focus() == this) this.this_onFocusIn(null);
+	}
+	,this_onFocusIn: function(event) {
+		if(this.__cursorPosition < 0) {
+			this.__cursorPosition = this.__text.length;
+			this.__selectionStart = this.__cursorPosition;
+		}
+		this.__hiddenInput.focus();
+		this.__hiddenInput.selectionStart = this.__selectionStart;
+		this.__hiddenInput.selectionEnd = this.__cursorPosition;
+		this.__stopCursorTimer();
+		this.__startCursorTimer();
+		this.__hasFocus = true;
+		this.__dirty = true;
+		this.stage.addEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.stage_onMouseUp));
+	}
+	,this_onFocusOut: function(event) {
+		this.__cursorPosition = -1;
+		this.__hasFocus = false;
+		this.__stopCursorTimer();
+		this.__hiddenInput.blur();
+		this.__dirty = true;
+	}
+	,this_onMouseDown: function(event) {
+		this.__selectionStart = this.__getPosition(event.localX,event.localY);
+		this.stage.addEventListener(openfl.events.MouseEvent.MOUSE_MOVE,$bind(this,this.stage_onMouseMove));
+		this.stage.addEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.stage_onMouseUp));
+	}
+	,this_onRemovedFromStage: function(event) {
+		this.removeEventListener(openfl.events.FocusEvent.FOCUS_IN,$bind(this,this.this_onFocusIn));
+		this.removeEventListener(openfl.events.FocusEvent.FOCUS_OUT,$bind(this,this.this_onFocusOut));
+		if(this.__hiddenInput != null) this.__hiddenInput.removeEventListener("keydown",$bind(this,this.input_onKeyDown));
+		if(this.__hiddenInput != null) this.__hiddenInput.removeEventListener("keyup",$bind(this,this.input_onKeyUp));
+		if(this.__hiddenInput != null) this.__hiddenInput.removeEventListener("input",$bind(this,this.input_onKeyUp));
+		this.removeEventListener(openfl.events.MouseEvent.MOUSE_DOWN,$bind(this,this.this_onMouseDown));
+		if(this.stage != null) this.stage.removeEventListener(openfl.events.MouseEvent.MOUSE_MOVE,$bind(this,this.stage_onMouseMove));
+		if(this.stage != null) this.stage.removeEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.stage_onMouseUp));
+	}
+	,set_autoSize: function(value) {
+		if(value != this.autoSize) this.__dirty = true;
+		return this.autoSize = value;
+	}
+	,set_background: function(value) {
+		if(value != this.background) this.__dirty = true;
+		return this.background = value;
+	}
+	,set_backgroundColor: function(value) {
+		if(value != this.backgroundColor) this.__dirty = true;
+		return this.backgroundColor = value;
+	}
+	,set_border: function(value) {
+		if(value != this.border) this.__dirty = true;
+		return this.border = value;
+	}
+	,set_borderColor: function(value) {
+		if(value != this.borderColor) this.__dirty = true;
+		return this.borderColor = value;
+	}
+	,get_bottomScrollV: function() {
+		return this.get_numLines();
+	}
+	,get_caretPos: function() {
+		return 0;
+	}
+	,get_defaultTextFormat: function() {
+		return this.__textFormat.clone();
+	}
+	,set_defaultTextFormat: function(value) {
+		this.__textFormat.__merge(value);
+		return value;
+	}
+	,get_height: function() {
+		return this.__height * this.get_scaleY();
+	}
+	,set_height: function(value) {
+		if(this.get_scaleY() != 1 || value != this.__height) {
+			if(!this.__transformDirty) {
+				this.__transformDirty = true;
+				openfl.display.DisplayObject.__worldTransformDirty++;
+			}
+			this.__dirty = true;
+		}
+		this.set_scaleY(1);
+		return this.__height = value;
+	}
+	,get_htmlText: function() {
+		return this.__text;
+	}
+	,set_htmlText: function(value) {
+		if(!this.__isHTML || this.__text != value) this.__dirty = true;
+		this.__ranges = null;
+		this.__isHTML = true;
+		if(this.__div == null) {
+			value = new EReg("<br>","g").replace(value,"\n");
+			value = new EReg("<br/>","g").replace(value,"\n");
+			var segments = value.split("<font");
+			if(segments.length == 1) {
+				value = new EReg("<.*?>","g").replace(value,"");
+				if(this.__hiddenInput != null) this.__hiddenInput.value = value;
+				return this.__text = value;
+			} else {
+				value = "";
+				this.__ranges = [];
+				var _g = 0;
+				while(_g < segments.length) {
+					var segment = segments[_g];
+					++_g;
+					if(segment == "") continue;
+					var closeFontIndex = segment.indexOf("</font>");
+					if(closeFontIndex > -1) {
+						var start = segment.indexOf(">") + 1;
+						var end = closeFontIndex;
+						var format = this.__textFormat.clone();
+						var faceIndex = segment.indexOf("face=");
+						var colorIndex = segment.indexOf("color=");
+						var sizeIndex = segment.indexOf("size=");
+						if(faceIndex > -1 && faceIndex < start) {
+							var len = segment.indexOf("\"",faceIndex);
+							format.font = HxOverrides.substr(segment,faceIndex + 6,len);
+						}
+						if(colorIndex > -1 && colorIndex < start) format.color = Std.parseInt("0x" + HxOverrides.substr(segment,colorIndex + 8,6));
+						if(sizeIndex > -1 && sizeIndex < start) format.size = Std.parseInt((function($this) {
+							var $r;
+							var len1 = segment.indexOf("\"",sizeIndex);
+							$r = HxOverrides.substr(segment,sizeIndex + 6,len1);
+							return $r;
+						}(this)));
+						var sub = segment.substring(start,end);
+						sub = new EReg("<.*?>","g").replace(sub,"");
+						this.__ranges.push(new openfl.text.TextFormatRange(format,value.length,value.length + sub.length));
+						value += sub;
+						if(closeFontIndex + 7 < segment.length) {
+							sub = HxOverrides.substr(segment,closeFontIndex + 7,null);
+							this.__ranges.push(new openfl.text.TextFormatRange(this.__textFormat,value.length,value.length + sub.length));
+							value += sub;
+						}
+					} else {
+						this.__ranges.push(new openfl.text.TextFormatRange(this.__textFormat,value.length,value.length + segment.length));
+						value += segment;
+					}
+				}
+			}
+		}
+		if(this.__hiddenInput != null) this.__hiddenInput.value = value;
+		return this.__text = value;
+	}
+	,get_maxScrollH: function() {
+		return 0;
+	}
+	,get_maxScrollV: function() {
+		return 1;
+	}
+	,get_numLines: function() {
+		if(this.get_text() != "" && this.get_text() != null) {
+			var count = this.get_text().split("\n").length;
+			if(this.__isHTML) count += this.get_text().split("<br>").length - 1;
+			return count;
+		}
+		return 1;
+	}
+	,get_text: function() {
+		if(this.__isHTML) {
+		}
+		return this.__text;
+	}
+	,set_text: function(value) {
+		if(this.__text != value && this.__hiddenInput != null) this.__hiddenInput.value = value;
+		if(this.__isHTML || this.__text != value) this.__dirty = true;
+		this.__ranges = null;
+		this.__isHTML = false;
+		return this.__text = value;
+	}
+	,get_textColor: function() {
+		return this.__textFormat.color;
+	}
+	,set_textColor: function(value) {
+		if(value != this.__textFormat.color) this.__dirty = true;
+		if(this.__ranges != null) {
+			var _g = 0;
+			var _g1 = this.__ranges;
+			while(_g < _g1.length) {
+				var range = _g1[_g];
+				++_g;
+				range.format.color = value;
+			}
+		}
+		return this.__textFormat.color = value;
+	}
+	,get_textWidth: function() {
+		if(this.__canvas != null) {
+			var sizes = this.__measureText();
+			var total = 0;
+			var _g = 0;
+			while(_g < sizes.length) {
+				var size = sizes[_g];
+				++_g;
+				total += size;
+			}
+			return total;
+		} else if(this.__div != null) return this.__div.clientWidth; else {
+			this.__measureTextWithDOM();
+			return this.__measuredWidth;
+		}
+	}
+	,get_textHeight: function() {
+		if(this.__canvas != null) return this.__textFormat.size * 1.185; else if(this.__div != null) return this.__div.clientHeight; else {
+			this.__measureTextWithDOM();
+			return this.__measuredHeight + this.__textFormat.size * 0.185;
+		}
+	}
+	,set_type: function(value) {
+		if(value != this.type) {
+			if(value == openfl.text.TextFieldType.INPUT) this.__enableInputMode(); else this.__disableInputMode();
+			this.__dirty = true;
+		}
+		return this.type = value;
+	}
+	,get_width: function() {
+		if(this.autoSize == openfl.text.TextFieldAutoSize.LEFT) return (this.get_textWidth() + 4) * this.get_scaleX(); else return this.__width * this.get_scaleX();
+	}
+	,set_width: function(value) {
+		if(this.get_scaleX() != 1 || this.__width != value) {
+			if(!this.__transformDirty) {
+				this.__transformDirty = true;
+				openfl.display.DisplayObject.__worldTransformDirty++;
+			}
+			this.__dirty = true;
+		}
+		this.set_scaleX(1);
+		return this.__width = value;
+	}
+	,get_wordWrap: function() {
+		return this.wordWrap;
+	}
+	,set_wordWrap: function(value) {
+		return this.wordWrap = value;
+	}
+	,__class__: openfl.text.TextField
+	,__properties__: $extend(openfl.display.InteractiveObject.prototype.__properties__,{set_wordWrap:"set_wordWrap",get_wordWrap:"get_wordWrap",set_type:"set_type",get_textWidth:"get_textWidth",get_textHeight:"get_textHeight",set_textColor:"set_textColor",get_textColor:"get_textColor",set_text:"set_text",get_text:"get_text",get_numLines:"get_numLines",get_maxScrollV:"get_maxScrollV",get_maxScrollH:"get_maxScrollH",set_htmlText:"set_htmlText",get_htmlText:"get_htmlText",set_defaultTextFormat:"set_defaultTextFormat",get_defaultTextFormat:"get_defaultTextFormat",get_caretPos:"get_caretPos",get_bottomScrollV:"get_bottomScrollV",set_borderColor:"set_borderColor",set_border:"set_border",set_backgroundColor:"set_backgroundColor",set_background:"set_background",set_autoSize:"set_autoSize"})
+});
+openfl.display.FPS = function(x,y,color) {
+	if(color == null) color = 0;
+	if(y == null) y = 10;
+	if(x == null) x = 10;
+	openfl.text.TextField.call(this);
+	this.set_x(x);
+	this.set_y(y);
+	this.currentFPS = 0;
+	this.selectable = false;
+	this.mouseEnabled = false;
+	this.set_defaultTextFormat(new openfl.text.TextFormat("_sans",12,color));
+	this.set_text("FPS: ");
+	this.cacheCount = 0;
+	this.times = [];
+	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.this_onEnterFrame));
+};
+$hxClasses["openfl.display.FPS"] = openfl.display.FPS;
+openfl.display.FPS.__name__ = ["openfl","display","FPS"];
+openfl.display.FPS.__super__ = openfl.text.TextField;
+openfl.display.FPS.prototype = $extend(openfl.text.TextField.prototype,{
+	this_onEnterFrame: function(event) {
+		var currentTime = haxe.Timer.stamp();
+		this.times.push(currentTime);
+		while(this.times[0] < currentTime - 1) this.times.shift();
+		var currentCount = this.times.length;
+		this.currentFPS = Math.round((currentCount + this.cacheCount) / 2);
+		if(currentCount != this.cacheCount) this.set_text("FPS: " + this.currentFPS);
+		this.cacheCount = currentCount;
+	}
+	,__class__: openfl.display.FPS
 });
 openfl.display.FrameLabel = function(name,frame) {
 	openfl.events.EventDispatcher.call(this);
@@ -15456,6 +18602,7 @@ openfl.display.FrameLabel.prototype = $extend(openfl.events.EventDispatcher.prot
 		return this.__name;
 	}
 	,__class__: openfl.display.FrameLabel
+	,__properties__: {get_name:"get_name",get_frame:"get_frame"}
 });
 openfl.display.GradientType = $hxClasses["openfl.display.GradientType"] = { __ename__ : true, __constructs__ : ["RADIAL","LINEAR"] };
 openfl.display.GradientType.RADIAL = ["RADIAL",0];
@@ -15473,6 +18620,7 @@ openfl.display.Graphics = function() {
 	this.__halfStrokeWidth = 0;
 	this.__positionX = 0;
 	this.__positionY = 0;
+	this.moveTo(0,0);
 };
 $hxClasses["openfl.display.Graphics"] = openfl.display.Graphics;
 openfl.display.Graphics.__name__ = ["openfl","display","Graphics"];
@@ -15490,22 +18638,32 @@ openfl.display.Graphics.prototype = {
 		if(alpha > 0) this.__visible = true;
 	}
 	,beginGradientFill: function(type,colors,alphas,ratios,matrix,spreadMethod,interpolationMethod,focalPointRatio) {
-		openfl.Lib.notImplemented("Graphics.beginGradientFill");
+		this.__commands.push(openfl.display.DrawCommand.BeginGradientFill(type,colors,alphas,ratios,matrix,spreadMethod,interpolationMethod,focalPointRatio));
+		var _g = 0;
+		while(_g < alphas.length) {
+			var alpha = alphas[_g];
+			++_g;
+			if(alpha > 0) {
+				this.__visible = true;
+				break;
+			}
+		}
 	}
 	,clear: function() {
 		this.__commands = new Array();
 		this.__halfStrokeWidth = 0;
 		if(this.__bounds != null) {
-			this.__dirty = true;
+			this.set___dirty(true);
 			this.__transformDirty = true;
 			this.__bounds = null;
 		}
 		this.__visible = false;
+		this.moveTo(0,0);
 	}
 	,copyFrom: function(sourceGraphics) {
 		this.__bounds = sourceGraphics.__bounds.clone();
 		this.__commands = sourceGraphics.__commands.slice();
-		this.__dirty = true;
+		this.set___dirty(true);
 		this.__halfStrokeWidth = sourceGraphics.__halfStrokeWidth;
 		this.__positionX = sourceGraphics.__positionX;
 		this.__positionY = sourceGraphics.__positionY;
@@ -15522,7 +18680,7 @@ openfl.display.Graphics.prototype = {
 		this.__inflateBounds(this.__positionX - this.__halfStrokeWidth,this.__positionY - this.__halfStrokeWidth);
 		this.__inflateBounds(this.__positionX + this.__halfStrokeWidth,this.__positionY + this.__halfStrokeWidth);
 		this.__commands.push(openfl.display.DrawCommand.CubicCurveTo(controlX1,controlY1,controlX2,controlY2,anchorX,anchorY));
-		this.__dirty = true;
+		this.set___dirty(true);
 	}
 	,curveTo: function(controlX,controlY,anchorX,anchorY) {
 		this.__inflateBounds(this.__positionX - this.__halfStrokeWidth,this.__positionY - this.__halfStrokeWidth);
@@ -15533,21 +18691,21 @@ openfl.display.Graphics.prototype = {
 		this.__inflateBounds(this.__positionX - this.__halfStrokeWidth,this.__positionY - this.__halfStrokeWidth);
 		this.__inflateBounds(this.__positionX + this.__halfStrokeWidth,this.__positionY + this.__halfStrokeWidth);
 		this.__commands.push(openfl.display.DrawCommand.CurveTo(controlX,controlY,anchorX,anchorY));
-		this.__dirty = true;
+		this.set___dirty(true);
 	}
 	,drawCircle: function(x,y,radius) {
 		if(radius <= 0) return;
 		this.__inflateBounds(x - radius - this.__halfStrokeWidth,y - radius - this.__halfStrokeWidth);
 		this.__inflateBounds(x + radius + this.__halfStrokeWidth,y + radius + this.__halfStrokeWidth);
 		this.__commands.push(openfl.display.DrawCommand.DrawCircle(x,y,radius));
-		this.__dirty = true;
+		this.set___dirty(true);
 	}
 	,drawEllipse: function(x,y,width,height) {
 		if(width <= 0 || height <= 0) return;
 		this.__inflateBounds(x - this.__halfStrokeWidth,y - this.__halfStrokeWidth);
 		this.__inflateBounds(x + width + this.__halfStrokeWidth,y + height + this.__halfStrokeWidth);
 		this.__commands.push(openfl.display.DrawCommand.DrawEllipse(x,y,width,height));
-		this.__dirty = true;
+		this.set___dirty(true);
 	}
 	,drawGraphicsData: function(graphicsData) {
 		openfl.Lib.notImplemented("Graphics.drawGraphicsData");
@@ -15584,7 +18742,7 @@ openfl.display.Graphics.prototype = {
 		this.__inflateBounds(x - this.__halfStrokeWidth,y - this.__halfStrokeWidth);
 		this.__inflateBounds(x + width + this.__halfStrokeWidth,y + height + this.__halfStrokeWidth);
 		this.__commands.push(openfl.display.DrawCommand.DrawRect(x,y,width,height));
-		this.__dirty = true;
+		this.set___dirty(true);
 	}
 	,drawRoundRect: function(x,y,width,height,rx,ry) {
 		if(ry == null) ry = -1;
@@ -15592,7 +18750,7 @@ openfl.display.Graphics.prototype = {
 		this.__inflateBounds(x - this.__halfStrokeWidth,y - this.__halfStrokeWidth);
 		this.__inflateBounds(x + width + this.__halfStrokeWidth,y + height + this.__halfStrokeWidth);
 		this.__commands.push(openfl.display.DrawCommand.DrawRoundRect(x,y,width,height,rx,ry));
-		this.__dirty = true;
+		this.set___dirty(true);
 	}
 	,drawRoundRectComplex: function(x,y,width,height,topLeftRadius,topRightRadius,bottomLeftRadius,bottomRightRadius) {
 		openfl.Lib.notImplemented("Graphics.drawRoundRectComplex");
@@ -15604,7 +18762,7 @@ openfl.display.Graphics.prototype = {
 		this.__inflateBounds(0,0);
 		this.__inflateBounds(openfl.Lib.current.stage.stageWidth,openfl.Lib.current.stage.stageHeight);
 		this.__commands.push(openfl.display.DrawCommand.DrawTiles(sheet,tileData,smooth,flags,count));
-		this.__dirty = true;
+		this.set___dirty(true);
 		this.__visible = true;
 	}
 	,drawTriangles: function(vertices,indices,uvtData,culling,colors,blendMode) {
@@ -15654,7 +18812,7 @@ openfl.display.Graphics.prototype = {
 		}
 		this.__inflateBounds(maxX,maxY);
 		this.__commands.push(openfl.display.DrawCommand.DrawTriangles(vertices,indices,uvtData,culling,colors,blendMode));
-		this.__dirty = true;
+		this.set___dirty(true);
 		this.__visible = true;
 	}
 	,endFill: function() {
@@ -15681,7 +18839,7 @@ openfl.display.Graphics.prototype = {
 		this.__inflateBounds(this.__positionX - this.__halfStrokeWidth,this.__positionY - this.__halfStrokeWidth);
 		this.__inflateBounds(this.__positionX + this.__halfStrokeWidth,this.__positionY + this.__halfStrokeWidth);
 		this.__commands.push(openfl.display.DrawCommand.LineTo(x,y));
-		this.__dirty = true;
+		this.set___dirty(true);
 	}
 	,moveTo: function(x,y) {
 		this.__positionX = x;
@@ -15717,25 +18875,33 @@ openfl.display.Graphics.prototype = {
 		if(x > this.__bounds.x + this.__bounds.width) this.__bounds.width = x - this.__bounds.x;
 		if(y > this.__bounds.y + this.__bounds.height) this.__bounds.height = y - this.__bounds.y;
 	}
+	,set___dirty: function(value) {
+		if(value && this.__owner != null) this.__owner.__setRenderDirty();
+		return this.__dirty = value;
+	}
 	,__class__: openfl.display.Graphics
+	,__properties__: {set___dirty:"set___dirty"}
 };
-openfl.display.DrawCommand = $hxClasses["openfl.display.DrawCommand"] = { __ename__ : true, __constructs__ : ["BeginBitmapFill","BeginFill","CubicCurveTo","CurveTo","DrawCircle","DrawEllipse","DrawRect","DrawRoundRect","DrawTiles","DrawTriangles","EndFill","LineStyle","LineTo","MoveTo"] };
+openfl.display.DrawCommand = $hxClasses["openfl.display.DrawCommand"] = { __ename__ : true, __constructs__ : ["BeginBitmapFill","BeginFill","BeginGradientFill","CubicCurveTo","CurveTo","DrawCircle","DrawEllipse","DrawRect","DrawRoundRect","DrawTiles","DrawTriangles","EndFill","LineStyle","LineTo","MoveTo","DrawPathC","OverrideMatrix"] };
 openfl.display.DrawCommand.BeginBitmapFill = function(bitmap,matrix,repeat,smooth) { var $x = ["BeginBitmapFill",0,bitmap,matrix,repeat,smooth]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
 openfl.display.DrawCommand.BeginFill = function(color,alpha) { var $x = ["BeginFill",1,color,alpha]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.CubicCurveTo = function(controlX1,controlY1,controlX2,controlY2,anchorX,anchorY) { var $x = ["CubicCurveTo",2,controlX1,controlY1,controlX2,controlY2,anchorX,anchorY]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.CurveTo = function(controlX,controlY,anchorX,anchorY) { var $x = ["CurveTo",3,controlX,controlY,anchorX,anchorY]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.DrawCircle = function(x,y,radius) { var $x = ["DrawCircle",4,x,y,radius]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.DrawEllipse = function(x,y,width,height) { var $x = ["DrawEllipse",5,x,y,width,height]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.DrawRect = function(x,y,width,height) { var $x = ["DrawRect",6,x,y,width,height]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.DrawRoundRect = function(x,y,width,height,rx,ry) { var $x = ["DrawRoundRect",7,x,y,width,height,rx,ry]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.DrawTiles = function(sheet,tileData,smooth,flags,count) { var $x = ["DrawTiles",8,sheet,tileData,smooth,flags,count]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.DrawTriangles = function(vertices,indices,uvtData,culling,colors,blendMode) { var $x = ["DrawTriangles",9,vertices,indices,uvtData,culling,colors,blendMode]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.EndFill = ["EndFill",10];
+openfl.display.DrawCommand.BeginGradientFill = function(type,colors,alphas,ratios,matrix,spreadMethod,interpolationMethod,focalPointRatio) { var $x = ["BeginGradientFill",2,type,colors,alphas,ratios,matrix,spreadMethod,interpolationMethod,focalPointRatio]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.CubicCurveTo = function(controlX1,controlY1,controlX2,controlY2,anchorX,anchorY) { var $x = ["CubicCurveTo",3,controlX1,controlY1,controlX2,controlY2,anchorX,anchorY]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.CurveTo = function(controlX,controlY,anchorX,anchorY) { var $x = ["CurveTo",4,controlX,controlY,anchorX,anchorY]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.DrawCircle = function(x,y,radius) { var $x = ["DrawCircle",5,x,y,radius]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.DrawEllipse = function(x,y,width,height) { var $x = ["DrawEllipse",6,x,y,width,height]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.DrawRect = function(x,y,width,height) { var $x = ["DrawRect",7,x,y,width,height]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.DrawRoundRect = function(x,y,width,height,rx,ry) { var $x = ["DrawRoundRect",8,x,y,width,height,rx,ry]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.DrawTiles = function(sheet,tileData,smooth,flags,count) { var $x = ["DrawTiles",9,sheet,tileData,smooth,flags,count]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.DrawTriangles = function(vertices,indices,uvtData,culling,colors,blendMode) { var $x = ["DrawTriangles",10,vertices,indices,uvtData,culling,colors,blendMode]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.EndFill = ["EndFill",11];
 openfl.display.DrawCommand.EndFill.toString = $estr;
 openfl.display.DrawCommand.EndFill.__enum__ = openfl.display.DrawCommand;
-openfl.display.DrawCommand.LineStyle = function(thickness,color,alpha,pixelHinting,scaleMode,caps,joints,miterLimit) { var $x = ["LineStyle",11,thickness,color,alpha,pixelHinting,scaleMode,caps,joints,miterLimit]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.LineTo = function(x,y) { var $x = ["LineTo",12,x,y]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
-openfl.display.DrawCommand.MoveTo = function(x,y) { var $x = ["MoveTo",13,x,y]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.LineStyle = function(thickness,color,alpha,pixelHinting,scaleMode,caps,joints,miterLimit) { var $x = ["LineStyle",12,thickness,color,alpha,pixelHinting,scaleMode,caps,joints,miterLimit]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.LineTo = function(x,y) { var $x = ["LineTo",13,x,y]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.MoveTo = function(x,y) { var $x = ["MoveTo",14,x,y]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.DrawPathC = function(commands,data,winding) { var $x = ["DrawPathC",15,commands,data,winding]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
+openfl.display.DrawCommand.OverrideMatrix = function(matrix) { var $x = ["OverrideMatrix",16,matrix]; $x.__enum__ = openfl.display.DrawCommand; $x.toString = $estr; return $x; };
 openfl.display.GraphicsPathCommand = function() { };
 $hxClasses["openfl.display.GraphicsPathCommand"] = openfl.display.GraphicsPathCommand;
 openfl.display.GraphicsPathCommand.__name__ = ["openfl","display","GraphicsPathCommand"];
@@ -15897,6 +19063,7 @@ openfl.display.OpenGLView = function() {
 };
 $hxClasses["openfl.display.OpenGLView"] = openfl.display.OpenGLView;
 openfl.display.OpenGLView.__name__ = ["openfl","display","OpenGLView"];
+openfl.display.OpenGLView.__properties__ = {get_isSupported:"get_isSupported"}
 openfl.display.OpenGLView.isSupported = null;
 openfl.display.OpenGLView.get_isSupported = function() {
 	if(!window.WebGLRenderingContext) return false;
@@ -16033,114 +19200,15 @@ $hxClasses["openfl.display.Shape"] = openfl.display.Shape;
 openfl.display.Shape.__name__ = ["openfl","display","Shape"];
 openfl.display.Shape.__super__ = openfl.display.DisplayObject;
 openfl.display.Shape.prototype = $extend(openfl.display.DisplayObject.prototype,{
-	__getBounds: function(rect,matrix) {
-		if(this.__graphics != null) this.__graphics.__getBounds(rect,this.__worldTransform);
-	}
-	,__hitTest: function(x,y,shapeFlag,stack,interactiveOnly) {
-		if(this.get_visible() && this.__graphics != null && this.__graphics.__hitTest(x,y,shapeFlag,this.__getTransform())) {
-			if(!interactiveOnly) stack.push(this);
-			return true;
+	get_graphics: function() {
+		if(this.__graphics == null) {
+			this.__graphics = new openfl.display.Graphics();
+			this.__graphics.__owner = this;
 		}
-		return false;
-	}
-	,__renderCanvas: function(renderSession) {
-		openfl._internal.renderer.canvas.CanvasShape.render(this,renderSession);
-	}
-	,__renderDOM: function(renderSession) {
-		openfl._internal.renderer.dom.DOMShape.render(this,renderSession);
-	}
-	,__renderGL: function(renderSession) {
-		if(!this.__renderable || this.__worldAlpha <= 0) return;
-		if(this.__graphics != null) openfl._internal.renderer.opengl.utils.GraphicsRenderer.render(this,renderSession);
-	}
-	,__renderMask: function(renderSession) {
-		if(this.__graphics != null) openfl._internal.renderer.canvas.CanvasGraphics.renderMask(this.__graphics,renderSession);
-	}
-	,get_graphics: function() {
-		if(this.__graphics == null) this.__graphics = new openfl.display.Graphics();
 		return this.__graphics;
 	}
 	,__class__: openfl.display.Shape
-});
-openfl.display.SimpleButton = function(upState,overState,downState,hitTestState) {
-	openfl.display.DisplayObjectContainer.call(this);
-	this.enabled = true;
-	this.trackAsMenu = false;
-	this.useHandCursor = true;
-	this.mouseChildren = false;
-	this.set_upState(upState != null?upState:this.__generateDefaultState());
-	this.set_overState(overState != null?overState:this.__generateDefaultState());
-	this.set_downState(downState != null?downState:this.__generateDefaultState());
-	this.set_hitTestState(hitTestState != null?hitTestState:this.__generateDefaultState());
-	this.set___currentState(this.upState);
-};
-$hxClasses["openfl.display.SimpleButton"] = openfl.display.SimpleButton;
-openfl.display.SimpleButton.__name__ = ["openfl","display","SimpleButton"];
-openfl.display.SimpleButton.__super__ = openfl.display.DisplayObjectContainer;
-openfl.display.SimpleButton.prototype = $extend(openfl.display.DisplayObjectContainer.prototype,{
-	switchState: function(state) {
-		if(this.__currentState != null && this.__currentState.parent == this) this.removeChild(this.__currentState);
-		if(state != null) this.addChild(state);
-	}
-	,__generateDefaultState: function() {
-		return new openfl.display.DisplayObject();
-	}
-	,set_downState: function(downState) {
-		if(this.downState != null && this.__currentState == this.downState) this.set___currentState(downState);
-		return this.downState = downState;
-	}
-	,set_hitTestState: function(hitTestState) {
-		if(hitTestState != this.hitTestState) {
-			if(this.hitTestState != null && this.hitTestState.parent == this) this.removeChild(this.hitTestState);
-			this.removeEventListener(openfl.events.MouseEvent.MOUSE_DOWN,$bind(this,this.__this_onMouseDown));
-			this.removeEventListener(openfl.events.MouseEvent.MOUSE_OUT,$bind(this,this.__this_onMouseOut));
-			this.removeEventListener(openfl.events.MouseEvent.MOUSE_OVER,$bind(this,this.__this_onMouseOver));
-			this.removeEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.__this_onMouseUp));
-			if(hitTestState != null) {
-				this.addEventListener(openfl.events.MouseEvent.MOUSE_DOWN,$bind(this,this.__this_onMouseDown));
-				this.addEventListener(openfl.events.MouseEvent.MOUSE_OUT,$bind(this,this.__this_onMouseOut));
-				this.addEventListener(openfl.events.MouseEvent.MOUSE_OVER,$bind(this,this.__this_onMouseOver));
-				this.addEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.__this_onMouseUp));
-				hitTestState.set_alpha(0.0);
-				this.addChild(hitTestState);
-			}
-		}
-		return this.hitTestState = hitTestState;
-	}
-	,set_overState: function(overState) {
-		if(this.overState != null && this.__currentState == this.overState) this.set___currentState(overState);
-		return this.overState = overState;
-	}
-	,get_soundTransform: function() {
-		if(this.__soundTransform == null) this.__soundTransform = new openfl.media.SoundTransform();
-		return new openfl.media.SoundTransform(this.__soundTransform.volume,this.__soundTransform.pan);
-	}
-	,set_soundTransform: function(value) {
-		this.__soundTransform = new openfl.media.SoundTransform(value.volume,value.pan);
-		return value;
-	}
-	,set_upState: function(upState) {
-		if(this.upState != null && this.__currentState == this.upState) this.set___currentState(upState);
-		return this.upState = upState;
-	}
-	,set___currentState: function(state) {
-		if(this.__currentState == state) return state;
-		this.switchState(state);
-		return this.__currentState = state;
-	}
-	,__this_onMouseDown: function(event) {
-		this.set___currentState(this.downState);
-	}
-	,__this_onMouseOut: function(event) {
-		if(this.upState != this.__currentState) this.set___currentState(this.upState);
-	}
-	,__this_onMouseOver: function(event) {
-		if(this.overState != this.__currentState) this.set___currentState(this.overState);
-	}
-	,__this_onMouseUp: function(event) {
-		this.set___currentState(this.overState);
-	}
-	,__class__: openfl.display.SimpleButton
+	,__properties__: $extend(openfl.display.DisplayObject.prototype.__properties__,{get_graphics:"get_graphics"})
 });
 openfl.display.SpreadMethod = $hxClasses["openfl.display.SpreadMethod"] = { __ename__ : true, __constructs__ : ["REPEAT","REFLECT","PAD"] };
 openfl.display.SpreadMethod.REPEAT = ["REPEAT",0];
@@ -16155,12 +19223,14 @@ openfl.display.SpreadMethod.PAD.__enum__ = openfl.display.SpreadMethod;
 openfl.display.Stage = function(width,height,color) {
 	this.__mouseY = 0;
 	this.__mouseX = 0;
-	openfl.display.Sprite.call(this);
+	this.__mouseOutStack = [];
+	openfl.display.DisplayObjectContainer.call(this);
 	if(color == null) {
 		this.__transparent = true;
 		this.set_color(0);
 	} else this.set_color(color);
 	this.set_name(null);
+	this.__displayState = openfl.display.StageDisplayState.NORMAL;
 	this.__mouseX = 0;
 	this.__mouseY = 0;
 	this.stageWidth = width;
@@ -16168,7 +19238,6 @@ openfl.display.Stage = function(width,height,color) {
 	this.stage = this;
 	this.align = openfl.display.StageAlign.TOP_LEFT;
 	this.allowsFullScreen = false;
-	this.set_displayState(openfl.display.StageDisplayState.NORMAL);
 	this.frameRate = 60;
 	this.quality = openfl.display.StageQuality.HIGH;
 	this.scaleMode = openfl.display.StageScaleMode.NO_SCALE;
@@ -16201,16 +19270,143 @@ openfl.display.Stage = function(width,height,color) {
 };
 $hxClasses["openfl.display.Stage"] = openfl.display.Stage;
 openfl.display.Stage.__name__ = ["openfl","display","Stage"];
-openfl.display.Stage.__super__ = openfl.display.Sprite;
-openfl.display.Stage.prototype = $extend(openfl.display.Sprite.prototype,{
+openfl.display.Stage.__interfaces__ = [lime.app.IModule];
+openfl.display.Stage.__super__ = openfl.display.DisplayObjectContainer;
+openfl.display.Stage.prototype = $extend(openfl.display.DisplayObjectContainer.prototype,{
 	globalToLocal: function(pos) {
 		return pos;
+	}
+	,init: function(context) {
+		switch(context[1]) {
+		case 0:
+			var gl = context[2];
+			this.__renderer = new openfl._internal.renderer.opengl.GLRenderer(this.stageWidth,this.stageHeight,gl);
+			break;
+		case 1:
+			var context1 = context[2];
+			this.__renderer = new openfl._internal.renderer.canvas.CanvasRenderer(this.stageWidth,this.stageHeight,context1);
+			break;
+		case 2:
+			var element = context[2];
+			this.__renderer = new openfl._internal.renderer.dom.DOMRenderer(this.stageWidth,this.stageHeight,element);
+			break;
+		default:
+		}
 	}
 	,invalidate: function() {
 		this.__invalidated = true;
 	}
 	,localToGlobal: function(pos) {
 		return pos;
+	}
+	,onGamepadAxisMove: function(gamepad,axis,value) {
+	}
+	,onGamepadButtonDown: function(gamepad,button) {
+	}
+	,onGamepadButtonUp: function(gamepad,button) {
+	}
+	,onGamepadConnect: function(gamepad) {
+	}
+	,onGamepadDisconnect: function(gamepad) {
+	}
+	,onKeyDown: function(keyCode,modifier) {
+		this.__onKey(openfl.events.KeyboardEvent.KEY_DOWN,keyCode,modifier);
+	}
+	,onKeyUp: function(keyCode,modifier) {
+		this.__onKey(openfl.events.KeyboardEvent.KEY_UP,keyCode,modifier);
+	}
+	,onMouseDown: function(x,y,button) {
+		var type;
+		switch(button) {
+		case 1:
+			type = openfl.events.MouseEvent.MIDDLE_MOUSE_DOWN;
+			break;
+		case 2:
+			type = openfl.events.MouseEvent.RIGHT_MOUSE_DOWN;
+			break;
+		default:
+			type = openfl.events.MouseEvent.MOUSE_DOWN;
+		}
+		this.__onMouse(type,x,y,button);
+	}
+	,onMouseMove: function(x,y) {
+		this.__onMouse(openfl.events.MouseEvent.MOUSE_MOVE,x,y,0);
+	}
+	,onMouseMoveRelative: function(x,y) {
+	}
+	,onMouseUp: function(x,y,button) {
+		var type;
+		switch(button) {
+		case 1:
+			type = openfl.events.MouseEvent.MIDDLE_MOUSE_UP;
+			break;
+		case 2:
+			type = openfl.events.MouseEvent.RIGHT_MOUSE_UP;
+			break;
+		default:
+			type = openfl.events.MouseEvent.MOUSE_UP;
+		}
+		this.__onMouse(type,x,y,button);
+	}
+	,onMouseWheel: function(deltaX,deltaY) {
+		this.__onMouseWheel(deltaX,deltaY);
+	}
+	,onRenderContextLost: function() {
+	}
+	,onRenderContextRestored: function(context) {
+	}
+	,onTouchMove: function(x,y,id) {
+		this.__onTouch("touchMove",x,y,id);
+	}
+	,onTouchEnd: function(x,y,id) {
+		this.__onTouch("touchEnd",x,y,id);
+	}
+	,onTouchStart: function(x,y,id) {
+		this.__onTouch("touchBegin",x,y,id);
+	}
+	,onWindowActivate: function() {
+		var event = new openfl.events.Event(openfl.events.Event.ACTIVATE);
+		this.__broadcast(event,true);
+	}
+	,onWindowClose: function() {
+	}
+	,onWindowDeactivate: function() {
+		var event = new openfl.events.Event(openfl.events.Event.DEACTIVATE);
+		this.__broadcast(event,true);
+	}
+	,onWindowFocusIn: function() {
+	}
+	,onWindowFocusOut: function() {
+	}
+	,onWindowFullscreen: function() {
+	}
+	,onWindowMinimize: function() {
+	}
+	,onWindowMove: function(x,y) {
+	}
+	,onWindowResize: function(width,height) {
+		this.stageWidth = width;
+		this.stageHeight = height;
+		if(this.__renderer != null) this.__renderer.resize(width,height);
+		var event = new openfl.events.Event(openfl.events.Event.RESIZE);
+		this.__broadcast(event,false);
+	}
+	,onWindowRestore: function() {
+	}
+	,render: function(context) {
+		if(this.__rendering) return;
+		this.__rendering = true;
+		this.__broadcast(new openfl.events.Event(openfl.events.Event.ENTER_FRAME),true);
+		if(this.__invalidated) {
+			this.__invalidated = false;
+			this.__broadcast(new openfl.events.Event(openfl.events.Event.RENDER),true);
+		}
+		this.__renderable = true;
+		this.__update(false,true);
+		if(this.__renderer != null) this.__renderer.render(this);
+		this.__rendering = false;
+	}
+	,update: function(deltaTime) {
 	}
 	,__drag: function(mouse) {
 		var parent = this.__dragObject.parent;
@@ -16254,34 +19450,147 @@ openfl.display.Stage.prototype = $extend(openfl.display.Sprite.prototype,{
 		}
 	}
 	,__getInteractive: function(stack) {
-		stack.push(this);
+		if(stack != null) stack.push(this);
+		return true;
 	}
-	,__render: function(context) {
-		this.__broadcast(new openfl.events.Event(openfl.events.Event.ENTER_FRAME),true);
-		if(this.__invalidated) {
-			this.__invalidated = false;
-			this.__broadcast(new openfl.events.Event(openfl.events.Event.RENDER),true);
+	,__onKey: function(type,keyCode,modifier) {
+		openfl.events.MouseEvent.__altKey = lime.ui._KeyModifier.KeyModifier_Impl_.get_altKey(modifier);
+		openfl.events.MouseEvent.__commandKey = lime.ui._KeyModifier.KeyModifier_Impl_.get_metaKey(modifier);
+		openfl.events.MouseEvent.__ctrlKey = lime.ui._KeyModifier.KeyModifier_Impl_.get_ctrlKey(modifier);
+		openfl.events.MouseEvent.__shiftKey = lime.ui._KeyModifier.KeyModifier_Impl_.get_shiftKey(modifier);
+		var stack = new Array();
+		if(this.__focus == null) this.__getInteractive(stack); else this.__focus.__getInteractive(stack);
+		if(stack.length > 0) {
+			var keyCode1 = openfl.ui.Keyboard.convertKeyCode(keyCode);
+			var charCode = openfl.ui.Keyboard.__getCharCode(keyCode1,lime.ui._KeyModifier.KeyModifier_Impl_.get_shiftKey(modifier));
+			var event = new openfl.events.KeyboardEvent(type,true,false,charCode,keyCode1,null,lime.ui._KeyModifier.KeyModifier_Impl_.get_ctrlKey(modifier),lime.ui._KeyModifier.KeyModifier_Impl_.get_altKey(modifier),lime.ui._KeyModifier.KeyModifier_Impl_.get_shiftKey(modifier),lime.ui._KeyModifier.KeyModifier_Impl_.get_metaKey(modifier));
+			stack.reverse();
+			this.__fireEvent(event,stack);
 		}
-		this.__renderable = true;
-		this.__update(false,true);
-		switch(context[1]) {
-		case 0:
-			var gl = context[2];
-			if(this.__renderer == null) this.__renderer = new openfl._internal.renderer.opengl.GLRenderer(this.stageWidth,this.stageHeight,gl);
-			this.__renderer.render(this);
+	}
+	,__onMouse: function(type,x,y,button) {
+		if(button > 2) return;
+		this.__mouseX = x;
+		this.__mouseY = y;
+		var stack = [];
+		var target = null;
+		var targetPoint = new openfl.geom.Point(x,y);
+		if(this.__hitTest(x,y,false,stack,true)) target = stack[stack.length - 1]; else {
+			target = this;
+			stack = [this];
+		}
+		if(type == openfl.events.MouseEvent.MOUSE_DOWN) this.set_focus(target);
+		this.__fireEvent(openfl.events.MouseEvent.__create(type,button,this.__mouseX,this.__mouseY,target == this?targetPoint:target.globalToLocal(targetPoint),target),stack);
+		var clickType;
+		switch(type) {
+		case openfl.events.MouseEvent.MOUSE_UP:
+			clickType = openfl.events.MouseEvent.CLICK;
 			break;
-		case 1:
-			var context1 = context[2];
-			if(this.__renderer == null) this.__renderer = new openfl._internal.renderer.canvas.CanvasRenderer(this.stageWidth,this.stageHeight,context1);
-			this.__renderer.render(this);
+		case openfl.events.MouseEvent.MIDDLE_MOUSE_UP:
+			clickType = openfl.events.MouseEvent.MIDDLE_CLICK;
 			break;
-		case 2:
-			var element = context[2];
-			if(this.__renderer == null) this.__renderer = new openfl._internal.renderer.dom.DOMRenderer(this.stageWidth,this.stageHeight,element);
-			this.__renderer.render(this);
+		case openfl.events.MouseEvent.RIGHT_MOUSE_UP:
+			clickType = openfl.events.MouseEvent.RIGHT_CLICK;
 			break;
 		default:
+			clickType = null;
 		}
+		if(clickType != null) {
+			this.__fireEvent(openfl.events.MouseEvent.__create(clickType,button,this.__mouseX,this.__mouseY,target == this?targetPoint:target.globalToLocal(targetPoint),target),stack);
+			if(type == openfl.events.MouseEvent.MOUSE_UP && (js.Boot.__cast(target , openfl.display.InteractiveObject)).doubleClickEnabled) {
+				var currentTime = openfl.Lib.getTimer();
+				if(currentTime - this.__lastClickTime < 500) {
+					this.__fireEvent(openfl.events.MouseEvent.__create(openfl.events.MouseEvent.DOUBLE_CLICK,button,this.__mouseX,this.__mouseY,target == this?targetPoint:target.globalToLocal(targetPoint),target),stack);
+					this.__lastClickTime = 0;
+				} else this.__lastClickTime = currentTime;
+			}
+		}
+		var cursor = null;
+		var _g = 0;
+		while(_g < stack.length) {
+			var target1 = stack[_g];
+			++_g;
+			cursor = target1.__getCursor();
+			if(cursor != null) {
+				lime.ui.Mouse.set_cursor(cursor);
+				break;
+			}
+		}
+		if(cursor == null) lime.ui.Mouse.set_cursor(lime.ui.MouseCursor.ARROW);
+		var _g1 = 0;
+		var _g11 = this.__mouseOutStack;
+		while(_g1 < _g11.length) {
+			var target2 = _g11[_g1];
+			++_g1;
+			if(HxOverrides.indexOf(stack,target2,0) == -1) {
+				HxOverrides.remove(this.__mouseOutStack,target2);
+				var localPoint = target2.globalToLocal(targetPoint);
+				target2.dispatchEvent(new openfl.events.MouseEvent(openfl.events.MouseEvent.MOUSE_OUT,false,false,localPoint.x,localPoint.y,target2));
+			}
+		}
+		var _g2 = 0;
+		while(_g2 < stack.length) {
+			var target3 = stack[_g2];
+			++_g2;
+			if(HxOverrides.indexOf(this.__mouseOutStack,target3,0) == -1) {
+				if(target3.hasEventListener(openfl.events.MouseEvent.MOUSE_OVER)) {
+					var localPoint1 = target3.globalToLocal(targetPoint);
+					target3.dispatchEvent(new openfl.events.MouseEvent(openfl.events.MouseEvent.MOUSE_OVER,false,false,localPoint1.x,localPoint1.y,target3));
+				}
+				if(target3.hasEventListener(openfl.events.MouseEvent.MOUSE_OUT)) this.__mouseOutStack.push(target3);
+			}
+		}
+		if(this.__dragObject != null) this.__drag(targetPoint);
+	}
+	,__onMouseWheel: function(deltaX,deltaY) {
+		var x = this.__mouseX;
+		var y = this.__mouseY;
+		var stack = [];
+		if(!this.__hitTest(x,y,false,stack,true)) stack = [this];
+		var target = stack[stack.length - 1];
+		var targetPoint = new openfl.geom.Point(x,y);
+		var delta = deltaY | 0;
+		this.__fireEvent(openfl.events.MouseEvent.__create(openfl.events.MouseEvent.MOUSE_WHEEL,0,this.__mouseX,this.__mouseY,target == this?targetPoint:target.globalToLocal(targetPoint),target,delta),stack);
+	}
+	,__onTouch: function(type,x,y,id) {
+		var point = new openfl.geom.Point(x,y);
+		this.__mouseX = point.x;
+		this.__mouseY = point.y;
+		var __stack = [];
+		var mouseType;
+		switch(type) {
+		case "touchBegin":
+			mouseType = openfl.events.MouseEvent.MOUSE_DOWN;
+			break;
+		case "touchMove":
+			mouseType = openfl.events.MouseEvent.MOUSE_MOVE;
+			break;
+		case "touchEnd":
+			mouseType = openfl.events.MouseEvent.MOUSE_UP;
+			break;
+		default:
+			mouseType = null;
+		}
+		if(this.__hitTest(x,y,false,__stack,true)) {
+			var target = __stack[__stack.length - 1];
+			var localPoint = target.globalToLocal(point);
+			var touchEvent = openfl.events.TouchEvent.__create(type,null,this.__mouseX,this.__mouseY,localPoint,target);
+			touchEvent.touchPointID = id;
+			touchEvent.isPrimaryTouchPoint = true;
+			var mouseEvent = openfl.events.MouseEvent.__create(mouseType,0,this.__mouseX,this.__mouseY,localPoint,target);
+			mouseEvent.buttonDown = type != "touchEnd";
+			this.__fireEvent(touchEvent,__stack);
+			this.__fireEvent(mouseEvent,__stack);
+		} else {
+			var touchEvent1 = openfl.events.TouchEvent.__create(type,null,this.__mouseX,this.__mouseY,point,this);
+			touchEvent1.touchPointID = id;
+			touchEvent1.isPrimaryTouchPoint = true;
+			var mouseEvent1 = openfl.events.MouseEvent.__create(mouseType,0,this.__mouseX,this.__mouseY,point,this);
+			mouseEvent1.buttonDown = type != "touchEnd";
+			this.__fireEvent(touchEvent1,[this.stage]);
+			this.__fireEvent(mouseEvent1,[this.stage]);
+		}
+		if(type == "touchMove" && this.__dragObject != null) this.__drag(point);
 	}
 	,__resize: function() {
 	}
@@ -16305,17 +19614,17 @@ openfl.display.Stage.prototype = $extend(openfl.display.Sprite.prototype,{
 		this.__dragBounds = null;
 		this.__dragObject = null;
 	}
-	,__update: function(transformOnly,updateChildren) {
+	,__update: function(transformOnly,updateChildren,maskGrahpics) {
 		if(transformOnly) {
 			if(openfl.display.DisplayObject.__worldTransformDirty > 0) {
-				openfl.display.Sprite.prototype.__update.call(this,true,updateChildren);
+				openfl.display.DisplayObjectContainer.prototype.__update.call(this,true,updateChildren,maskGrahpics);
 				if(updateChildren) {
 					openfl.display.DisplayObject.__worldTransformDirty = 0;
 					this.__dirty = true;
 				}
 			}
 		} else if(openfl.display.DisplayObject.__worldTransformDirty > 0 || this.__dirty || openfl.display.DisplayObject.__worldRenderDirty > 0) {
-			openfl.display.Sprite.prototype.__update.call(this,false,updateChildren);
+			openfl.display.DisplayObjectContainer.prototype.__update.call(this,false,updateChildren,maskGrahpics);
 			if(updateChildren) {
 				openfl.display.DisplayObject.__worldTransformDirty = 0;
 				openfl.display.DisplayObject.__worldRenderDirty = 0;
@@ -16367,11 +19676,21 @@ openfl.display.Stage.prototype = $extend(openfl.display.Sprite.prototype,{
 		}
 		return this.__focus;
 	}
+	,get_displayState: function() {
+		return this.__displayState;
+	}
 	,set_displayState: function(value) {
-		this.displayState = value;
-		return value;
+		switch(value[1]) {
+		case 0:
+			openfl.Lib.application.windows[0].set_fullscreen(false);
+			break;
+		default:
+			openfl.Lib.application.windows[0].set_fullscreen(true);
+		}
+		return this.__displayState = value;
 	}
 	,__class__: openfl.display.Stage
+	,__properties__: $extend(openfl.display.DisplayObjectContainer.prototype.__properties__,{set_focus:"set_focus",get_focus:"get_focus",set_displayState:"set_displayState",get_displayState:"get_displayState",set_color:"set_color",get_color:"get_color"})
 });
 openfl.display.Stage3D = function() {
 	openfl.events.EventDispatcher.call(this);
@@ -17692,6 +21011,9 @@ openfl.events.Event.prototype = {
 	,isDefaultPrevented: function() {
 		return this.__isCancelled || this.__isCancelledNow;
 	}
+	,preventDefault: function() {
+		this.__isCancelled = true;
+	}
 	,stopImmediatePropagation: function() {
 		this.__isCancelled = true;
 		this.__isCancelledNow = true;
@@ -17871,8 +21193,12 @@ openfl.events.MouseEvent = function(type,bubbles,cancelable,localX,localY,relate
 };
 $hxClasses["openfl.events.MouseEvent"] = openfl.events.MouseEvent;
 openfl.events.MouseEvent.__name__ = ["openfl","events","MouseEvent"];
-openfl.events.MouseEvent.__create = function(type,button,local,target) {
-	var delta = 2;
+openfl.events.MouseEvent.__altKey = null;
+openfl.events.MouseEvent.__commandKey = null;
+openfl.events.MouseEvent.__ctrlKey = null;
+openfl.events.MouseEvent.__shiftKey = null;
+openfl.events.MouseEvent.__create = function(type,button,stageX,stageY,local,target,delta) {
+	if(delta == null) delta = 0;
 	switch(type) {
 	case openfl.events.MouseEvent.MOUSE_DOWN:case openfl.events.MouseEvent.MIDDLE_MOUSE_DOWN:case openfl.events.MouseEvent.RIGHT_MOUSE_DOWN:
 		openfl.events.MouseEvent.__buttonDown[button] = true;
@@ -17881,11 +21207,11 @@ openfl.events.MouseEvent.__create = function(type,button,local,target) {
 		openfl.events.MouseEvent.__buttonDown[button] = false;
 		break;
 	}
-	var pseudoEvent = new openfl.events.MouseEvent(type,true,false,local.x,local.y,null,false,false,false,openfl.events.MouseEvent.__buttonDown[button],delta);
-	pseudoEvent.stageX = openfl.Lib.current.stage.get_mouseX();
-	pseudoEvent.stageY = openfl.Lib.current.stage.get_mouseY();
-	pseudoEvent.target = target;
-	return pseudoEvent;
+	var event = new openfl.events.MouseEvent(type,true,false,local.x,local.y,null,openfl.events.MouseEvent.__ctrlKey,openfl.events.MouseEvent.__altKey,openfl.events.MouseEvent.__shiftKey,openfl.events.MouseEvent.__buttonDown[button],delta,openfl.events.MouseEvent.__commandKey);
+	event.stageX = stageX;
+	event.stageY = stageY;
+	event.target = target;
+	return event;
 };
 openfl.events.MouseEvent.__super__ = openfl.events.Event;
 openfl.events.MouseEvent.prototype = $extend(openfl.events.Event.prototype,{
@@ -17932,10 +21258,10 @@ openfl.events.TouchEvent = function(type,bubbles,cancelable,localX,localY,sizeX,
 };
 $hxClasses["openfl.events.TouchEvent"] = openfl.events.TouchEvent;
 openfl.events.TouchEvent.__name__ = ["openfl","events","TouchEvent"];
-openfl.events.TouchEvent.__create = function(type,touch,local,target) {
+openfl.events.TouchEvent.__create = function(type,touch,stageX,stageY,local,target) {
 	var evt = new openfl.events.TouchEvent(type,true,false,local.x,local.y,null,null,null,false,false,false,false,0,null,0);
-	evt.stageX = openfl.Lib.current.stage.get_mouseX();
-	evt.stageY = openfl.Lib.current.stage.get_mouseY();
+	evt.stageX = stageX;
+	evt.stageY = stageY;
 	evt.target = target;
 	return evt;
 };
@@ -17957,50 +21283,6 @@ openfl.filters.BitmapFilter.prototype = {
 	,__applyFilter: function(sourceData,targetData,sourceRect,destPoint) {
 	}
 	,__class__: openfl.filters.BitmapFilter
-};
-openfl.geom.ColorTransform = function(redMultiplier,greenMultiplier,blueMultiplier,alphaMultiplier,redOffset,greenOffset,blueOffset,alphaOffset) {
-	if(alphaOffset == null) alphaOffset = 0;
-	if(blueOffset == null) blueOffset = 0;
-	if(greenOffset == null) greenOffset = 0;
-	if(redOffset == null) redOffset = 0;
-	if(alphaMultiplier == null) alphaMultiplier = 1;
-	if(blueMultiplier == null) blueMultiplier = 1;
-	if(greenMultiplier == null) greenMultiplier = 1;
-	if(redMultiplier == null) redMultiplier = 1;
-	this.redMultiplier = redMultiplier;
-	this.greenMultiplier = greenMultiplier;
-	this.blueMultiplier = blueMultiplier;
-	this.alphaMultiplier = alphaMultiplier;
-	this.redOffset = redOffset;
-	this.greenOffset = greenOffset;
-	this.blueOffset = blueOffset;
-	this.alphaOffset = alphaOffset;
-};
-$hxClasses["openfl.geom.ColorTransform"] = openfl.geom.ColorTransform;
-openfl.geom.ColorTransform.__name__ = ["openfl","geom","ColorTransform"];
-openfl.geom.ColorTransform.prototype = {
-	concat: function(second) {
-		this.redMultiplier += second.redMultiplier;
-		this.greenMultiplier += second.greenMultiplier;
-		this.blueMultiplier += second.blueMultiplier;
-		this.alphaMultiplier += second.alphaMultiplier;
-	}
-	,get_color: function() {
-		return (this.redOffset | 0) << 16 | (this.greenOffset | 0) << 8 | (this.blueOffset | 0);
-	}
-	,set_color: function(value) {
-		this.redOffset = value >> 16 & 255;
-		this.greenOffset = value >> 8 & 255;
-		this.blueOffset = value & 255;
-		this.redMultiplier = 0;
-		this.greenMultiplier = 0;
-		this.blueMultiplier = 0;
-		return this.get_color();
-	}
-	,__toLimeColorMatrix: function() {
-		return new Float32Array([this.redMultiplier,0,0,0,this.redOffset / 255,0,this.greenMultiplier,0,0,this.greenOffset / 255,0,0,this.blueMultiplier,0,this.blueOffset / 255,0,0,0,this.alphaMultiplier,this.alphaOffset / 255]);
-	}
-	,__class__: openfl.geom.ColorTransform
 };
 openfl.geom.Matrix3D = function(v) {
 	if(v != null && v.length == 16) this.rawData = v; else {
@@ -20967,6 +24249,7 @@ openfl.geom.Matrix3D.prototype = {
 		return val;
 	}
 	,__class__: openfl.geom.Matrix3D
+	,__properties__: {set_position:"set_position",get_position:"get_position",get_determinant:"get_determinant"}
 };
 openfl.geom.Orientation3D = $hxClasses["openfl.geom.Orientation3D"] = { __ename__ : true, __constructs__ : ["AXIS_ANGLE","EULER_ANGLES","QUATERNION"] };
 openfl.geom.Orientation3D.AXIS_ANGLE = ["AXIS_ANGLE",0];
@@ -21071,6 +24354,7 @@ openfl.geom.Transform.prototype = {
 		return value;
 	}
 	,__class__: openfl.geom.Transform
+	,__properties__: {set_matrix3D:"set_matrix3D",get_matrix3D:"get_matrix3D",set_matrix:"set_matrix",get_matrix:"get_matrix",set_colorTransform:"set_colorTransform",get_colorTransform:"get_colorTransform"}
 };
 openfl.geom.Vector3D = function(x,y,z,w) {
 	if(w == null) w = 0;
@@ -21084,6 +24368,7 @@ openfl.geom.Vector3D = function(x,y,z,w) {
 };
 $hxClasses["openfl.geom.Vector3D"] = openfl.geom.Vector3D;
 openfl.geom.Vector3D.__name__ = ["openfl","geom","Vector3D"];
+openfl.geom.Vector3D.__properties__ = {get_Z_AXIS:"get_Z_AXIS",get_Y_AXIS:"get_Y_AXIS",get_X_AXIS:"get_X_AXIS"}
 openfl.geom.Vector3D.X_AXIS = null;
 openfl.geom.Vector3D.Y_AXIS = null;
 openfl.geom.Vector3D.Z_AXIS = null;
@@ -21187,6 +24472,7 @@ openfl.geom.Vector3D.prototype = {
 		return this.x * this.x + this.y * this.y + this.z * this.z;
 	}
 	,__class__: openfl.geom.Vector3D
+	,__properties__: {get_lengthSquared:"get_lengthSquared",get_length:"get_length"}
 };
 openfl.media = {};
 openfl.media.ID3Info = function() {
@@ -21212,6 +24498,9 @@ openfl.media.Sound.fromAudioBuffer = function(buffer) {
 	var sound = new openfl.media.Sound();
 	sound.__buffer = buffer;
 	return sound;
+};
+openfl.media.Sound.fromFile = function(path) {
+	return openfl.media.Sound.fromAudioBuffer(lime.audio.AudioBuffer.fromFile(path));
 };
 openfl.media.Sound.__super__ = openfl.events.EventDispatcher;
 openfl.media.Sound.prototype = $extend(openfl.events.EventDispatcher.prototype,{
@@ -21241,7 +24530,8 @@ openfl.media.Sound.prototype = $extend(openfl.events.EventDispatcher.prototype,{
 		if(loops == null) loops = 0;
 		if(startTime == null) startTime = 0.0;
 		if(sndTransform == null) sndTransform = new openfl.media.SoundTransform(1,0);
-		var instance = createjs.Sound.play(this.__soundID,"any",0,startTime | 0,loops,sndTransform.volume,sndTransform.pan);
+		var instance;
+		if(loops > 1) instance = createjs.Sound.play(this.__soundID,"any",0,startTime | 0,loops - 1,sndTransform.volume,sndTransform.pan); else instance = createjs.Sound.play(this.__soundID,"any",0,startTime | 0,0,sndTransform.volume,sndTransform.pan);
 		return new openfl.media.SoundChannel(instance);
 	}
 	,get_id3: function() {
@@ -21266,9 +24556,12 @@ openfl.media.Sound.prototype = $extend(openfl.events.EventDispatcher.prototype,{
 		}
 	}
 	,__class__: openfl.media.Sound
+	,__properties__: {get_id3:"get_id3"}
 });
 openfl.media.SoundChannel = function(soundInstance) {
 	openfl.events.EventDispatcher.call(this,this);
+	this.leftPeak = 1;
+	this.rightPeak = 1;
 	if(soundInstance != null) {
 		this.__soundInstance = soundInstance;
 		this.__soundInstance.addEventListener("complete",$bind(this,this.source_onComplete));
@@ -21314,6 +24607,7 @@ openfl.media.SoundChannel.prototype = $extend(openfl.events.EventDispatcher.prot
 		this.dispatchEvent(new openfl.events.Event(openfl.events.Event.SOUND_COMPLETE));
 	}
 	,__class__: openfl.media.SoundChannel
+	,__properties__: {set_soundTransform:"set_soundTransform",get_soundTransform:"get_soundTransform",set_position:"set_position",get_position:"get_position"}
 });
 openfl.media.SoundLoaderContext = function(bufferTime,checkPolicyFile) {
 	if(checkPolicyFile == null) checkPolicyFile = false;
@@ -21403,10 +24697,11 @@ openfl.system.SecurityDomain.prototype = {
 openfl.system.System = function() { };
 $hxClasses["openfl.system.System"] = openfl.system.System;
 openfl.system.System.__name__ = ["openfl","system","System"];
+openfl.system.System.__properties__ = {get_vmVersion:"get_vmVersion",get_totalMemory:"get_totalMemory"}
 openfl.system.System.totalMemory = null;
 openfl.system.System.vmVersion = null;
 openfl.system.System.exit = function(code) {
-	throw "System.exit is currently not supported for HTML5";
+	lime.system.System.exit(code);
 };
 openfl.system.System.gc = function() {
 };
@@ -21425,7 +24720,6 @@ openfl.system.System.get_totalMemory = function() {
 openfl.system.System.get_vmVersion = function() {
 	return "1.0.0";
 };
-openfl.text = {};
 openfl.text.AntiAliasType = $hxClasses["openfl.text.AntiAliasType"] = { __ename__ : true, __constructs__ : ["ADVANCED","NORMAL"] };
 openfl.text.AntiAliasType.ADVANCED = ["ADVANCED",0];
 openfl.text.AntiAliasType.ADVANCED.toString = $estr;
@@ -21434,7 +24728,7 @@ openfl.text.AntiAliasType.NORMAL = ["NORMAL",1];
 openfl.text.AntiAliasType.NORMAL.toString = $estr;
 openfl.text.AntiAliasType.NORMAL.__enum__ = openfl.text.AntiAliasType;
 openfl.text.Font = function(name) {
-	lime.graphics.Font.call(this,name);
+	lime.text.Font.call(this,name);
 };
 $hxClasses["openfl.text.Font"] = openfl.text.Font;
 openfl.text.Font.__name__ = ["openfl","text","Font"];
@@ -21444,6 +24738,7 @@ openfl.text.Font.enumerateFonts = function(enumerateDeviceFonts) {
 };
 openfl.text.Font.fromBytes = function(bytes) {
 	var font = new openfl.text.Font();
+	font.__fromBytes(bytes);
 	return font;
 };
 openfl.text.Font.fromFile = function(path) {
@@ -21456,9 +24751,22 @@ openfl.text.Font.registerFont = function(font) {
 	instance = js.Boot.__cast(Type.createInstance(font,[]) , openfl.text.Font);
 	if(instance != null) openfl.text.Font.__registeredFonts.push(instance);
 };
-openfl.text.Font.__super__ = lime.graphics.Font;
-openfl.text.Font.prototype = $extend(lime.graphics.Font.prototype,{
-	__class__: openfl.text.Font
+openfl.text.Font.__fromLimeFont = function(value) {
+	var font = new openfl.text.Font();
+	font.name = value.name;
+	font.src = value.src;
+	return font;
+};
+openfl.text.Font.__super__ = lime.text.Font;
+openfl.text.Font.prototype = $extend(lime.text.Font.prototype,{
+	get_fontName: function() {
+		return this.name;
+	}
+	,set_fontName: function(value) {
+		return this.name = value;
+	}
+	,__class__: openfl.text.Font
+	,__properties__: $extend(lime.text.Font.prototype.__properties__,{set_fontName:"set_fontName",get_fontName:"get_fontName"})
 });
 openfl.text.FontStyle = $hxClasses["openfl.text.FontStyle"] = { __ename__ : true, __constructs__ : ["REGULAR","ITALIC","BOLD_ITALIC","BOLD"] };
 openfl.text.FontStyle.REGULAR = ["REGULAR",0];
@@ -21493,548 +24801,6 @@ openfl.text.GridFitType.PIXEL.__enum__ = openfl.text.GridFitType;
 openfl.text.GridFitType.SUBPIXEL = ["SUBPIXEL",2];
 openfl.text.GridFitType.SUBPIXEL.toString = $estr;
 openfl.text.GridFitType.SUBPIXEL.__enum__ = openfl.text.GridFitType;
-openfl.text.TextField = function() {
-	openfl.display.InteractiveObject.call(this);
-	this.__width = 100;
-	this.__height = 100;
-	this.__text = "";
-	this.set_type(openfl.text.TextFieldType.DYNAMIC);
-	this.set_autoSize(openfl.text.TextFieldAutoSize.NONE);
-	this.displayAsPassword = false;
-	this.embedFonts = false;
-	this.selectable = true;
-	this.set_borderColor(0);
-	this.set_border(false);
-	this.set_backgroundColor(16777215);
-	this.set_background(false);
-	this.gridFitType = openfl.text.GridFitType.PIXEL;
-	this.maxChars = 0;
-	this.multiline = false;
-	this.sharpness = 0;
-	this.scrollH = 0;
-	this.scrollV = 1;
-	this.set_wordWrap(false);
-	if(openfl.text.TextField.__defaultTextFormat == null) {
-		openfl.text.TextField.__defaultTextFormat = new openfl.text.TextFormat("Times New Roman",12,0,false,false,false,"","",openfl.text.TextFormatAlign.LEFT,0,0,0,0);
-		openfl.text.TextField.__defaultTextFormat.blockIndent = 0;
-		openfl.text.TextField.__defaultTextFormat.bullet = false;
-		openfl.text.TextField.__defaultTextFormat.letterSpacing = 0;
-		openfl.text.TextField.__defaultTextFormat.kerning = false;
-	}
-	this.__textFormat = openfl.text.TextField.__defaultTextFormat.clone();
-};
-$hxClasses["openfl.text.TextField"] = openfl.text.TextField;
-openfl.text.TextField.__name__ = ["openfl","text","TextField"];
-openfl.text.TextField.__defaultTextFormat = null;
-openfl.text.TextField.__super__ = openfl.display.InteractiveObject;
-openfl.text.TextField.prototype = $extend(openfl.display.InteractiveObject.prototype,{
-	appendText: function(text) {
-		var _g = this;
-		_g.set_text(_g.get_text() + text);
-	}
-	,getCharBoundaries: function(a) {
-		openfl.Lib.notImplemented("TextField.getCharBoundaries");
-		return null;
-	}
-	,getCharIndexAtPoint: function(x,y) {
-		openfl.Lib.notImplemented("TextField.getCharIndexAtPoint");
-		return 0;
-	}
-	,getLineIndexAtPoint: function(x,y) {
-		openfl.Lib.notImplemented("TextField.getLineIndexAtPoint");
-		return 0;
-	}
-	,getLineMetrics: function(lineIndex) {
-		openfl.Lib.notImplemented("TextField.getLineMetrics");
-		return new openfl.text.TextLineMetrics(0,0,0,0,0,0);
-	}
-	,getLineOffset: function(lineIndex) {
-		openfl.Lib.notImplemented("TextField.getLineOffset");
-		return 0;
-	}
-	,getLineText: function(lineIndex) {
-		openfl.Lib.notImplemented("TextField.getLineText");
-		return "";
-	}
-	,getTextFormat: function(beginIndex,endIndex) {
-		if(endIndex == null) endIndex = 0;
-		if(beginIndex == null) beginIndex = 0;
-		return this.__textFormat.clone();
-	}
-	,setSelection: function(beginIndex,endIndex) {
-		openfl.Lib.notImplemented("TextField.setSelection");
-	}
-	,setTextFormat: function(format,beginIndex,endIndex) {
-		if(endIndex == null) endIndex = 0;
-		if(beginIndex == null) beginIndex = 0;
-		if(format.font != null) this.__textFormat.font = format.font;
-		if(format.size != null) this.__textFormat.size = format.size;
-		if(format.color != null) this.__textFormat.color = format.color;
-		if(format.bold != null) this.__textFormat.bold = format.bold;
-		if(format.italic != null) this.__textFormat.italic = format.italic;
-		if(format.underline != null) this.__textFormat.underline = format.underline;
-		if(format.url != null) this.__textFormat.url = format.url;
-		if(format.target != null) this.__textFormat.target = format.target;
-		if(format.align != null) this.__textFormat.align = format.align;
-		if(format.leftMargin != null) this.__textFormat.leftMargin = format.leftMargin;
-		if(format.rightMargin != null) this.__textFormat.rightMargin = format.rightMargin;
-		if(format.indent != null) this.__textFormat.indent = format.indent;
-		if(format.leading != null) this.__textFormat.leading = format.leading;
-		if(format.blockIndent != null) this.__textFormat.blockIndent = format.blockIndent;
-		if(format.bullet != null) this.__textFormat.bullet = format.bullet;
-		if(format.kerning != null) this.__textFormat.kerning = format.kerning;
-		if(format.letterSpacing != null) this.__textFormat.letterSpacing = format.letterSpacing;
-		if(format.tabStops != null) this.__textFormat.tabStops = format.tabStops;
-		this.__dirty = true;
-	}
-	,__clipText: function(value) {
-		var textWidth = this.__getTextWidth(value);
-		var fillPer = textWidth / this.__width;
-		this.set_text(fillPer > 1?(function($this) {
-			var $r;
-			var _this = $this.get_text();
-			var pos = -1 * Math.floor($this.get_text().length / fillPer);
-			$r = HxOverrides.substr(_this,pos,null);
-			return $r;
-		}(this)):this.get_text());
-		return this.get_text() + "";
-	}
-	,__disableInputMode: function() {
-		this.this_onRemovedFromStage(null);
-	}
-	,__enableInputMode: function() {
-		this.__cursorPosition = -1;
-		if(this.__hiddenInput == null) {
-			this.__hiddenInput = window.document.createElement("input");
-			this.__hiddenInput.type = "text";
-			this.__hiddenInput.style.position = "absolute";
-			this.__hiddenInput.style.opacity = "0";
-			this.__hiddenInput.style.pointerEvents = "none";
-			this.__hiddenInput.style.left = this.get_x() + (this.__canvas != null?this.__canvas.offsetLeft:0) + "px";
-			this.__hiddenInput.style.top = this.get_y() + (this.__canvas != null?this.__canvas.offsetTop:0) + "px";
-			this.__hiddenInput.style.width = this.__width + "px";
-			this.__hiddenInput.style.height = this.__height + "px";
-			this.__hiddenInput.style.zIndex = "0";
-			if(this.maxChars > 0) this.__hiddenInput.maxLength = this.maxChars;
-			window.document.body.appendChild(this.__hiddenInput);
-			this.__hiddenInput.value = this.__text;
-		}
-		if(this.stage != null) this.this_onAddedToStage(null); else {
-			this.addEventListener(openfl.events.Event.ADDED_TO_STAGE,$bind(this,this.this_onAddedToStage));
-			this.addEventListener(openfl.events.Event.REMOVED_FROM_STAGE,$bind(this,this.this_onRemovedFromStage));
-		}
-	}
-	,__getBounds: function(rect,matrix) {
-		var bounds = new openfl.geom.Rectangle(0,0,this.__width,this.__height);
-		bounds.transform(this.__worldTransform);
-		rect.__expand(bounds.x,bounds.y,bounds.width,bounds.height);
-	}
-	,__getFont: function(format) {
-		var font;
-		if(format.italic) font = "italic "; else font = "normal ";
-		font += "normal ";
-		if(format.bold) font += "bold "; else font += "normal ";
-		font += format.size + "px";
-		font += "/" + (format.size + format.leading + 4) + "px ";
-		font += "'" + (function($this) {
-			var $r;
-			var _g = format.font;
-			$r = (function($this) {
-				var $r;
-				switch(_g) {
-				case "_sans":
-					$r = "sans-serif";
-					break;
-				case "_serif":
-					$r = "serif";
-					break;
-				case "_typewriter":
-					$r = "monospace";
-					break;
-				default:
-					$r = format.font;
-				}
-				return $r;
-			}($this));
-			return $r;
-		}(this));
-		font += "'";
-		return font;
-	}
-	,__getPosition: function(x,y) {
-		var value = this.get_text();
-		var text = value;
-		var totalW = 0;
-		var pos = text.length;
-		if(x < this.__getTextWidth(text)) {
-			var _g1 = 0;
-			var _g = text.length;
-			while(_g1 < _g) {
-				var i = _g1++;
-				totalW += this.__getTextWidth(text.charAt(i));
-				if(totalW >= x) {
-					pos = i;
-					break;
-				}
-			}
-		}
-		return pos;
-	}
-	,__getTextWidth: function(text) {
-		if(this.__context == null) {
-			this.__canvas = window.document.createElement("canvas");
-			this.__context = this.__canvas.getContext("2d");
-		}
-		this.__context.font = this.__getFont(this.__textFormat);
-		this.__context.textAlign = "left";
-		return this.__context.measureText(text).width;
-	}
-	,__hitTest: function(x,y,shapeFlag,stack,interactiveOnly) {
-		if(!this.get_visible() || interactiveOnly && !this.mouseEnabled) return false;
-		var point = this.globalToLocal(new openfl.geom.Point(x,y));
-		if(point.x > 0 && point.y > 0 && point.x <= this.__width && point.y <= this.__height) {
-			if(stack != null) stack.push(this);
-			return true;
-		}
-		return false;
-	}
-	,__measureText: function() {
-		if(this.__ranges == null) {
-			this.__context.font = this.__getFont(this.__textFormat);
-			return [this.__context.measureText(this.__text).width];
-		} else {
-			var measurements = [];
-			var _g = 0;
-			var _g1 = this.__ranges;
-			while(_g < _g1.length) {
-				var range = _g1[_g];
-				++_g;
-				this.__context.font = this.__getFont(range.format);
-				measurements.push(this.__context.measureText(this.get_text().substring(range.start,range.end)).width);
-			}
-			return measurements;
-		}
-	}
-	,__measureTextWithDOM: function() {
-		var div = this.__div;
-		if(this.__div == null) {
-			div = window.document.createElement("div");
-			div.innerHTML = new EReg("\n","g").replace(this.__text,"<br>");
-			div.style.setProperty("font",this.__getFont(this.__textFormat),null);
-			div.style.position = "absolute";
-			div.style.top = "110%";
-			window.document.body.appendChild(div);
-		}
-		this.__measuredWidth = div.clientWidth;
-		if(this.__div == null) div.style.width = Std.string(this.__width) + "px";
-		this.__measuredHeight = div.clientHeight;
-		if(this.__div == null) window.document.body.removeChild(div);
-	}
-	,__renderCanvas: function(renderSession) {
-		openfl._internal.renderer.canvas.CanvasTextField.render(this,renderSession);
-	}
-	,__renderDOM: function(renderSession) {
-		openfl._internal.renderer.dom.DOMTextField.render(this,renderSession);
-	}
-	,__renderGL: function(renderSession) {
-		openfl._internal.renderer.opengl.GLTextField.render(this,renderSession);
-	}
-	,__startCursorTimer: function() {
-		this.__cursorTimer = haxe.Timer.delay($bind(this,this.__startCursorTimer),500);
-		this.__showCursor = !this.__showCursor;
-		this.__dirty = true;
-	}
-	,__stopCursorTimer: function() {
-		if(this.__cursorTimer != null) this.__cursorTimer.stop();
-	}
-	,input_onKeyUp: function(event) {
-		this.__isKeyDown = false;
-		if(event == null) event == window.event;
-		this.__text = this.__hiddenInput.value;
-		this.__ranges = null;
-		this.__isHTML = false;
-		this.__cursorPosition = this.__hiddenInput.selectionStart;
-		this.__selectionStart = this.__cursorPosition;
-		this.__dirty = true;
-		this.dispatchEvent(new openfl.events.Event(openfl.events.Event.CHANGE,true));
-	}
-	,input_onKeyDown: function(event) {
-		this.__isKeyDown = true;
-		if(event == null) event == window.event;
-		var keyCode = event.which;
-		var isShift = event.shiftKey;
-		if(keyCode == 65 && (event.ctrlKey || event.metaKey)) {
-			this.__hiddenInput.selectionStart = 0;
-			this.__hiddenInput.selectionEnd = this.get_text().length;
-			event.preventDefault();
-			this.__dirty = true;
-			return;
-		}
-		if(keyCode == 17 || event.metaKey || event.ctrlKey) return;
-		this.__text = this.__hiddenInput.value;
-		this.__ranges = null;
-		this.__isHTML = false;
-		this.__selectionStart = this.__hiddenInput.selectionStart;
-		this.__dirty = true;
-	}
-	,stage_onFocusOut: function(event) {
-		this.__cursorPosition = -1;
-		this.__hasFocus = false;
-		this.__stopCursorTimer();
-		this.__hiddenInput.blur();
-		this.__dirty = true;
-	}
-	,stage_onMouseMove: function(event) {
-		if(this.__hasFocus && this.__selectionStart >= 0) {
-			this.__cursorPosition = this.__getPosition(event.localX,event.localY);
-			this.__dirty = true;
-		}
-	}
-	,stage_onMouseUp: function(event) {
-		var upPos = this.__getPosition(event.localX,event.localY);
-		var leftPos;
-		var rightPos;
-		leftPos = Std["int"](Math.min(this.__selectionStart,upPos));
-		rightPos = Std["int"](Math.max(this.__selectionStart,upPos));
-		this.__selectionStart = leftPos;
-		this.__cursorPosition = rightPos;
-		this.stage.removeEventListener(openfl.events.MouseEvent.MOUSE_MOVE,$bind(this,this.stage_onMouseMove));
-		this.stage.addEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.stage_onMouseUp));
-		this.stage.set_focus(this);
-		if(this.__cursorPosition < 0) {
-			this.__cursorPosition = this.__text.length;
-			this.__selectionStart = this.__cursorPosition;
-		}
-		this.__hiddenInput.focus();
-		this.__hiddenInput.selectionStart = this.__selectionStart;
-		this.__hiddenInput.selectionEnd = this.__cursorPosition;
-		this.__stopCursorTimer();
-		this.__startCursorTimer();
-		this.__hasFocus = true;
-		this.__dirty = true;
-	}
-	,this_onAddedToStage: function(event) {
-		this.stage.addEventListener(openfl.events.FocusEvent.FOCUS_OUT,$bind(this,this.stage_onFocusOut));
-		this.__hiddenInput.addEventListener("keydown",$bind(this,this.input_onKeyDown));
-		this.__hiddenInput.addEventListener("keyup",$bind(this,this.input_onKeyUp));
-		this.__hiddenInput.addEventListener("input",$bind(this,this.input_onKeyUp));
-		this.addEventListener(openfl.events.MouseEvent.MOUSE_DOWN,$bind(this,this.this_onMouseDown));
-	}
-	,this_onMouseDown: function(event) {
-		this.__selectionStart = this.__getPosition(event.localX,event.localY);
-		this.stage.addEventListener(openfl.events.MouseEvent.MOUSE_MOVE,$bind(this,this.stage_onMouseMove));
-		this.stage.addEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.stage_onMouseUp));
-	}
-	,this_onRemovedFromStage: function(event) {
-		if(this.stage != null) this.stage.removeEventListener(openfl.events.FocusEvent.FOCUS_OUT,$bind(this,this.stage_onFocusOut));
-		if(this.__hiddenInput != null) this.__hiddenInput.removeEventListener("keydown",$bind(this,this.input_onKeyDown));
-		if(this.__hiddenInput != null) this.__hiddenInput.removeEventListener("keyup",$bind(this,this.input_onKeyUp));
-		if(this.__hiddenInput != null) this.__hiddenInput.removeEventListener("input",$bind(this,this.input_onKeyUp));
-		this.removeEventListener(openfl.events.MouseEvent.MOUSE_DOWN,$bind(this,this.this_onMouseDown));
-		if(this.stage != null) this.stage.removeEventListener(openfl.events.MouseEvent.MOUSE_MOVE,$bind(this,this.stage_onMouseMove));
-		if(this.stage != null) this.stage.removeEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.stage_onMouseUp));
-	}
-	,set_autoSize: function(value) {
-		if(value != this.autoSize) this.__dirty = true;
-		return this.autoSize = value;
-	}
-	,set_background: function(value) {
-		if(value != this.background) this.__dirty = true;
-		return this.background = value;
-	}
-	,set_backgroundColor: function(value) {
-		if(value != this.backgroundColor) this.__dirty = true;
-		return this.backgroundColor = value;
-	}
-	,set_border: function(value) {
-		if(value != this.border) this.__dirty = true;
-		return this.border = value;
-	}
-	,set_borderColor: function(value) {
-		if(value != this.borderColor) this.__dirty = true;
-		return this.borderColor = value;
-	}
-	,get_bottomScrollV: function() {
-		return this.get_numLines();
-	}
-	,get_caretPos: function() {
-		return 0;
-	}
-	,get_defaultTextFormat: function() {
-		return this.__textFormat.clone();
-	}
-	,set_defaultTextFormat: function(value) {
-		this.__textFormat.__merge(value);
-		return value;
-	}
-	,get_height: function() {
-		return this.__height * this.get_scaleY();
-	}
-	,set_height: function(value) {
-		if(this.get_scaleY() != 1 || value != this.__height) {
-			if(!this.__transformDirty) {
-				this.__transformDirty = true;
-				openfl.display.DisplayObject.__worldTransformDirty++;
-			}
-			this.__dirty = true;
-		}
-		this.set_scaleY(1);
-		return this.__height = value;
-	}
-	,get_htmlText: function() {
-		return this.__text;
-	}
-	,set_htmlText: function(value) {
-		if(!this.__isHTML || this.__text != value) this.__dirty = true;
-		this.__ranges = null;
-		this.__isHTML = true;
-		if(this.__div == null) {
-			value = new EReg("<br>","g").replace(value,"\n");
-			value = new EReg("<br/>","g").replace(value,"\n");
-			var segments = value.split("<font");
-			if(segments.length == 1) {
-				value = new EReg("<.*?>","g").replace(value,"");
-				if(this.__hiddenInput != null) this.__hiddenInput.value = value;
-				return this.__text = value;
-			} else {
-				value = "";
-				this.__ranges = [];
-				var _g = 0;
-				while(_g < segments.length) {
-					var segment = segments[_g];
-					++_g;
-					if(segment == "") continue;
-					var closeFontIndex = segment.indexOf("</font>");
-					if(closeFontIndex > -1) {
-						var start = segment.indexOf(">") + 1;
-						var end = closeFontIndex;
-						var format = this.__textFormat.clone();
-						var faceIndex = segment.indexOf("face=");
-						var colorIndex = segment.indexOf("color=");
-						var sizeIndex = segment.indexOf("size=");
-						if(faceIndex > -1 && faceIndex < start) {
-							var len = segment.indexOf("\"",faceIndex);
-							format.font = HxOverrides.substr(segment,faceIndex + 6,len);
-						}
-						if(colorIndex > -1 && colorIndex < start) format.color = Std.parseInt("0x" + HxOverrides.substr(segment,colorIndex + 8,6));
-						if(sizeIndex > -1 && sizeIndex < start) format.size = Std.parseInt((function($this) {
-							var $r;
-							var len1 = segment.indexOf("\"",sizeIndex);
-							$r = HxOverrides.substr(segment,sizeIndex + 6,len1);
-							return $r;
-						}(this)));
-						var sub = segment.substring(start,end);
-						sub = new EReg("<.*?>","g").replace(sub,"");
-						this.__ranges.push(new openfl.text.TextFormatRange(format,value.length,value.length + sub.length));
-						value += sub;
-						if(closeFontIndex + 7 < segment.length) {
-							sub = HxOverrides.substr(segment,closeFontIndex + 7,null);
-							this.__ranges.push(new openfl.text.TextFormatRange(this.__textFormat,value.length,value.length + sub.length));
-							value += sub;
-						}
-					} else {
-						this.__ranges.push(new openfl.text.TextFormatRange(this.__textFormat,value.length,value.length + segment.length));
-						value += segment;
-					}
-				}
-			}
-		}
-		if(this.__hiddenInput != null) this.__hiddenInput.value = value;
-		return this.__text = value;
-	}
-	,get_maxScrollH: function() {
-		return 0;
-	}
-	,get_maxScrollV: function() {
-		return 1;
-	}
-	,get_numLines: function() {
-		if(this.get_text() != "" && this.get_text() != null) {
-			var count = this.get_text().split("\n").length;
-			if(this.__isHTML) count += this.get_text().split("<br>").length - 1;
-			return count;
-		}
-		return 1;
-	}
-	,get_text: function() {
-		if(this.__isHTML) {
-		}
-		return this.__text;
-	}
-	,set_text: function(value) {
-		if(this.__text != value && this.__hiddenInput != null) this.__hiddenInput.value = value;
-		if(this.__isHTML || this.__text != value) this.__dirty = true;
-		this.__ranges = null;
-		this.__isHTML = false;
-		return this.__text = value;
-	}
-	,get_textColor: function() {
-		return this.__textFormat.color;
-	}
-	,set_textColor: function(value) {
-		if(value != this.__textFormat.color) this.__dirty = true;
-		if(this.__ranges != null) {
-			var _g = 0;
-			var _g1 = this.__ranges;
-			while(_g < _g1.length) {
-				var range = _g1[_g];
-				++_g;
-				range.format.color = value;
-			}
-		}
-		return this.__textFormat.color = value;
-	}
-	,get_textWidth: function() {
-		if(this.__canvas != null) {
-			var sizes = this.__measureText();
-			var total = 0;
-			var _g = 0;
-			while(_g < sizes.length) {
-				var size = sizes[_g];
-				++_g;
-				total += size;
-			}
-			return total;
-		} else if(this.__div != null) return this.__div.clientWidth; else {
-			this.__measureTextWithDOM();
-			return this.__measuredWidth;
-		}
-	}
-	,get_textHeight: function() {
-		if(this.__canvas != null) return this.__textFormat.size * 1.185; else if(this.__div != null) return this.__div.clientHeight; else {
-			this.__measureTextWithDOM();
-			return this.__measuredHeight + this.__textFormat.size * 0.185;
-		}
-	}
-	,set_type: function(value) {
-		if(value != this.type) {
-			if(value == openfl.text.TextFieldType.INPUT) this.__enableInputMode(); else this.__disableInputMode();
-			this.__dirty = true;
-		}
-		return this.type = value;
-	}
-	,get_width: function() {
-		if(this.autoSize == openfl.text.TextFieldAutoSize.LEFT) return (this.get_textWidth() + 4) * this.get_scaleX(); else return this.__width * this.get_scaleX();
-	}
-	,set_width: function(value) {
-		if(this.get_scaleX() != 1 || this.__width != value) {
-			if(!this.__transformDirty) {
-				this.__transformDirty = true;
-				openfl.display.DisplayObject.__worldTransformDirty++;
-			}
-			this.__dirty = true;
-		}
-		this.set_scaleX(1);
-		return this.__width = value;
-	}
-	,get_wordWrap: function() {
-		return this.wordWrap;
-	}
-	,set_wordWrap: function(value) {
-		return this.wordWrap = value;
-	}
-	,__class__: openfl.text.TextField
-});
 openfl.text.TextFormatRange = function(format,start,end) {
 	this.format = format;
 	this.start = start;
@@ -22155,103 +24921,489 @@ $hxClasses["openfl.ui.Keyboard"] = openfl.ui.Keyboard;
 openfl.ui.Keyboard.__name__ = ["openfl","ui","Keyboard"];
 openfl.ui.Keyboard.capsLock = null;
 openfl.ui.Keyboard.numLock = null;
-openfl.ui.Keyboard.isAccessible = function() {
-	return false;
-};
-openfl.ui.Keyboard.__convertMozillaCode = function(code) {
-	switch(code) {
+openfl.ui.Keyboard.convertKeyCode = function(key) {
+	switch(key) {
 	case 8:
 		return 8;
 	case 9:
 		return 9;
 	case 13:
 		return 13;
-	case 14:
-		return 13;
-	case 16:
-		return 16;
-	case 17:
-		return 17;
-	case 20:
-		return 20;
 	case 27:
 		return 27;
 	case 32:
 		return 32;
 	case 33:
-		return 33;
+		return 49;
 	case 34:
-		return 34;
+		return 222;
 	case 35:
-		return 35;
+		return 51;
 	case 36:
-		return 36;
+		return 52;
 	case 37:
-		return 37;
-	case 39:
-		return 39;
+		return 53;
 	case 38:
-		return 38;
+		return 55;
+	case 39:
+		return 222;
 	case 40:
-		return 40;
+		return 57;
+	case 41:
+		return 48;
+	case 42:
+		return 56;
+	case 44:
+		return 188;
 	case 45:
-		return 45;
+		return 189;
 	case 46:
+		return 190;
+	case 47:
+		return 191;
+	case 48:
+		return 48;
+	case 49:
+		return 49;
+	case 50:
+		return 50;
+	case 51:
+		return 51;
+	case 52:
+		return 52;
+	case 53:
+		return 53;
+	case 54:
+		return 54;
+	case 55:
+		return 55;
+	case 56:
+		return 56;
+	case 57:
+		return 57;
+	case 58:
+		return 186;
+	case 59:
+		return 186;
+	case 60:
+		return 60;
+	case 61:
+		return 187;
+	case 62:
+		return 190;
+	case 63:
+		return 191;
+	case 64:
+		return 50;
+	case 91:
+		return 219;
+	case 92:
+		return 220;
+	case 93:
+		return 221;
+	case 94:
+		return 54;
+	case 95:
+		return 189;
+	case 96:
+		return 192;
+	case 97:
+		return 65;
+	case 98:
+		return 66;
+	case 99:
+		return 67;
+	case 100:
+		return 68;
+	case 101:
+		return 69;
+	case 102:
+		return 70;
+	case 103:
+		return 71;
+	case 104:
+		return 72;
+	case 105:
+		return 73;
+	case 106:
+		return 74;
+	case 107:
+		return 75;
+	case 108:
+		return 76;
+	case 109:
+		return 77;
+	case 110:
+		return 78;
+	case 111:
+		return 79;
+	case 112:
+		return 80;
+	case 113:
+		return 81;
+	case 114:
+		return 82;
+	case 115:
+		return 83;
+	case 116:
+		return 84;
+	case 117:
+		return 85;
+	case 118:
+		return 86;
+	case 119:
+		return 87;
+	case 120:
+		return 88;
+	case 121:
+		return 89;
+	case 122:
+		return 90;
+	case 127:
 		return 46;
-	case 144:
+	case 1073741881:
+		return 20;
+	case 1073741882:
+		return 112;
+	case 1073741883:
+		return 113;
+	case 1073741884:
+		return 114;
+	case 1073741885:
+		return 115;
+	case 1073741886:
+		return 116;
+	case 1073741887:
+		return 117;
+	case 1073741888:
+		return 118;
+	case 1073741889:
+		return 119;
+	case 1073741890:
+		return 120;
+	case 1073741891:
+		return 121;
+	case 1073741892:
+		return 122;
+	case 1073741893:
+		return 123;
+	case 1073741894:
+		return 301;
+	case 1073741895:
+		return 145;
+	case 1073741896:
+		return 19;
+	case 1073741897:
+		return 45;
+	case 1073741898:
+		return 36;
+	case 1073741899:
+		return 33;
+	case 1073741901:
+		return 35;
+	case 1073741902:
+		return 34;
+	case 1073741903:
+		return 39;
+	case 1073741904:
+		return 37;
+	case 1073741905:
+		return 40;
+	case 1073741906:
+		return 38;
+	case 1073741907:
 		return 144;
+	case 1073741908:
+		return 111;
+	case 1073741909:
+		return 106;
+	case 1073741910:
+		return 109;
+	case 1073741911:
+		return 107;
+	case 1073741912:
+		return 108;
+	case 1073741913:
+		return 97;
+	case 1073741914:
+		return 98;
+	case 1073741915:
+		return 99;
+	case 1073741916:
+		return 100;
+	case 1073741917:
+		return 101;
+	case 1073741918:
+		return 102;
+	case 1073741919:
+		return 103;
+	case 1073741920:
+		return 104;
+	case 1073741921:
+		return 105;
+	case 1073741922:
+		return 96;
+	case 1073741923:
+		return 110;
+	case 1073741925:
+		return 302;
+	case 1073741928:
+		return 124;
+	case 1073741929:
+		return 125;
+	case 1073741930:
+		return 126;
+	case 1073741982:
+		return 13;
+	case 1073742044:
+		return 110;
+	case 1073742048:
+		return 17;
+	case 1073742049:
+		return 16;
+	case 1073742050:
+		return 18;
+	case 1073742051:
+		return 15;
+	case 1073742052:
+		return 17;
+	case 1073742053:
+		return 16;
+	case 1073742054:
+		return 18;
+	case 1073742055:
+		return 15;
 	default:
-		return code;
+		return key;
 	}
 };
-openfl.ui.Keyboard.__convertWebkitCode = function(code) {
-	var _g = code.toLowerCase();
-	switch(_g) {
-	case "backspace":
-		return 8;
-	case "tab":
-		return 9;
-	case "enter":
-		return 13;
-	case "shift":
-		return 16;
-	case "control":
-		return 17;
-	case "capslock":
-		return 20;
-	case "escape":
-		return 27;
-	case "space":
-		return 32;
-	case "pageup":
-		return 33;
-	case "pagedown":
-		return 34;
-	case "end":
-		return 35;
-	case "home":
-		return 36;
-	case "left":
-		return 37;
-	case "right":
-		return 39;
-	case "up":
-		return 38;
-	case "down":
-		return 40;
-	case "insert":
-		return 45;
-	case "delete":
-		return 46;
-	case "numlock":
-		return 144;
-	case "break":
-		return 19;
+openfl.ui.Keyboard.isAccessible = function() {
+	return false;
+};
+openfl.ui.Keyboard.__getCharCode = function(key,shift) {
+	if(shift == null) shift = false;
+	if(!shift) {
+		switch(key) {
+		case 8:
+			return 8;
+		case 9:
+			return 9;
+		case 13:
+			return 13;
+		case 27:
+			return 27;
+		case 32:
+			return 32;
+		case 186:
+			return 59;
+		case 187:
+			return 61;
+		case 188:
+			return 44;
+		case 189:
+			return 45;
+		case 190:
+			return 46;
+		case 191:
+			return 47;
+		case 192:
+			return 96;
+		case 219:
+			return 91;
+		case 220:
+			return 92;
+		case 221:
+			return 93;
+		case 222:
+			return 39;
+		}
+		if(key >= 48 && key <= 57) return key - 48 + 48;
+		if(key >= 65 && key <= 90) return key - 65 + 97;
+	} else {
+		switch(key) {
+		case 48:
+			return 41;
+		case 49:
+			return 33;
+		case 50:
+			return 64;
+		case 51:
+			return 35;
+		case 52:
+			return 36;
+		case 53:
+			return 37;
+		case 54:
+			return 94;
+		case 55:
+			return 38;
+		case 56:
+			return 42;
+		case 57:
+			return 40;
+		case 186:
+			return 58;
+		case 187:
+			return 43;
+		case 188:
+			return 60;
+		case 189:
+			return 95;
+		case 190:
+			return 62;
+		case 191:
+			return 63;
+		case 192:
+			return 126;
+		case 219:
+			return 123;
+		case 220:
+			return 124;
+		case 221:
+			return 125;
+		case 222:
+			return 34;
+		}
+		if(key >= 65 && key <= 90) return key - 65 + 65;
 	}
-	if(code.indexOf("U+") == 0) return Std.parseInt("0x" + HxOverrides.substr(code,3,null));
-	throw "Unrecognized key code: " + code;
+	if(key >= 96 && key <= 105) return key - 96 + 48;
+	switch(key) {
+	case 106:
+		return 42;
+	case 107:
+		return 43;
+	case 108:
+		return 44;
+	case 110:
+		return 45;
+	case 111:
+		return 46;
+	case 46:
+		return 127;
+	case 13:
+		return 13;
+	case 8:
+		return 8;
+	}
 	return 0;
 };
+var platform = {};
+platform.Platform = function() {
+	this.fogMap = new Array();
+	this.obstacles = new Array();
+	this.coins = new Array();
+	this.blocks = new Array();
+	this.level = new Array();
+	openfl.display.Sprite.call(this);
+};
+$hxClasses["platform.Platform"] = platform.Platform;
+platform.Platform.__name__ = ["platform","Platform"];
+platform.Platform.__super__ = openfl.display.Sprite;
+platform.Platform.prototype = $extend(openfl.display.Sprite.prototype,{
+	move: function(x,y) {
+		this.set_x(x);
+		this.set_y(y);
+	}
+	,returnXY: function() {
+		return [this.get_x(),this.get_y()];
+	}
+	,init: function() {
+		Global.levelWidth = this.level[0].length * Global.elementSize;
+		Global.levelHeight = this.level.length * Global.elementSize;
+		var _g1 = 0;
+		var _g = this.level.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			var _g3 = 0;
+			var _g2 = this.level[i].length;
+			while(_g3 < _g2) {
+				var ii = _g3++;
+				var _g4 = this.level[i][ii];
+				switch(_g4) {
+				case 1:case 101:
+					this.temp = new blocks.Block();
+					this.temp.x = ii * Global.elementSize;
+					this.temp.y = i * Global.elementSize;
+					this.blocks.push(this.temp);
+					this.addChild(this.temp);
+					break;
+				case 2:case 102:
+					this.temp = new blocks.Coin();
+					this.temp.x = ii * Global.elementSize;
+					this.temp.y = i * Global.elementSize;
+					this.coins.push(this.temp);
+					this.addChild(this.temp);
+					break;
+				case 3:case 103:
+					this.temp = new blocks.Obstacle();
+					this.temp.x = ii * Global.elementSize;
+					this.temp.y = i * Global.elementSize;
+					this.blocks.push(this.temp);
+					this.addChild(this.temp);
+					break;
+				case 4:case 104:
+					this.temp = new blocks.Lamp();
+					this.temp.x = ii * Global.elementSize;
+					this.temp.y = i * Global.elementSize;
+					this.addChild(this.temp);
+					break;
+				case 6:case 106:
+					this.temp = new blocks.Stairs();
+					this.temp.x = ii * Global.elementSize;
+					this.temp.y = i * Global.elementSize;
+					this.addChild(this.temp);
+					break;
+				case 7:case 107:
+					this.temp = new blocks.OpenCeiling();
+					this.temp.x = ii * Global.elementSize;
+					this.temp.y = i * Global.elementSize;
+					this.blocks.push(this.temp);
+					this.addChild(this.temp);
+					break;
+				}
+			}
+		}
+		var _g11 = 0;
+		var _g5 = this.level.length;
+		while(_g11 < _g5) {
+			var i1 = _g11++;
+			this.fogMap[i1] = new Array();
+			var _g31 = 0;
+			var _g21 = this.level[i1].length;
+			while(_g31 < _g21) {
+				var ii1 = _g31++;
+				this.fogMap[i1][ii1] = null;
+				if(this.level[i1][ii1] >= 100) {
+					this.temp = new blocks.Fog();
+					this.temp.x = ii1 * Global.elementSize;
+					this.temp.y = i1 * Global.elementSize;
+					this.temp.z = 0;
+					this.addChild(this.temp);
+					this.fogMap[i1][ii1] = this.temp;
+				}
+			}
+		}
+		Global.blocks = this.blocks;
+		Global.coins = this.coins;
+		Global.fogMap = this.fogMap;
+		this.player = new player.Player();
+		this.player.set_x(Global.elementSize + 30);
+		this.player.set_y(Global.levelHeight - Global.elementSize - this.player.get_height() - 30);
+		this.addChild(this.player);
+	}
+	,__class__: platform.Platform
+});
+platform.Platform2 = function() {
+	platform.Platform.call(this);
+	this.level = [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,7,7,7,7,7,7,7,7,7,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]];
+	this.init();
+};
+$hxClasses["platform.Platform2"] = platform.Platform2;
+platform.Platform2.__name__ = ["platform","Platform2"];
+platform.Platform2.__super__ = platform.Platform;
+platform.Platform2.prototype = $extend(platform.Platform.prototype,{
+	__class__: platform.Platform2
+});
 var player = {};
 player.Arm = function(leftRight) {
 	this.currentWeaponIndex = 1;
@@ -22278,19 +25430,19 @@ player.Arm.prototype = $extend(openfl.display.Sprite.prototype,{
 		if(this.leftRight) this.controlWeapons();
 	}
 	,controlWeapons: function() {
-		haxe.Log.trace(Global.weaponIndex != this.currentWeaponIndex,{ fileName : "Arm.hx", lineNumber : 54, className : "player.Arm", methodName : "controlWeapons"});
 		if(Global.weaponIndex != this.currentWeaponIndex) {
+			this.weapon.remove();
 			var _g = Global.weaponIndex;
 			switch(_g) {
 			case 1:
 				this.weapon = new weapons.ProjectileWeapon();
 				this.addChild(this.weapon);
-				haxe.Log.trace("ProjectileWeapon",{ fileName : "Arm.hx", lineNumber : 61, className : "player.Arm", methodName : "controlWeapons"});
+				haxe.Log.trace("ProjectileWeapon",{ fileName : "Arm.hx", lineNumber : 60, className : "player.Arm", methodName : "controlWeapons"});
 				break;
 			case 2:
 				this.weapon = new weapons.Phone();
 				this.addChild(this.weapon);
-				haxe.Log.trace("Phone",{ fileName : "Arm.hx", lineNumber : 65, className : "player.Arm", methodName : "controlWeapons"});
+				haxe.Log.trace("Phone",{ fileName : "Arm.hx", lineNumber : 64, className : "player.Arm", methodName : "controlWeapons"});
 				break;
 			}
 			this.currentWeaponIndex = Global.weaponIndex;
@@ -22305,7 +25457,7 @@ player.Arm.prototype = $extend(openfl.display.Sprite.prototype,{
 			if(Global.mouseY > this.absY) this.rotationRad = Math.PI - this.rotationRad;
 			this.set_rotation(this.rotationRad / Math.PI * 180);
 		} catch( e ) {
-			haxe.Log.trace(e,{ fileName : "Arm.hx", lineNumber : 90, className : "player.Arm", methodName : "followMouse"});
+			haxe.Log.trace(e,{ fileName : "Arm.hx", lineNumber : 89, className : "player.Arm", methodName : "followMouse"});
 		} else this.rotationRad = this.get_rotation() / 360 * 2 * Math.PI;
 		this.set_x(this.startX + 0.4 * Global.elementSize - 0.4 * Global.elementSize * Math.cos(this.rotationRad));
 		this.set_y(this.startY - 0.4 * Global.elementSize * Math.sin(this.rotationRad));
@@ -22352,13 +25504,174 @@ player.Leg.__super__ = openfl.display.Sprite;
 player.Leg.prototype = $extend(openfl.display.Sprite.prototype,{
 	__class__: player.Leg
 });
+player.Player = function() {
+	this.moveViewY = 0;
+	this.moveViewX = 0;
+	this.hanging = false;
+	this.arms = new Array();
+	this.legs = new Array();
+	this.playerHeight = 5 * Global.elementSize;
+	this.playerWidth = 2 * Global.elementSize;
+	this.isStanding = false;
+	this.gravity = 0.046875 * Global.elementSize;
+	this.climbSpeed = 0.3125 * Global.elementSize;
+	this.maxFallSpeed = 1.25 * Global.elementSize;
+	this.maxYSpeed = 0.6875 * Global.elementSize;
+	this.maxXSpeed = 0.3125 * Global.elementSize;
+	this.ySpeed = 0;
+	this.xSpeed = 0;
+	openfl.display.Sprite.call(this);
+	this.frankenstein();
+	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+};
+$hxClasses["player.Player"] = player.Player;
+player.Player.__name__ = ["player","Player"];
+player.Player.__super__ = openfl.display.Sprite;
+player.Player.prototype = $extend(openfl.display.Sprite.prototype,{
+	returnXY: function() {
+		return [this.get_x(),this.get_y()];
+	}
+	,frankenstein: function() {
+		this.arms[0] = new player.Arm(false);
+		this.addChild(this.arms[0]);
+		this.legs[0] = new player.Leg(false);
+		this.addChild(this.legs[0]);
+		this.body = new player.Body();
+		this.addChild(this.body);
+		this.head = new player.Head();
+		this.addChild(this.head);
+		this.legs[1] = new player.Leg(true);
+		this.addChild(this.legs[1]);
+		this.arms[1] = new player.Arm(true);
+		this.addChild(this.arms[1]);
+	}
+	,update: function(e) {
+		this.move();
+		this.moveView();
+	}
+	,moveView: function() {
+		if(openfl.Lib.current.stage.stageWidth < Global.levelWidth) {
+			if(this.get_x() + this.playerWidth * 0.5 > openfl.Lib.current.stage.stageWidth * 0.5 && this.get_x() + this.playerWidth * 0.5 < Global.levelWidth - openfl.Lib.current.stage.stageWidth * 0.5) this.moveViewX = openfl.Lib.current.stage.stageWidth * 0.5 - this.get_x() - this.playerWidth * 0.5; else if(this.get_x() - this.playerWidth * 0.5 > openfl.Lib.current.stage.stageWidth * 0.5) this.moveViewX = openfl.Lib.current.stage.stageWidth - Global.levelWidth; else if(this.get_x() - this.playerWidth * 0.5 < Global.levelWidth - openfl.Lib.current.stage.stageWidth * 0.5) this.moveViewX = 0;
+		}
+		if(openfl.Lib.current.stage.stageHeight < Global.levelHeight) {
+			if(this.get_y() + this.playerHeight * 0.5 > openfl.Lib.current.stage.stageHeight * 0.5 && this.get_y() + this.playerHeight * 0.5 < Global.levelHeight - openfl.Lib.current.stage.stageHeight * 0.5) this.moveViewY = openfl.Lib.current.stage.stageHeight * 0.5 - this.get_y() - this.playerHeight * 0.5; else if(this.get_y() - this.playerHeight * 0.5 > openfl.Lib.current.stage.stageHeight * 0.5) this.moveViewY = openfl.Lib.current.stage.stageHeight - Global.levelHeight; else if(this.get_y() - this.playerHeight * 0.5 < Global.levelHeight - openfl.Lib.current.stage.stageHeight * 0.5) this.moveViewY = 0;
+		}
+		Global.level.move(this.moveViewX,this.moveViewY);
+	}
+	,move: function() {
+		this.xSpeed = 0;
+		if(Global.jump) {
+			if(this.isStanding && !this.hanging) this.startJumping();
+		}
+		this.checkCollision();
+		if(Global.left) {
+			if(this.againstWallLeft) {
+				this.xSpeed = 0;
+				this.set_x(Global.blocks[this.wallBlockLeft].x + Global.blocks[this.wallBlockLeft].width);
+			} else this.xSpeed -= this.maxXSpeed;
+		}
+		if(Global.right) {
+			if(this.againstWallRight) {
+				this.xSpeed = 0;
+				this.set_x(Global.blocks[this.wallBlockRight].x - this.playerWidth);
+			} else this.xSpeed += this.maxXSpeed;
+		}
+		if(Global.left && Global.right) this.xSpeed = 0;
+		if(this.hanging) this.hangController(); else this.jumpController();
+		if(Global.shift) this.xSpeed *= 0.4;
+		var _g = this;
+		_g.set_x(_g.get_x() + this.xSpeed);
+		var _g1 = this;
+		_g1.set_y(_g1.get_y() + this.ySpeed);
+		this.checkCoin();
+	}
+	,checkCollision: function() {
+		this.againstWallLeft = this.againstWallRight = this.againstTheCeiling = this.onTheGround = false;
+		var _g1 = 0;
+		var _g = Global.blocks.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			if(Global.blocks[i].y < this.get_y() + this.playerHeight && Global.blocks[i].y > this.get_y() - Global.elementSize && Global.blocks[i].x + Global.elementSize >= this.get_x() - this.maxXSpeed && Global.blocks[i].x < this.get_x() - this.maxXSpeed) {
+				if(Global.blocks[i].type != "OpenCeiling") {
+					this.againstWallLeft = true;
+					this.wallBlockLeft = i;
+				}
+			}
+			if(Global.blocks[i].y < this.get_y() + this.playerHeight && Global.blocks[i].y > this.get_y() - Global.elementSize && Global.blocks[i].x + Global.elementSize > this.get_x() + this.maxXSpeed && Global.blocks[i].x <= this.get_x() + this.playerWidth + this.maxXSpeed) {
+				if(Global.blocks[i].type != "OpenCeiling") {
+					this.againstWallRight = true;
+					this.wallBlockRight = i;
+				}
+			}
+			if(Global.blocks[i].y + Global.elementSize >= this.get_y() + this.ySpeed + this.gravity && Global.blocks[i].y < this.get_y() && Global.blocks[i].x + Global.elementSize > this.get_x() && Global.blocks[i].x < this.get_x() + this.playerWidth) {
+				if(Global.blocks[i].type != "OpenCeiling") {
+					this.againstTheCeiling = true;
+					this.ceilingBlock = i;
+				}
+			}
+			if(Global.blocks[i].y <= this.get_y() + this.ySpeed + this.gravity + this.playerHeight && Global.blocks[i].y > this.get_y() && Global.blocks[i].x > this.get_x() - Global.elementSize && Global.blocks[i].x < this.get_x() + this.playerWidth) {
+				if(Global.blocks[i].type != "OpenCeiling") {
+					this.onTheGround = true;
+					this.groundBlock = i;
+				} else if(Global.blocks[i].y >= this.get_y() + this.playerHeight && !Global.down) {
+					this.onTheGround = true;
+					this.groundBlock = i;
+				}
+			}
+		}
+	}
+	,startJumping: function() {
+		this.ySpeed = -this.maxYSpeed;
+		this.isStanding = false;
+	}
+	,jumpController: function() {
+		if(!this.onTheGround) this.isStanding = false;
+		if(this.onTheGround || this.againstTheCeiling) {
+			if(this.onTheGround) {
+				this.ySpeed = 0;
+				this.set_y(Global.blocks[this.groundBlock].y - this.playerHeight);
+				this.isStanding = true;
+			}
+			if(this.againstTheCeiling) {
+				this.ySpeed = 0;
+				this.set_y(Global.blocks[this.ceilingBlock].y + Global.elementSize);
+			}
+		} else {
+			this.ySpeed += this.gravity;
+			if(this.ySpeed > this.maxFallSpeed) this.ySpeed = this.maxFallSpeed;
+		}
+	}
+	,hangController: function() {
+		this.pX = this.arms[1].weapon.phoneHorn.x;
+		this.pY = this.arms[1].weapon.phoneHorn.y;
+		this.pDistance = Math.sqrt((this.pX - this.get_x()) * (this.pX - this.get_x()) + (this.pY - this.get_y()) * (this.pY - this.get_y()));
+		if(Global.up) {
+		}
+		if(Global.down) {
+		}
+	}
+	,checkCoin: function() {
+		this.i = 0;
+		while(this.i < Global.coins.length) {
+			this.tempCoin = Global.coins[this.i];
+			if(this.get_x() < this.tempCoin.get_x() + this.tempCoin.get_width() && this.get_x() > this.tempCoin.get_x() - this.playerWidth && this.get_y() < this.tempCoin.get_y() + this.tempCoin.get_height() && this.get_y() > this.tempCoin.get_y() - this.playerHeight) {
+				haxe.Log.trace("You ate a coin!!",{ fileName : "Player.hx", lineNumber : 304, className : "player.Player", methodName : "checkCoin"});
+				Global.level.level[Math.floor(this.tempCoin.get_y() / Global.elementSize)][Math.floor(this.tempCoin.get_x() / Global.elementSize)] -= 2;
+				HxOverrides.remove(Global.coins,this.tempCoin);
+				this.tempCoin.parent.removeChild(this.tempCoin);
+				this.i--;
+			}
+			this.i++;
+		}
+	}
+	,__class__: player.Player
+});
 var weapons = {};
 weapons.Bullet = function(x,y) {
-	this.collision = false;
 	openfl.display.Sprite.call(this);
 	this.set_x(x);
 	this.set_y(y);
-	this.get_graphics().beginFill(16711935);
+	this.get_graphics().beginFill(0);
 	this.get_graphics().drawRect(0,0,4 * Global.elementSize / 16,4 * Global.elementSize / 16);
 	this.startMoving();
 	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
@@ -22386,9 +25699,9 @@ weapons.Bullet.prototype = $extend(openfl.display.Sprite.prototype,{
 		_g.set_x(_g.get_x() + this.xSpeed);
 		var _g1 = this;
 		_g1.set_y(_g1.get_y() + this.ySpeed);
-		if(this.checkCollision(this.xSpeed,this.ySpeed) > 0 && this.checkCollision(this.xSpeed,this.ySpeed) != 100 && this.checkCollision(this.xSpeed,this.ySpeed) != 2 && this.checkCollision(this.xSpeed,this.ySpeed) != 102) {
-			if(this.checkCollision(this.xSpeed,this.ySpeed) == 3 || this.checkCollision(this.xSpeed,this.ySpeed) == 103) {
-				Global.level.level[Math.floor((this.get_y() + this.ySpeed) / Global.elementSize)][Math.floor((this.get_x() + this.xSpeed) / Global.elementSize)] = 0;
+		this.collision = this.checkCollision(this.xSpeed,this.ySpeed);
+		if(this.collision > 0 && this.collision != 100 && this.collision != 2 && this.collision != 102 && this.collision != 4 && this.collision != 104 && this.collision != 7 && this.collision != 107) {
+			if(this.collision == 3 || this.collision == 103) {
 				this.i = 0;
 				while(Global.blocks[this.i].x != Math.floor((this.get_x() + this.xSpeed) / Global.elementSize) * Global.elementSize || Global.blocks[this.i].y != Math.floor((this.get_y() + this.ySpeed) / Global.elementSize) * Global.elementSize) this.i++;
 				Global.blocks[this.i].remove();
@@ -22404,38 +25717,176 @@ weapons.Bullet.prototype = $extend(openfl.display.Sprite.prototype,{
 	,__class__: weapons.Bullet
 });
 weapons.Phone = function() {
+	this.xySpeed = new Array();
+	this.takeBreak = false;
+	this.youMayShoot = true;
 	openfl.display.Sprite.call(this);
 	this.set_y(Global.elementSize * 2);
 	this.get_graphics().beginFill(65280);
 	this.get_graphics().drawRect(0,0,0.8 * Global.elementSize,0.8 * Global.elementSize);
+	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+	openfl.Lib.current.stage.addEventListener(openfl.events.MouseEvent.MOUSE_UP,$bind(this,this.shootAgain));
 };
 $hxClasses["weapons.Phone"] = weapons.Phone;
 weapons.Phone.__name__ = ["weapons","Phone"];
 weapons.Phone.__super__ = openfl.display.Sprite;
 weapons.Phone.prototype = $extend(openfl.display.Sprite.prototype,{
-	remove: function() {
+	update: function(e) {
+		this.shoot();
+	}
+	,shoot: function() {
+		if(Global.mouseDown) {
+			if(this.takeBreak) return;
+			if(!this.youMayShoot) {
+				this.phoneHorn.parent.removeChild(this.phoneHorn);
+				this.phoneHorn = null;
+				this.youMayShoot = true;
+				this.takeBreak = true;
+				return;
+			}
+			this.phoneHorn = new weapons.PhoneHorn(Global.level.player.returnXY()[0] + Global.elementSize * 0.5,Global.level.player.returnXY()[1] + 1.5 * Global.elementSize);
+			Global.level.addChild(this.phoneHorn);
+			this.xySpeed[0] = Global.elementSize * this.phoneHorn.xSpeed / this.phoneHorn.speed;
+			this.xySpeed[1] = Global.elementSize * this.phoneHorn.ySpeed / this.phoneHorn.speed;
+			var _g = 0;
+			while(_g < 25) {
+				var i = _g++;
+				this.collision = this.phoneHorn.checkCollision(-0.1 * i * this.xySpeed[0],-0.1 * i * this.xySpeed[1]);
+				if(this.collision > 0 && this.collision < 100 && this.collision != 2 && this.collision != 102 && this.collision != 4 && this.collision != 104) {
+					this.phoneHorn.parent.removeChild(this.phoneHorn);
+					this.phoneHorn = null;
+					this.youMayShoot = true;
+					break;
+				}
+			}
+			this.youMayShoot = false;
+			this.takeBreak = true;
+		}
+	}
+	,shootAgain: function(e) {
+		this.takeBreak = false;
+	}
+	,remove: function() {
+		if(this.phoneHorn != null) {
+			this.phoneHorn.parent.removeChild(this.phoneHorn);
+			this.phoneHorn = null;
+		}
+		this.removeEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
 		this.parent.removeChild(this);
 	}
 	,__class__: weapons.Phone
+});
+weapons.PhoneCable = function() {
+	this.ii = 0;
+	openfl.display.Sprite.call(this);
+	this.partSize = 0.3 * Global.elementSize;
+};
+$hxClasses["weapons.PhoneCable"] = weapons.PhoneCable;
+weapons.PhoneCable.__name__ = ["weapons","PhoneCable"];
+weapons.PhoneCable.__super__ = openfl.display.Sprite;
+weapons.PhoneCable.prototype = $extend(openfl.display.Sprite.prototype,{
+	update: function(phoneHornX,phoneHornY) {
+		this.armX = Global.level.player.returnXY()[0] + Global.elementSize;
+		this.armY = Global.level.player.returnXY()[1] + 2 * Global.elementSize;
+		this.distance = Math.sqrt((phoneHornX - this.armX) * (phoneHornX - this.armX) + (phoneHornY - this.armY) * (phoneHornY - this.armY));
+		this.distanceX = Math.abs(phoneHornX - this.armX);
+		this.distanceY = Math.abs(phoneHornY - this.armY);
+		if(phoneHornX > this.armX && phoneHornY > this.armY) this.set_rotation(180 - Math.asin(this.distanceX / this.distance) * 180 / Math.PI);
+		if(phoneHornX > this.armX && phoneHornY < this.armY) this.set_rotation(Math.asin(this.distanceX / this.distance) * 180 / Math.PI);
+		if(phoneHornX < this.armX && phoneHornY < this.armY) this.set_rotation(360 - Math.asin(this.distanceX / this.distance) * 180 / Math.PI);
+		if(phoneHornX < this.armX && phoneHornY > this.armY) this.set_rotation(Math.asin(this.distanceX / this.distance) * 180 / Math.PI + 180);
+		this.get_graphics().clear();
+		this.forLoopMax = Math.floor(this.distance / this.partSize);
+		var _g1 = 0;
+		var _g = this.forLoopMax;
+		while(_g1 < _g) {
+			var i = _g1++;
+			this.get_graphics().beginFill(0);
+			this.get_graphics().drawRect(0,i * this.partSize,this.partSize,this.partSize);
+		}
+	}
+	,__class__: weapons.PhoneCable
+});
+weapons.PhoneHorn = function(x,y) {
+	openfl.display.Sprite.call(this);
+	this.hornWidth = Global.elementSize;
+	this.hornHeight = Global.elementSize;
+	this.get_graphics().beginFill(0);
+	this.get_graphics().drawRect(0,0,this.hornWidth,this.hornHeight);
+	this.set_x(x - 0.5 * this.hornWidth);
+	this.set_y(y - 0.5 * this.hornHeight);
+	this.startMoving();
+	this.cable = new weapons.PhoneCable();
+	this.cable.set_x(0.5 * this.hornWidth - 0.15 * Global.elementSize);
+	this.cable.set_y(0.5 * this.hornHeight - 0.15 * Global.elementSize);
+	this.addChild(this.cable);
+	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+};
+$hxClasses["weapons.PhoneHorn"] = weapons.PhoneHorn;
+weapons.PhoneHorn.__name__ = ["weapons","PhoneHorn"];
+weapons.PhoneHorn.__super__ = openfl.display.Sprite;
+weapons.PhoneHorn.prototype = $extend(openfl.display.Sprite.prototype,{
+	startMoving: function() {
+		this.speed = 0.5 * Global.elementSize;
+		this.absX = Global.level.returnXY()[0] + this.get_x();
+		this.absY = Global.level.returnXY()[1] + this.get_y();
+		this.mouseDistance = Math.sqrt((Global.mouseX - 0.5 * this.hornWidth - this.absX) * (Global.mouseX - 0.5 * this.hornWidth - this.absX) + (Global.mouseY - 0.5 * this.hornHeight - this.absY) * (Global.mouseY - 0.5 * this.hornHeight - this.absY));
+		this.mouseDistanceX = Global.mouseX - 0.5 * this.hornWidth - this.absX;
+		this.mouseDistanceY = Global.mouseY - 0.5 * this.hornHeight - this.absY;
+		this.xSpeed = this.mouseDistanceX / this.mouseDistance * this.speed;
+		this.ySpeed = this.mouseDistanceY / this.mouseDistance * this.speed;
+		var _g = this;
+		_g.set_x(_g.get_x() + 2.5 * Global.elementSize * this.xSpeed / this.speed);
+		var _g1 = this;
+		_g1.set_y(_g1.get_y() + 2.5 * Global.elementSize * this.ySpeed / this.speed);
+	}
+	,update: function(e) {
+		var _g = this;
+		_g.set_x(_g.get_x() + this.xSpeed);
+		var _g1 = this;
+		_g1.set_y(_g1.get_y() + this.ySpeed);
+		this.collision = this.checkCollision(this.xSpeed,this.ySpeed);
+		this.playerX = Global.level.player.returnXY[0];
+		this.playerY = Global.level.player.returnXY[1];
+		this.playerDistance = Math.sqrt((this.get_x() - this.playerX) * (this.get_x() - this.playerX) + (this.get_y() - this.playerY) * (this.get_y() - this.playerY));
+		haxe.Log.trace(this.playerDistance,{ fileName : "PhoneHorn.hx", lineNumber : 105, className : "weapons.PhoneHorn", methodName : "update"});
+		if(this.playerDistance > Global.elementSize) {
+			this.removeEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
+			if(Global.weaponIndex == 2 && Global.level.player.arms[1].weapon.phoneHorn == this) {
+				Global.level.player.arms[1].weapon.youMayShoot = true;
+				Global.level.player.arms[1].weapon.phoneHorn = null;
+			}
+			this.parent.removeChild(this);
+			return;
+		}
+		if(this.collision == 4 || this.collision == 104) this.startHanging();
+		this.cable.update(this.get_x() + 0.5 * this.hornWidth,this.get_y() + 0.5 * this.hornHeight);
+	}
+	,checkCollision: function(xSpeed,ySpeed) {
+		return Global.level.level[Math.floor((this.get_y() + ySpeed + 0.5 * this.hornHeight) / Global.elementSize)][Math.floor((this.get_x() + xSpeed + 0.5 * this.hornWidth) / Global.elementSize)];
+	}
+	,startHanging: function() {
+		this.set_x(Math.floor((this.get_x() + this.xSpeed + 0.5 * this.hornHeight) / Global.elementSize) * Global.elementSize);
+		this.set_y(Math.floor((this.get_y() + this.ySpeed + 0.5 * this.hornHeight) / Global.elementSize) * Global.elementSize);
+		this.xSpeed = 0;
+		this.ySpeed = 0;
+	}
+	,__class__: weapons.PhoneHorn
 });
 weapons.ProjectileWeapon = function() {
 	this.xySpeed = new Array();
 	this.youMayShoot = true;
 	openfl.display.Sprite.call(this);
-	haxe.Log.trace("tadaa",{ fileName : "ProjectileWeapon.hx", lineNumber : 19, className : "weapons.ProjectileWeapon", methodName : "new"});
 	this.set_y(Global.elementSize * 2);
 	this.get_graphics().beginFill(0);
 	this.get_graphics().drawRect(0,0,0.8 * Global.elementSize,0.8 * Global.elementSize);
-	this.eventListener(true);
+	this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
 };
 $hxClasses["weapons.ProjectileWeapon"] = weapons.ProjectileWeapon;
 weapons.ProjectileWeapon.__name__ = ["weapons","ProjectileWeapon"];
 weapons.ProjectileWeapon.__super__ = openfl.display.Sprite;
 weapons.ProjectileWeapon.prototype = $extend(openfl.display.Sprite.prototype,{
-	eventListener: function(create) {
-		if(create) this.addEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update)); else this.removeEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
-	}
-	,update: function(e) {
+	update: function(e) {
 		this.shoot();
 	}
 	,shoot: function() {
@@ -22450,7 +25901,7 @@ weapons.ProjectileWeapon.prototype = $extend(openfl.display.Sprite.prototype,{
 			while(_g < 25) {
 				var i = _g++;
 				this.collision = this.bullet.checkCollision(-0.1 * i * this.xySpeed[0],-0.1 * i * this.xySpeed[1]);
-				if(this.collision > 0 && this.collision < 100 && this.collision != 2 && this.collision != 102) {
+				if(this.collision > 0 && this.collision < 100 && this.collision != 2 && this.collision != 102 && this.collision != 7 && this.collision != 107) {
 					HxOverrides.remove(Global.bullets,this.bullet);
 					this.bullet.parent.removeChild(this.bullet);
 					break;
@@ -22464,7 +25915,7 @@ weapons.ProjectileWeapon.prototype = $extend(openfl.display.Sprite.prototype,{
 		this.youMayShoot = true;
 	}
 	,remove: function() {
-		this.eventListener(false);
+		this.removeEventListener(openfl.events.Event.ENTER_FRAME,$bind(this,this.update));
 		this.parent.removeChild(this);
 	}
 	,__class__: weapons.ProjectileWeapon
@@ -22529,6 +25980,7 @@ Global.blocks = new Array();
 Global.coins = new Array();
 Global.bullets = new Array();
 Global.fogMap = new Array();
+haxe.ds.ObjectMap.count = 0;
 js.Boot.__toStr = {}.toString;
 lime.Assets.cache = new lime.AssetCache();
 lime.Assets.libraries = new haxe.ds.StringMap();
@@ -22932,8 +26384,179 @@ lime.net._URLRequestMethod.URLRequestMethod_Impl_.HEAD = "HEAD";
 lime.net._URLRequestMethod.URLRequestMethod_Impl_.OPTIONS = "OPTIONS";
 lime.net._URLRequestMethod.URLRequestMethod_Impl_.POST = "POST";
 lime.net._URLRequestMethod.URLRequestMethod_Impl_.PUT = "PUT";
+lime.project._Platform.Platform_Impl_.ANDROID = "android";
+lime.project._Platform.Platform_Impl_.BLACKBERRY = "blackberry";
+lime.project._Platform.Platform_Impl_.FIREFOX = "firefox";
+lime.project._Platform.Platform_Impl_.FLASH = "flash";
+lime.project._Platform.Platform_Impl_.HTML5 = "html5";
+lime.project._Platform.Platform_Impl_.IOS = "ios";
+lime.project._Platform.Platform_Impl_.LINUX = "linux";
+lime.project._Platform.Platform_Impl_.MAC = "mac";
+lime.project._Platform.Platform_Impl_.TIZEN = "tizen";
+lime.project._Platform.Platform_Impl_.WINDOWS = "windows";
+lime.project._Platform.Platform_Impl_.WEBOS = "webos";
+lime.project._Platform.Platform_Impl_.EMSCRIPTEN = "emscripten";
+lime.project._Platform.Platform_Impl_.CUSTOM = null;
 lime.system.System.__moduleNames = null;
-lime.system.System.__startTime = haxe.Timer.stamp();
+lime.system._System.SystemDirectory_Impl_.APPLICATION = 0;
+lime.system._System.SystemDirectory_Impl_.APPLICATION_STORAGE = 1;
+lime.system._System.SystemDirectory_Impl_.DESKTOP = 2;
+lime.system._System.SystemDirectory_Impl_.DOCUMENTS = 3;
+lime.system._System.SystemDirectory_Impl_.FONTS = 4;
+lime.system._System.SystemDirectory_Impl_.USER = 5;
+lime.text._TextDirection.TextDirection_Impl_.INVALID = 0;
+lime.text._TextDirection.TextDirection_Impl_.LEFT_TO_RIGHT = 4;
+lime.text._TextDirection.TextDirection_Impl_.RIGHT_TO_LEFT = 5;
+lime.text._TextDirection.TextDirection_Impl_.TOP_TO_BOTTOM = 6;
+lime.text._TextDirection.TextDirection_Impl_.BOTTOM_TO_TOP = 7;
+lime.text._TextScript.TextScript_Impl_.COMMON = "Zyyy";
+lime.text._TextScript.TextScript_Impl_.INHERITED = "Zinh";
+lime.text._TextScript.TextScript_Impl_.UNKNOWN = "Zzzz";
+lime.text._TextScript.TextScript_Impl_.ARABIC = "Arab";
+lime.text._TextScript.TextScript_Impl_.ARMENIAN = "Armn";
+lime.text._TextScript.TextScript_Impl_.BENGALI = "Beng";
+lime.text._TextScript.TextScript_Impl_.CYRILLIC = "Cyrl";
+lime.text._TextScript.TextScript_Impl_.DEVANAGARI = "Deva";
+lime.text._TextScript.TextScript_Impl_.GEORGIAN = "Geor";
+lime.text._TextScript.TextScript_Impl_.GREEK = "Grek";
+lime.text._TextScript.TextScript_Impl_.GUJARATI = "Gujr";
+lime.text._TextScript.TextScript_Impl_.GURMUKHI = "Guru";
+lime.text._TextScript.TextScript_Impl_.HANGUL = "Hang";
+lime.text._TextScript.TextScript_Impl_.HAN = "Hani";
+lime.text._TextScript.TextScript_Impl_.HEBREW = "Hebr";
+lime.text._TextScript.TextScript_Impl_.HIRAGANA = "Hira";
+lime.text._TextScript.TextScript_Impl_.KANNADA = "Knda";
+lime.text._TextScript.TextScript_Impl_.KATAKANA = "Kana";
+lime.text._TextScript.TextScript_Impl_.LAO = "Laoo";
+lime.text._TextScript.TextScript_Impl_.LATIN = "Latn";
+lime.text._TextScript.TextScript_Impl_.MALAYALAM = "Mlym";
+lime.text._TextScript.TextScript_Impl_.ORIYA = "Orya";
+lime.text._TextScript.TextScript_Impl_.TAMIL = "Taml";
+lime.text._TextScript.TextScript_Impl_.TELUGA = "Telu";
+lime.text._TextScript.TextScript_Impl_.THAI = "Thai";
+lime.text._TextScript.TextScript_Impl_.TIBETAN = "Tibt";
+lime.text._TextScript.TextScript_Impl_.BOPOMOFO = "Bopo";
+lime.text._TextScript.TextScript_Impl_.BRAILLE = "Brai";
+lime.text._TextScript.TextScript_Impl_.CANADIAN_SYLLABICS = "Cans";
+lime.text._TextScript.TextScript_Impl_.CHEROKEE = "Cher";
+lime.text._TextScript.TextScript_Impl_.ETHIOPIC = "Ethi";
+lime.text._TextScript.TextScript_Impl_.KHMER = "Khmr";
+lime.text._TextScript.TextScript_Impl_.MONGOLIAN = "Mong";
+lime.text._TextScript.TextScript_Impl_.MYANMAR = "Mymr";
+lime.text._TextScript.TextScript_Impl_.OGHAM = "Ogam";
+lime.text._TextScript.TextScript_Impl_.RUNIC = "Runr";
+lime.text._TextScript.TextScript_Impl_.SINHALA = "Sinh";
+lime.text._TextScript.TextScript_Impl_.SYRIAC = "Syrc";
+lime.text._TextScript.TextScript_Impl_.THAANA = "Thaa";
+lime.text._TextScript.TextScript_Impl_.YI = "Yiii";
+lime.text._TextScript.TextScript_Impl_.DESERET = "Dsrt";
+lime.text._TextScript.TextScript_Impl_.GOTHIC = "Goth";
+lime.text._TextScript.TextScript_Impl_.OLD_ITALIC = "Ital";
+lime.text._TextScript.TextScript_Impl_.BUHID = "Buhd";
+lime.text._TextScript.TextScript_Impl_.HANUNOO = "Hano";
+lime.text._TextScript.TextScript_Impl_.TAGALOG = "Tglg";
+lime.text._TextScript.TextScript_Impl_.TAGBANWA = "Tagb";
+lime.text._TextScript.TextScript_Impl_.CYPRIOT = "Cprt";
+lime.text._TextScript.TextScript_Impl_.LIMBU = "Limb";
+lime.text._TextScript.TextScript_Impl_.LINEAR_B = "Linb";
+lime.text._TextScript.TextScript_Impl_.OSMANYA = "Osma";
+lime.text._TextScript.TextScript_Impl_.SHAVIAN = "Shaw";
+lime.text._TextScript.TextScript_Impl_.TAI_LE = "Tale";
+lime.text._TextScript.TextScript_Impl_.UGARITIC = "Ugar";
+lime.text._TextScript.TextScript_Impl_.BUGINESE = "Bugi";
+lime.text._TextScript.TextScript_Impl_.COPTIC = "Copt";
+lime.text._TextScript.TextScript_Impl_.GLAGOLITIC = "Glag";
+lime.text._TextScript.TextScript_Impl_.KHAROSHTHI = "Khar";
+lime.text._TextScript.TextScript_Impl_.NEW_TAI_LUE = "Talu";
+lime.text._TextScript.TextScript_Impl_.OLD_PERSIAN = "Xpeo";
+lime.text._TextScript.TextScript_Impl_.SYLOTI_NAGRI = "Sylo";
+lime.text._TextScript.TextScript_Impl_.TIFINAGH = "Tfng";
+lime.text._TextScript.TextScript_Impl_.BALINESE = "Bali";
+lime.text._TextScript.TextScript_Impl_.CUNEIFORM = "Xsux";
+lime.text._TextScript.TextScript_Impl_.NKO = "Nkoo";
+lime.text._TextScript.TextScript_Impl_.PHAGS_PA = "Phag";
+lime.text._TextScript.TextScript_Impl_.PHOENICIAN = "Phnx";
+lime.text._TextScript.TextScript_Impl_.CARIAN = "Cari";
+lime.text._TextScript.TextScript_Impl_.CHAM = "Cham";
+lime.text._TextScript.TextScript_Impl_.KAYAH_LI = "Kali";
+lime.text._TextScript.TextScript_Impl_.LEPCHA = "Lepc";
+lime.text._TextScript.TextScript_Impl_.LYCIAN = "Lyci";
+lime.text._TextScript.TextScript_Impl_.LYDIAN = "Lydi";
+lime.text._TextScript.TextScript_Impl_.OL_CHIKI = "Olck";
+lime.text._TextScript.TextScript_Impl_.REJANG = "Rjng";
+lime.text._TextScript.TextScript_Impl_.SAURASHTRA = "Saur";
+lime.text._TextScript.TextScript_Impl_.SUNDANESE = "Sund";
+lime.text._TextScript.TextScript_Impl_.VAI = "Vaii";
+lime.text._TextScript.TextScript_Impl_.AVESTAN = "Avst";
+lime.text._TextScript.TextScript_Impl_.BAMUM = "Bamu";
+lime.text._TextScript.TextScript_Impl_.EGYPTIAN_HIEROGLYPHS = "Egyp";
+lime.text._TextScript.TextScript_Impl_.IMPERIAL_ARAMAIC = "Armi";
+lime.text._TextScript.TextScript_Impl_.INSCRIPTIONAL_PAHLAVI = "Phli";
+lime.text._TextScript.TextScript_Impl_.INSCRIPTIONAL_PARTHIAN = "Prti";
+lime.text._TextScript.TextScript_Impl_.JAVANESE = "Java";
+lime.text._TextScript.TextScript_Impl_.KAITHI = "Kthi";
+lime.text._TextScript.TextScript_Impl_.LISU = "Lisu";
+lime.text._TextScript.TextScript_Impl_.MEETEI_MAYEK = "Mtei";
+lime.text._TextScript.TextScript_Impl_.OLD_SOUTH_ARABIAN = "Sarb";
+lime.text._TextScript.TextScript_Impl_.OLD_TURKIC = "Orkh";
+lime.text._TextScript.TextScript_Impl_.SAMARITAN = "Samr";
+lime.text._TextScript.TextScript_Impl_.TAI_THAM = "Lana";
+lime.text._TextScript.TextScript_Impl_.TAI_VIET = "Tavt";
+lime.text._TextScript.TextScript_Impl_.BATAK = "Batk";
+lime.text._TextScript.TextScript_Impl_.BRAHMI = "Brah";
+lime.text._TextScript.TextScript_Impl_.MANDAIC = "Mand";
+lime.text._TextScript.TextScript_Impl_.CHAKMA = "Cakm";
+lime.text._TextScript.TextScript_Impl_.MEROITIC_CURSIVE = "Merc";
+lime.text._TextScript.TextScript_Impl_.MEROITIC_HIEROGLYPHS = "Mero";
+lime.text._TextScript.TextScript_Impl_.MIAO = "Plrd";
+lime.text._TextScript.TextScript_Impl_.SHARADA = "Shrd";
+lime.text._TextScript.TextScript_Impl_.SORA_SOMPENG = "Sora";
+lime.text._TextScript.TextScript_Impl_.TAKRI = "Takr";
+lime.text._TextScript.TextScript_Impl_.BASSA_VAH = "Bass";
+lime.text._TextScript.TextScript_Impl_.CAUCASIAN_ALBANIAN = "Aghb";
+lime.text._TextScript.TextScript_Impl_.DUPLOYAN = "Dupl";
+lime.text._TextScript.TextScript_Impl_.ELBASAN = "Elba";
+lime.text._TextScript.TextScript_Impl_.GRANTHA = "Gran";
+lime.text._TextScript.TextScript_Impl_.KHOJKI = "Khoj";
+lime.text._TextScript.TextScript_Impl_.KHUDAWADI = "Sind";
+lime.text._TextScript.TextScript_Impl_.LINEAR_A = "Lina";
+lime.text._TextScript.TextScript_Impl_.MAHAJANI = "Mahj";
+lime.text._TextScript.TextScript_Impl_.MANICHAEAN = "Mani";
+lime.text._TextScript.TextScript_Impl_.MENDE_KIKAKUI = "Mend";
+lime.text._TextScript.TextScript_Impl_.MODI = "Modi";
+lime.text._TextScript.TextScript_Impl_.MRO = "Mroo";
+lime.text._TextScript.TextScript_Impl_.NABATAEAN = "Nbat";
+lime.text._TextScript.TextScript_Impl_.OLD_NORTH_ARABIAN = "Narb";
+lime.text._TextScript.TextScript_Impl_.OLD_PERMIC = "Perm";
+lime.text._TextScript.TextScript_Impl_.PAHAWH_HMONG = "Hmng";
+lime.text._TextScript.TextScript_Impl_.PALMYRENE = "Palm";
+lime.text._TextScript.TextScript_Impl_.PAU_CIN_HAU = "Pauc";
+lime.text._TextScript.TextScript_Impl_.PSALTER_PAHLAVI = "Phlp";
+lime.text._TextScript.TextScript_Impl_.SIDDHAM = "Sidd";
+lime.text._TextScript.TextScript_Impl_.TIRHUTA = "Tirh";
+lime.text._TextScript.TextScript_Impl_.WARANG_CITI = "Wara";
+lime.ui.Gamepad.devices = new haxe.ds.IntMap();
+lime.ui._GamepadAxis.GamepadAxis_Impl_.LEFT_X = 0;
+lime.ui._GamepadAxis.GamepadAxis_Impl_.LEFT_Y = 1;
+lime.ui._GamepadAxis.GamepadAxis_Impl_.RIGHT_X = 2;
+lime.ui._GamepadAxis.GamepadAxis_Impl_.RIGHT_Y = 3;
+lime.ui._GamepadAxis.GamepadAxis_Impl_.TRIGGER_LEFT = 4;
+lime.ui._GamepadAxis.GamepadAxis_Impl_.TRIGGER_RIGHT = 5;
+lime.ui._GamepadButton.GamepadButton_Impl_.A = 0;
+lime.ui._GamepadButton.GamepadButton_Impl_.B = 1;
+lime.ui._GamepadButton.GamepadButton_Impl_.X = 2;
+lime.ui._GamepadButton.GamepadButton_Impl_.Y = 3;
+lime.ui._GamepadButton.GamepadButton_Impl_.BACK = 4;
+lime.ui._GamepadButton.GamepadButton_Impl_.GUIDE = 5;
+lime.ui._GamepadButton.GamepadButton_Impl_.START = 6;
+lime.ui._GamepadButton.GamepadButton_Impl_.LEFT_STICK = 7;
+lime.ui._GamepadButton.GamepadButton_Impl_.RIGHT_STICK = 8;
+lime.ui._GamepadButton.GamepadButton_Impl_.LEFT_SHOULDER = 9;
+lime.ui._GamepadButton.GamepadButton_Impl_.RIGHT_SHOULDER = 10;
+lime.ui._GamepadButton.GamepadButton_Impl_.DPAD_UP = 11;
+lime.ui._GamepadButton.GamepadButton_Impl_.DPAD_DOWN = 12;
+lime.ui._GamepadButton.GamepadButton_Impl_.DPAD_LEFT = 13;
+lime.ui._GamepadButton.GamepadButton_Impl_.DPAD_RIGHT = 14;
 lime.ui._KeyCode.KeyCode_Impl_.UNKNOWN = 0;
 lime.ui._KeyCode.KeyCode_Impl_.BACKSPACE = 8;
 lime.ui._KeyCode.KeyCode_Impl_.TAB = 9;
@@ -23189,6 +26812,12 @@ lime.utils.ByteArray.lime_byte_array_overwrite_file = lime.system.System.load("l
 lime.utils.ByteArray.lime_byte_array_read_file = lime.system.System.load("lime","lime_byte_array_read_file",1);
 lime.utils.ByteArray.lime_lzma_decode = lime.system.System.load("lime","lime_lzma_decode",1);
 lime.utils.ByteArray.lime_lzma_encode = lime.system.System.load("lime","lime_lzma_encode",1);
+motion.actuators.SimpleActuator.actuators = new Array();
+motion.actuators.SimpleActuator.actuatorsLength = 0;
+motion.actuators.SimpleActuator.addedEvent = false;
+motion.Actuate.defaultActuator = motion.actuators.SimpleActuator;
+motion.Actuate.defaultEase = motion.easing.Expo.get_easeOut();
+motion.Actuate.targetLibraries = new haxe.ds.ObjectMap();
 openfl.display.LoaderInfo.__rootURL = window.document.URL;
 openfl.system.ApplicationDomain.currentDomain = new openfl.system.ApplicationDomain(null);
 openfl.geom.Matrix.__identity = new openfl.geom.Matrix();
@@ -23199,15 +26828,86 @@ openfl._internal.renderer.canvas.CanvasGraphics.TAN22 = 0.4142135623730950488016
 openfl._internal.renderer.opengl.GLRenderer.blendModesWebGL = null;
 openfl._internal.renderer.opengl.GLRenderer.glContextId = 0;
 openfl._internal.renderer.opengl.GLRenderer.glContexts = [];
-openfl._internal.renderer.opengl.shaders.AbstractShader.__UID = 0;
-openfl._internal.renderer.opengl.shaders.DefaultShader.defaultVertexSrc = ["attribute vec2 aVertexPosition;","attribute vec2 aTextureCoord;","attribute vec2 aColor;","uniform vec2 projectionVector;","uniform vec2 offsetVector;","varying vec2 vTextureCoord;","varying vec4 vColor;","const vec2 center = vec2(-1.0, 1.0);","void main(void) {","   gl_Position = vec4( ((aVertexPosition + offsetVector) / projectionVector) + center , 0.0, 1.0);","   vTextureCoord = aTextureCoord;","   vec3 color = mod(vec3(aColor.y/65536.0, aColor.y/256.0, aColor.y), 256.0) / 256.0;","   vColor = vec4(color * aColor.x, aColor.x);","}"];
+openfl._internal.renderer.opengl.GLTextField.bitmapData = new haxe.ds.ObjectMap();
+openfl._internal.renderer.opengl.GLTextField.glyphs = new haxe.ds.ObjectMap();
+openfl._internal.renderer.opengl.GLTextField.tilesheets = new haxe.ds.ObjectMap();
+openfl._internal.renderer.opengl.GLTextField.tileIDs = new haxe.ds.ObjectMap();
+openfl._internal.renderer.opengl.shaders2.Shader.UID = 0;
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Attrib_Impl_.Position = "aPosition";
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Attrib_Impl_.TexCoord = "aTexCoord0";
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Attrib_Impl_.Color = "aColor";
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_.Sampler = "uSampler0";
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_.ProjectionVector = "uProjectionVector";
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_.OffsetVector = "uOffsetVector";
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_.Color = "uColor";
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_.Alpha = "uAlpha";
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_.ColorMultiplier = "uColorMultiplier";
+openfl._internal.renderer.opengl.shaders2._DefaultShader.Uniform_Impl_.ColorOffset = "uColorOffset";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Attrib_Impl_.Position = "aPosition";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Attrib_Impl_.TexCoord = "aTexCoord0";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Attrib_Impl_.Color = "aColor";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_.UseTexture = "uUseTexture";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_.Sampler = "uSampler0";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_.ProjectionVector = "uProjectionVector";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_.OffsetVector = "uOffsetVector";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_.Color = "uColor";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_.Alpha = "uAlpha";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_.ColorMultiplier = "uColorMultiplier";
+openfl._internal.renderer.opengl.shaders2._DrawTrianglesShader.Uniform_Impl_.ColorOffset = "uColorOffset";
+openfl._internal.renderer.opengl.shaders2._FillShader.Attrib_Impl_.Position = "aPosition";
+openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_.TranslationMatrix = "uTranslationMatrix";
+openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_.ProjectionVector = "uProjectionVector";
+openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_.OffsetVector = "uOffsetVector";
+openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_.Color = "uColor";
+openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_.Alpha = "uAlpha";
+openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_.ColorMultiplier = "uColorMultiplier";
+openfl._internal.renderer.opengl.shaders2._FillShader.Uniform_Impl_.ColorOffset = "uColorOffset";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Attrib_Impl_.Position = "aPosition";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.TranslationMatrix = "uTranslationMatrix";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.PatternMatrix = "uPatternMatrix";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.PatternTL = "uPatternTL";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.PatternBR = "uPatternBR";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.Sampler = "uSampler0";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.ProjectionVector = "uProjectionVector";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.OffsetVector = "uOffsetVector";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.Color = "uColor";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.Alpha = "uAlpha";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.ColorMultiplier = "uColorMultiplier";
+openfl._internal.renderer.opengl.shaders2._PatternFillShader.Uniform_Impl_.ColorOffset = "uColorOffset";
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Attrib_Impl_.Position = "aPosition";
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Attrib_Impl_.Color = "aColor";
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_.TranslationMatrix = "uTranslationMatrix";
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_.ProjectionVector = "uProjectionVector";
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_.OffsetVector = "uOffsetVector";
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_.Alpha = "uAlpha";
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_.ColorMultiplier = "uColorMultiplier";
+openfl._internal.renderer.opengl.shaders2._PrimitiveShader.Uniform_Impl_.ColorOffset = "uColorOffset";
+openfl._internal.renderer.opengl.utils.PathBuiler.__currentWinding = 0;
 openfl._internal.renderer.opengl.utils.PathBuiler.__fillIndex = 0;
+openfl._internal.renderer.opengl.utils._DrawPath.WindingRule_Impl_.EVEN_ODD = 0;
+openfl._internal.renderer.opengl.utils._DrawPath.WindingRule_Impl_.NON_ZERO = 1;
+openfl._internal.renderer.opengl.utils.GraphicsRenderer.fillVertexAttributes = [new openfl._internal.renderer.opengl.utils.VertexAttribute(2,5126,false,"aPosition")];
+openfl._internal.renderer.opengl.utils.GraphicsRenderer.drawTrianglesVertexAttributes = [new openfl._internal.renderer.opengl.utils.VertexAttribute(2,5126,false,"aPosition"),new openfl._internal.renderer.opengl.utils.VertexAttribute(2,5126,false,"aTexCoord0"),new openfl._internal.renderer.opengl.utils.VertexAttribute(4,5121,true,"aColor")];
+openfl._internal.renderer.opengl.utils.GraphicsRenderer.primitiveVertexAttributes = [new openfl._internal.renderer.opengl.utils.VertexAttribute(2,5126,false,"aPosition"),new openfl._internal.renderer.opengl.utils.VertexAttribute(4,5126,false,"aColor")];
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.graphicsDataPool = [];
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.bucketPool = [];
+openfl._internal.renderer.opengl.utils.GraphicsRenderer.SIN45 = 0.70710678118654752440084436210485;
+openfl._internal.renderer.opengl.utils.GraphicsRenderer.TAN22 = 0.4142135623730950488016887242097;
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectPosition = new openfl.geom.Point();
 openfl._internal.renderer.opengl.utils.GraphicsRenderer.objectBounds = new openfl.geom.Rectangle();
 openfl._internal.renderer.opengl.utils._GraphicsRenderer.RenderMode_Impl_.DEFAULT = 0;
 openfl._internal.renderer.opengl.utils._GraphicsRenderer.RenderMode_Impl_.STENCIL = 1;
+openfl._internal.renderer.opengl.utils.SpriteBatch.VERTS_PER_SPRITE = 4;
+openfl._internal.renderer.opengl.utils._VertexAttribute.ElementType_Impl_.BYTE = 5120;
+openfl._internal.renderer.opengl.utils._VertexAttribute.ElementType_Impl_.UNSIGNED_BYTE = 5121;
+openfl._internal.renderer.opengl.utils._VertexAttribute.ElementType_Impl_.SHORT = 5122;
+openfl._internal.renderer.opengl.utils._VertexAttribute.ElementType_Impl_.UNSIGNED_SHORT = 5123;
+openfl._internal.renderer.opengl.utils._VertexAttribute.ElementType_Impl_.FLOAT = 5126;
+openfl.text.TextField.__utf8_endline_code = 10;
+openfl.text.TextField.ASCENDER = 0;
+openfl.text.TextField.DESCENDER = 1;
+openfl.text.TextField.LINE_HEIGHT = 2;
+openfl.text.TextField.LEADING = 3;
 openfl.display.Graphics.TILE_SCALE = 1;
 openfl.display.Graphics.TILE_ROTATION = 2;
 openfl.display.Graphics.TILE_RGB = 4;
@@ -23403,6 +27103,7 @@ openfl.ui.Keyboard.ENTER = 13;
 openfl.ui.Keyboard.COMMAND = 15;
 openfl.ui.Keyboard.SHIFT = 16;
 openfl.ui.Keyboard.CONTROL = 17;
+openfl.ui.Keyboard.BREAK = 19;
 openfl.ui.Keyboard.CAPS_LOCK = 20;
 openfl.ui.Keyboard.NUMPAD = 21;
 openfl.ui.Keyboard.ESCAPE = 27;
@@ -23418,7 +27119,6 @@ openfl.ui.Keyboard.DOWN = 40;
 openfl.ui.Keyboard.INSERT = 45;
 openfl.ui.Keyboard.DELETE = 46;
 openfl.ui.Keyboard.NUMLOCK = 144;
-openfl.ui.Keyboard.BREAK = 19;
 openfl.ui.Keyboard.SEMICOLON = 186;
 openfl.ui.Keyboard.EQUAL = 187;
 openfl.ui.Keyboard.COMMA = 188;
@@ -23430,134 +27130,7 @@ openfl.ui.Keyboard.LEFTBRACKET = 219;
 openfl.ui.Keyboard.BACKSLASH = 220;
 openfl.ui.Keyboard.RIGHTBRACKET = 221;
 openfl.ui.Keyboard.QUOTE = 222;
-openfl.ui.Keyboard.DOM_VK_CANCEL = 3;
-openfl.ui.Keyboard.DOM_VK_HELP = 6;
-openfl.ui.Keyboard.DOM_VK_BACK_SPACE = 8;
-openfl.ui.Keyboard.DOM_VK_TAB = 9;
-openfl.ui.Keyboard.DOM_VK_CLEAR = 12;
-openfl.ui.Keyboard.DOM_VK_RETURN = 13;
-openfl.ui.Keyboard.DOM_VK_ENTER = 14;
-openfl.ui.Keyboard.DOM_VK_SHIFT = 16;
-openfl.ui.Keyboard.DOM_VK_CONTROL = 17;
-openfl.ui.Keyboard.DOM_VK_ALT = 18;
-openfl.ui.Keyboard.DOM_VK_PAUSE = 19;
-openfl.ui.Keyboard.DOM_VK_CAPS_LOCK = 20;
-openfl.ui.Keyboard.DOM_VK_ESCAPE = 27;
-openfl.ui.Keyboard.DOM_VK_SPACE = 32;
-openfl.ui.Keyboard.DOM_VK_PAGE_UP = 33;
-openfl.ui.Keyboard.DOM_VK_PAGE_DOWN = 34;
-openfl.ui.Keyboard.DOM_VK_END = 35;
-openfl.ui.Keyboard.DOM_VK_HOME = 36;
-openfl.ui.Keyboard.DOM_VK_LEFT = 37;
-openfl.ui.Keyboard.DOM_VK_UP = 38;
-openfl.ui.Keyboard.DOM_VK_RIGHT = 39;
-openfl.ui.Keyboard.DOM_VK_DOWN = 40;
-openfl.ui.Keyboard.DOM_VK_PRINTSCREEN = 44;
-openfl.ui.Keyboard.DOM_VK_INSERT = 45;
-openfl.ui.Keyboard.DOM_VK_DELETE = 46;
-openfl.ui.Keyboard.DOM_VK_0 = 48;
-openfl.ui.Keyboard.DOM_VK_1 = 49;
-openfl.ui.Keyboard.DOM_VK_2 = 50;
-openfl.ui.Keyboard.DOM_VK_3 = 51;
-openfl.ui.Keyboard.DOM_VK_4 = 52;
-openfl.ui.Keyboard.DOM_VK_5 = 53;
-openfl.ui.Keyboard.DOM_VK_6 = 54;
-openfl.ui.Keyboard.DOM_VK_7 = 55;
-openfl.ui.Keyboard.DOM_VK_8 = 56;
-openfl.ui.Keyboard.DOM_VK_9 = 57;
-openfl.ui.Keyboard.DOM_VK_SEMICOLON = 59;
-openfl.ui.Keyboard.DOM_VK_EQUALS = 61;
-openfl.ui.Keyboard.DOM_VK_A = 65;
-openfl.ui.Keyboard.DOM_VK_B = 66;
-openfl.ui.Keyboard.DOM_VK_C = 67;
-openfl.ui.Keyboard.DOM_VK_D = 68;
-openfl.ui.Keyboard.DOM_VK_E = 69;
-openfl.ui.Keyboard.DOM_VK_F = 70;
-openfl.ui.Keyboard.DOM_VK_G = 71;
-openfl.ui.Keyboard.DOM_VK_H = 72;
-openfl.ui.Keyboard.DOM_VK_I = 73;
-openfl.ui.Keyboard.DOM_VK_J = 74;
-openfl.ui.Keyboard.DOM_VK_K = 75;
-openfl.ui.Keyboard.DOM_VK_L = 76;
-openfl.ui.Keyboard.DOM_VK_M = 77;
-openfl.ui.Keyboard.DOM_VK_N = 78;
-openfl.ui.Keyboard.DOM_VK_O = 79;
-openfl.ui.Keyboard.DOM_VK_P = 80;
-openfl.ui.Keyboard.DOM_VK_Q = 81;
-openfl.ui.Keyboard.DOM_VK_R = 82;
-openfl.ui.Keyboard.DOM_VK_S = 83;
-openfl.ui.Keyboard.DOM_VK_T = 84;
-openfl.ui.Keyboard.DOM_VK_U = 85;
-openfl.ui.Keyboard.DOM_VK_V = 86;
-openfl.ui.Keyboard.DOM_VK_W = 87;
-openfl.ui.Keyboard.DOM_VK_X = 88;
-openfl.ui.Keyboard.DOM_VK_Y = 89;
-openfl.ui.Keyboard.DOM_VK_Z = 90;
-openfl.ui.Keyboard.DOM_VK_CONTEXT_MENU = 93;
-openfl.ui.Keyboard.DOM_VK_NUMPAD0 = 96;
-openfl.ui.Keyboard.DOM_VK_NUMPAD1 = 97;
-openfl.ui.Keyboard.DOM_VK_NUMPAD2 = 98;
-openfl.ui.Keyboard.DOM_VK_NUMPAD3 = 99;
-openfl.ui.Keyboard.DOM_VK_NUMPAD4 = 100;
-openfl.ui.Keyboard.DOM_VK_NUMPAD5 = 101;
-openfl.ui.Keyboard.DOM_VK_NUMPAD6 = 102;
-openfl.ui.Keyboard.DOM_VK_NUMPAD7 = 103;
-openfl.ui.Keyboard.DOM_VK_NUMPAD8 = 104;
-openfl.ui.Keyboard.DOM_VK_NUMPAD9 = 105;
-openfl.ui.Keyboard.DOM_VK_MULTIPLY = 106;
-openfl.ui.Keyboard.DOM_VK_ADD = 107;
-openfl.ui.Keyboard.DOM_VK_SEPARATOR = 108;
-openfl.ui.Keyboard.DOM_VK_SUBTRACT = 109;
-openfl.ui.Keyboard.DOM_VK_DECIMAL = 110;
-openfl.ui.Keyboard.DOM_VK_DIVIDE = 111;
-openfl.ui.Keyboard.DOM_VK_F1 = 112;
-openfl.ui.Keyboard.DOM_VK_F2 = 113;
-openfl.ui.Keyboard.DOM_VK_F3 = 114;
-openfl.ui.Keyboard.DOM_VK_F4 = 115;
-openfl.ui.Keyboard.DOM_VK_F5 = 116;
-openfl.ui.Keyboard.DOM_VK_F6 = 117;
-openfl.ui.Keyboard.DOM_VK_F7 = 118;
-openfl.ui.Keyboard.DOM_VK_F8 = 119;
-openfl.ui.Keyboard.DOM_VK_F9 = 120;
-openfl.ui.Keyboard.DOM_VK_F10 = 121;
-openfl.ui.Keyboard.DOM_VK_F11 = 122;
-openfl.ui.Keyboard.DOM_VK_F12 = 123;
-openfl.ui.Keyboard.DOM_VK_F13 = 124;
-openfl.ui.Keyboard.DOM_VK_F14 = 125;
-openfl.ui.Keyboard.DOM_VK_F15 = 126;
-openfl.ui.Keyboard.DOM_VK_F16 = 127;
-openfl.ui.Keyboard.DOM_VK_F17 = 128;
-openfl.ui.Keyboard.DOM_VK_F18 = 129;
-openfl.ui.Keyboard.DOM_VK_F19 = 130;
-openfl.ui.Keyboard.DOM_VK_F20 = 131;
-openfl.ui.Keyboard.DOM_VK_F21 = 132;
-openfl.ui.Keyboard.DOM_VK_F22 = 133;
-openfl.ui.Keyboard.DOM_VK_F23 = 134;
-openfl.ui.Keyboard.DOM_VK_F24 = 135;
-openfl.ui.Keyboard.DOM_VK_NUM_LOCK = 144;
-openfl.ui.Keyboard.DOM_VK_SCROLL_LOCK = 145;
-openfl.ui.Keyboard.DOM_VK_COMMA = 188;
-openfl.ui.Keyboard.DOM_VK_PERIOD = 190;
-openfl.ui.Keyboard.DOM_VK_SLASH = 191;
-openfl.ui.Keyboard.DOM_VK_BACK_QUOTE = 192;
-openfl.ui.Keyboard.DOM_VK_OPEN_BRACKET = 219;
-openfl.ui.Keyboard.DOM_VK_BACK_SLASH = 220;
-openfl.ui.Keyboard.DOM_VK_CLOSE_BRACKET = 221;
-openfl.ui.Keyboard.DOM_VK_QUOTE = 222;
-openfl.ui.Keyboard.DOM_VK_META = 224;
-openfl.ui.Keyboard.DOM_VK_KANA = 21;
-openfl.ui.Keyboard.DOM_VK_HANGUL = 21;
-openfl.ui.Keyboard.DOM_VK_JUNJA = 23;
-openfl.ui.Keyboard.DOM_VK_FINAL = 24;
-openfl.ui.Keyboard.DOM_VK_HANJA = 25;
-openfl.ui.Keyboard.DOM_VK_KANJI = 25;
-openfl.ui.Keyboard.DOM_VK_CONVERT = 28;
-openfl.ui.Keyboard.DOM_VK_NONCONVERT = 29;
-openfl.ui.Keyboard.DOM_VK_ACEPT = 30;
-openfl.ui.Keyboard.DOM_VK_MODECHANGE = 31;
-openfl.ui.Keyboard.DOM_VK_SELECT = 41;
-openfl.ui.Keyboard.DOM_VK_PRINT = 42;
-openfl.ui.Keyboard.DOM_VK_EXECUTE = 43;
-openfl.ui.Keyboard.DOM_VK_SLEEP = 95;
 ApplicationMain.main();
 })(typeof window != "undefined" ? window : exports);
+
+//# sourceMappingURL=PlatformEngine.js.map

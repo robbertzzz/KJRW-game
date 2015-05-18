@@ -2,6 +2,7 @@ package player ;
 
 import openfl.display.Sprite;
 import openfl.events.Event;
+import openfl.geom.Matrix;
 import openfl.Lib;
 
 import player.Arm;
@@ -9,11 +10,7 @@ import player.Body;
 import player.Head;
 import player.Leg;
 
-import blocks.Block;
-import blocks.Coin;
-import blocks.Fog;
-import blocks.HangBlock;
-import blocks.Obstacle;
+import blocks.*;
 
 /**
  * ...
@@ -23,9 +20,10 @@ class Player extends Sprite
 {
 	private var xSpeed:Float = 0;
 	private var ySpeed:Float = 0;
-	private var maxXSpeed:Float = (5/16) * Global.elementSize;
-	private var maxYSpeed:Float = (11 / 16) * Global.elementSize;
-	private var maxFallSpeed:Float = (20 / 16) * Global.elementSize;
+	private var maxXSpeed:Float = 4;
+	private var maxYSpeed:Float = 8;
+	private var maxFallSpeed:Float = 15;
+	private var climbSpeed:Float = 4;
 	private var i:Int;
 	private var gravity:Float = 0.75 * (1/16) * Global.elementSize;
 	private var isStanding:Bool = false;
@@ -37,6 +35,10 @@ class Player extends Sprite
 	public var arms:Array<Arm> = new Array();
 	private var body:Body;
 	private var head:Head;
+	
+	public var hanging:Bool = false;
+	
+	public var frame:Float = 0;
 	
 
 	public function new() 
@@ -53,10 +55,10 @@ class Player extends Sprite
 	}
 	
 	private function frankenstein():Void {
-		arms[0] = new Arm(false);
+		/*arms[0] = new Arm(false);
 		addChild(arms[0]);
 		
-		legs[0] = new Leg(false);
+		/*legs[0] = new Leg(false);
 		addChild(legs[0]);
 		
 		body = new Body();
@@ -66,7 +68,7 @@ class Player extends Sprite
 		addChild(head);
 		
 		legs[1] = new Leg(true);
-		addChild(legs[1]);
+		addChild(legs[1]);*/
 		
 		arms[1] = new Arm(true);
 		addChild(arms[1]);
@@ -75,6 +77,7 @@ class Player extends Sprite
 	private function update(e:Event):Void {
 		move();
 		moveView();
+		draw();
 	}
 	
 	
@@ -118,6 +121,8 @@ class Player extends Sprite
 	private var onTheGround:Bool;		//Idem
 	private var againstTheCeiling:Bool;	//Idem
 	
+	private var onTheStairs:Bool = false;       //Whether or not the player should walk up and down the stairs or not
+	
 	private var wallBlockLeft:Int;		//the index of the colliding wall block on the left in the Global.block array
 	private var wallBlockRight:Int;		//the index of the colliding wall block on the right in the Global.block array
 	private var groundBlock:Int;		//the index of the colliding ground block
@@ -126,18 +131,20 @@ class Player extends Sprite
 	private function move():Void {
 		xSpeed = 0;
 		
-		//needs to be in front of the collision checking, because alse the collision checking will be a frame behind and cause bugs
-		if (Global.up) {
-			if (isStanding) {
+		//needs to be before of the collision checking, because else the collision checking will be a frame behind and cause bugs
+		if (Global.jump) {
+			if ( (isStanding || onTheStairs) && !hanging) {
 				startJumping();
+				onTheStairs = false;
 			}
 		}
 		
 		checkCollision();
 		
+		// Check the controls, move accordingly
 		if (Global.left) {
 			//if the player is against a wall on the left side, stop against it, else, move
-			if (againstWallLeft) {
+			if (againstWallLeft && !onTheStairs) {
 				xSpeed = 0;
 				x = Global.blocks[wallBlockLeft].x + Global.blocks[wallBlockLeft].width;
 			} else { 
@@ -147,27 +154,43 @@ class Player extends Sprite
 		
 		if (Global.right) {
 			//if the player is against a wall on the right side, stop against it, else, move
-			if (againstWallRight) {
+			if (againstWallRight && !onTheStairs) {
 				xSpeed = 0;
 				x = Global.blocks[wallBlockRight].x - playerWidth;
-			} else { 
+			} else {
 				xSpeed += maxXSpeed;
 			}
 		}
 		
 		
-		//fix for bug when standing against the wall
+		//fix for bug when standing against the wall, stand still when both left and right are pressed.
 		if (Global.left && Global.right) {
 			xSpeed = 0;
 		}
 		
-		jumpController();
+		if (hanging) {
+			hangController();
+		} else {
+			jumpController();
+		}
+		
+		//move slower when shift is pressed
 		if (Global.shift) {
 			xSpeed *= 0.4;
 		}
-		x += xSpeed;
-		y += ySpeed;
 		
+		//y += ySpeed;
+		
+		//walk up or down the stairs
+		if (onTheStairs) {
+			xSpeed *= 0.5;
+			y -= xSpeed;
+		} else {
+			y += ySpeed;
+		}
+		x += xSpeed;
+		
+		//check if the player ate a coin
 		checkCoin();
 	}
 	
@@ -182,38 +205,56 @@ class Player extends Sprite
 			//trace("width: " + Global.blocks[i].blockWidth + ", height: " + Global.blocks[i].blockHeight);
 			//collision on the left side
 			if (	   Global.blocks[i].y < y + playerHeight
-					&& Global.blocks[i].y > y - 16 //Global.blocks[i].height
-					&& (Global.blocks[i].x + 16 /*Global.blocks[i].width*/) >= x - maxXSpeed
+					&& Global.blocks[i].y > y - Global.elementSize
+					&& (Global.blocks[i].x + Global.elementSize) >= x - maxXSpeed
 					&& Global.blocks[i].x < x - maxXSpeed) {
-				againstWallLeft = true;
-				wallBlockLeft = i;
+				if(Global.blocks[i].type != "OpenCeiling" && (Global.blocks[i].type != "Stairs" || onTheStairs) ) {
+					againstWallLeft = true;
+					wallBlockLeft = i;
+				}
 			}
 			
 			//collision on the right side
 			if (	   Global.blocks[i].y < y + playerHeight
-					&& Global.blocks[i].y > y - 16 //Global.blocks[i].height
-					&& (Global.blocks[i].x + 16 /*Global.blocks[i].width*/) > x + maxXSpeed
+					&& Global.blocks[i].y > y - Global.elementSize
+					&& (Global.blocks[i].x + Global.elementSize) > x + maxXSpeed
 					&& Global.blocks[i].x <= x + playerWidth + maxXSpeed) {
-				againstWallRight = true;
-				wallBlockRight = i;
+				if(Global.blocks[i].type != "OpenCeiling" && (Global.blocks[i].type != "Stairs" || onTheStairs) ) {
+					againstWallRight = true;
+					wallBlockRight = i;
+				}
 			}
 			
 			//collision on the top side
-			if (	   Global.blocks[i].y + 16 /*Global.blocks[i].height*/ >= y + ySpeed + gravity
+			if (	   Global.blocks[i].y + Global.elementSize >= y + ySpeed + gravity
 					&& Global.blocks[i].y < y
-					&& Global.blocks[i].x + 16 /*Global.blocks[i].width*/ > x
+					&& Global.blocks[i].x + Global.elementSize > x
 					&& Global.blocks[i].x < x + playerWidth) {
-				againstTheCeiling = true;
-				ceilingBlock = i;
+				if(Global.blocks[i].type != "OpenCeiling" && Global.blocks[i].type != "Stairs") {
+					againstTheCeiling = true;
+					onTheStairs = false;
+					ceilingBlock = i;
+				}
 			}
 			
 			//collision on the bottom side
 			if (	   Global.blocks[i].y <= y + ySpeed + gravity + playerHeight
 					&& Global.blocks[i].y > y
-					&& Global.blocks[i].x > x - 16 //Global.blocks[i].width
+					&& Global.blocks[i].x > x - Global.elementSize
 					&& Global.blocks[i].x < x + playerWidth) {
-				onTheGround = true;
-				groundBlock = i;
+				if (Global.blocks[i].type == "Block") {
+					onTheGround = true;
+					onTheStairs = false;
+					groundBlock = i;
+				} else if(Global.blocks[i].type == "OpenCeiling" && Global.blocks[i].y >= y + playerHeight && !Global.down) {
+					onTheGround = true;
+					onTheStairs = false;
+					groundBlock = i;
+				} else if (Global.blocks[i].type == "Stairs" && /*Global.blocks[i].y >= y + playerHeight &&*/ Global.up) {
+					onTheGround = false;
+					onTheStairs = true;
+					groundBlock = i;
+				}
 			}
 		}
 	}
@@ -230,9 +271,9 @@ class Player extends Sprite
 		}
 		
 		//if it's on the ground, land, else, fall faster.
-		//if it's against the ceiling, stop moving up. Trace ouch.
+		//if it's against the ceiling, stop moving up.
 		if (onTheGround || againstTheCeiling) {
-			if(onTheGround) {
+			if(onTheGround || onTheStairs) {
 				//LAND
 				ySpeed = 0;
 				y = Global.blocks[groundBlock].y - playerHeight;
@@ -240,7 +281,7 @@ class Player extends Sprite
 			}
 			if(againstTheCeiling) {
 				ySpeed = 0;
-				y = Global.blocks[ceilingBlock].y + 16 /*Global.blocks[ceilingBlock].height;*/;
+				y = Global.blocks[ceilingBlock].y + Global.elementSize;
 			}
 		} else { 
 			ySpeed += gravity;
@@ -250,6 +291,28 @@ class Player extends Sprite
 		}
 	}
 	
+	private var pX:Float;
+	private var pY:Float;
+	private var pDistance:Float;
+	//Hang from the phone, change controls
+	private function hangController():Void {
+		//phoneHorn position
+		pX = arms[1].weapon.phoneHorn.x;
+		pY = arms[1].weapon.phoneHorn.y;
+		pDistance = Math.sqrt((pX - x) * (pX - x) + (pY - y) * (pY - y));
+		
+		//Move up/towards the phoneHorn
+		if (Global.up) {
+			
+		}
+		
+		//Move down/away from the phoneHorn
+		if (Global.down) {
+			
+		}
+	}
+	
+	//eat coins
 	private var tempCoin:Coin;
 	private function checkCoin():Void {
 		i = 0;
@@ -266,6 +329,23 @@ class Player extends Sprite
 				i--;
 			}
 			i++;
+		}
+	}
+	
+	private function draw() {
+		this.graphics.clear();
+		AssetStorage.playerWalk.drawTiles(this.graphics, [ -10, 0, Math.floor(frame) % 8]);
+		if(Global.right && !Global.left) {
+			frame += 0.25;
+			if (frame == 8) {
+				frame = 0;
+			}
+		}
+		if (Global.left && !Global.right) {
+			frame -= 0.25;
+			if (frame == 0) {
+				frame = 8;
+			}
 		}
 	}
 }

@@ -45,11 +45,29 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		#if flash
 		
+		className.set ("img/blocks.png", __ASSET__img_blocks_png);
+		type.set ("img/blocks.png", AssetType.IMAGE);
+		className.set ("img/player.png", __ASSET__img_player_png);
+		type.set ("img/player.png", AssetType.IMAGE);
+		className.set ("img/retardoarm.png", __ASSET__img_retardoarm_png);
+		type.set ("img/retardoarm.png", AssetType.IMAGE);
 		
 		
 		#elseif html5
 		
 		var id;
+		id = "img/blocks.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/retardoarm.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
 		
 		
 		var assetsPrefix = ApplicationMain.config.assetsPrefix;
@@ -64,11 +82,23 @@ class DefaultAssetLibrary extends AssetLibrary {
 		#if openfl
 		
 		
+		
+		
+		
 		#end
 		
 		#if (windows || mac || linux)
 		
 		var useManifest = false;
+		
+		className.set ("img/blocks.png", __ASSET__img_blocks_png);
+		type.set ("img/blocks.png", AssetType.IMAGE);
+		
+		className.set ("img/player.png", __ASSET__img_player_png);
+		type.set ("img/player.png", AssetType.IMAGE);
+		
+		className.set ("img/retardoarm.png", __ASSET__img_retardoarm_png);
+		type.set ("img/retardoarm.png", AssetType.IMAGE);
 		
 		
 		if (useManifest) {
@@ -247,9 +277,9 @@ class DefaultAssetLibrary extends AssetLibrary {
 		#if flash
 		
 		var src = Type.createInstance (className.get (id), []);
+		
 		var font = new Font (src.fontName);
 		font.src = src;
-		
 		return font;
 		
 		#elseif html5
@@ -539,6 +569,8 @@ class DefaultAssetLibrary extends AssetLibrary {
 			var bytes = ByteArray.readFile ("assets/manifest");
 			#elseif (mac && java)
 			var bytes = ByteArray.readFile ("../Resources/manifest");
+			#elseif ios
+			var bytes = ByteArray.readFile ("assets/manifest");
 			#else
 			var bytes = ByteArray.readFile ("manifest");
 			#end
@@ -559,7 +591,11 @@ class DefaultAssetLibrary extends AssetLibrary {
 							
 							if (!className.exists (asset.id)) {
 								
+								#if ios
+								path.set (asset.id, "assets/" + asset.path);
+								#else
 								path.set (asset.id, asset.path);
+								#end
 								type.set (asset.id, cast (asset.type, AssetType));
 								
 							}
@@ -664,9 +700,15 @@ class DefaultAssetLibrary extends AssetLibrary {
 #if !display
 #if flash
 
+@:keep @:bind #if display private #end class __ASSET__img_blocks_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_retardoarm_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 
 
 #elseif html5
+
+
+
 
 
 
@@ -677,6 +719,9 @@ class DefaultAssetLibrary extends AssetLibrary {
 #if (windows || mac || linux)
 
 
+@:image("assets/img/blocks.png") #if display private #end class __ASSET__img_blocks_png extends lime.graphics.Image {}
+@:image("assets/img/player.png") #if display private #end class __ASSET__img_player_png extends lime.graphics.Image {}
+@:image("assets/img/retardoarm.png") #if display private #end class __ASSET__img_retardoarm_png extends lime.graphics.Image {}
 
 
 

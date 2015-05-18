@@ -13,11 +13,7 @@ import player.Body;
 import player.Head;
 import player.Leg;
 
-import blocks.Block;
-import blocks.Coin;
-import blocks.Fog;
-import blocks.HangBlock;
-import blocks.Obstacle;
+import blocks.*;
 
 /**
  * ...
@@ -60,9 +56,9 @@ class Platform extends Sprite
 			for (ii in 0...level[i].length) {
 				switch(level[i][ii]) {
 					case 1, 101:
-						temp = new Block();
-						temp.x = ii * Global.elementSize;
-						temp.y = i * Global.elementSize;
+						temp = new Block(ii * Global.elementSize, i * Global.elementSize, level);
+						/*temp.x = ii * Global.elementSize;
+						temp.y = i * Global.elementSize;*/
 						blocks.push(temp);
 						addChild(temp);
 					
@@ -81,7 +77,7 @@ class Platform extends Sprite
 						blocks.push(temp);
 						addChild(temp);
 					case 4, 104:
-						temp = new HangBlock();
+						temp = new Lamp();
 						temp.x = ii * Global.elementSize;
 						temp.y = i * Global.elementSize;
 						//blocks.push(temp);
@@ -92,6 +88,18 @@ class Platform extends Sprite
 						temp.y = i * Global.elementSize;
 						addChild(temp);
 						level[i][ii] -= 5;*/
+					case 6, 106:
+						temp = new Stairs();
+						temp.x = ii * Global.elementSize;
+						temp.y = i * Global.elementSize;
+						blocks.push(temp);
+						addChild(temp);
+					case 7, 107:
+						temp = new OpenCeiling();
+						temp.x = ii * Global.elementSize;
+						temp.y = i * Global.elementSize;
+						blocks.push(temp);
+						addChild(temp);
 				}
 				
 			}

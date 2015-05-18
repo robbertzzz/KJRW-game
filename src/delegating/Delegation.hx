@@ -5,7 +5,7 @@ import openfl.display.Sprite;
 import motion.Actuate;
 import openfl.Lib;
 import openfl.events.Event;
-import platform.Platform1;
+import platform.*;
 
 /**
  * ...
@@ -46,7 +46,7 @@ class Delegation extends Sprite
 	
 	private function update(e:Event):Void {
 		if (delegated == 5) {
-			Global.main.level = new Platform1();
+			Global.main.level = new Platform2();
 			Global.main.addChild(Global.main.level);
 			Global.level = Global.main.level;
 			removeEventListener(Event.ENTER_FRAME, update);
