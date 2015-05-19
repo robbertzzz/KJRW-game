@@ -10,6 +10,7 @@ import openfl.display.Sprite;
 class Obstacle extends Sprite
 {
 	private var instancePrev:Dynamic;
+	public var type:String = "Obstacle";
 	
 	public function new() 
 	{

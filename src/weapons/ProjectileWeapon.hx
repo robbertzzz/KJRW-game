@@ -44,8 +44,9 @@ class ProjectileWeapon extends Sprite
 			for (i in 0...25) {
 				collision = bullet.checkCollision( -0.1 * i * xySpeed[0], -0.1 * i * xySpeed[1]);
 				if (collision > 0 && collision < 100 && collision != 2 && collision != 102 && collision != 7 && collision != 107) {
-					Global.bullets.remove(bullet);
+					bullet.removeEventListener(Event.ENTER_FRAME, bullet.update);
 					bullet.parent.removeChild(bullet);
+					Global.bullets[Global.bullets.indexOf(bullet)] = null;
 					break;
 				}
 			}

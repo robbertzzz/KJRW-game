@@ -1,7 +1,5 @@
 package platform ;
 
-import openfl.events.Event;
-
 /**
  * ...
  * @author Robert-Jan Zandvoort

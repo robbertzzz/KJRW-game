@@ -326,7 +326,7 @@ class Player extends Sprite
 	}
 	
 	//eat coins
-	private var tempCoin:Coin;
+	private var tempCoin:Coffee;
 	private function checkCoin():Void {
 		i = 0;
 		while (i < Global.coins.length) {

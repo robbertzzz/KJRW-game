@@ -24,7 +24,7 @@ class Platform extends Sprite
 	public var player:Player;
 	public var level:Array<Array<Int>> = new Array();
 	public var blocks:Array<Dynamic> = new Array();
-	public var coins:Array<Coin> = new Array();
+	public var coins:Array<Coffee> = new Array();
 	public var obstacles:Array<Obstacle> = new Array();
 	public var fogMap:Array<Array<Fog>> = new Array();
 	private var i:Int;
@@ -63,7 +63,7 @@ class Platform extends Sprite
 						addChild(temp);
 					
 					case 2, 102:
-						temp = new Coin();
+						temp = new Coffee();
 						temp.x = ii * Global.elementSize;
 						temp.y = i * Global.elementSize;
 						coins.push(temp);
@@ -82,12 +82,12 @@ class Platform extends Sprite
 						temp.y = i * Global.elementSize;
 						//blocks.push(temp);
 						addChild(temp); 
-					/*case 5, 105:
+					case 5, 105:
 						temp = new Darkling();
 						temp.x = ii * Global.elementSize;
 						temp.y = i * Global.elementSize;
 						addChild(temp);
-						level[i][ii] -= 5;*/
+						level[i][ii] -= 5;
 					case 6, 106:
 						temp = new Stairs(ii * Global.elementSize, i * Global.elementSize, level);
 						/*temp.x = ii * Global.elementSize;
@@ -100,8 +100,14 @@ class Platform extends Sprite
 						temp.y = i * Global.elementSize;
 						blocks.push(temp);
 						addChild(temp);
+					
+					case 8, 108:
+						temp = new Door();
+						temp.x = ii * Global.elementSize;
+						temp.y = i * Global.elementSize;
+						blocks.push(temp);
+						addChild(temp);
 				}
-				
 			}
 		}
 		

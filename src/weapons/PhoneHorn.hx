@@ -73,7 +73,7 @@ class PhoneHorn extends Sprite
 	private function update(e:Event):Void {
 		x += xSpeed;
 		y += ySpeed;
-		collision = checkCollision(xSpeed, ySpeed);
+		//collision = checkCollision(xSpeed, ySpeed);
 		
 		/*// perform a collision check, DIE
 		if (collision > 0 && collision != 100 && collision != 2 && collision != 102 && collision != 4 && collision != 104) {
@@ -98,13 +98,13 @@ class PhoneHorn extends Sprite
 		}*/
 		
 		//check the distance, if too far, DIE
-		playerX = Global.level.player.returnXY[0];
-		playerY = Global.level.player.returnXY[1];
+		playerX = Global.level.player.returnXY()[0];
+		playerY = Global.level.player.returnXY()[1];
 		playerDistance = Math.sqrt((x - playerX) * (x - playerX) + (y - playerY) * (y - playerY));
 		
 		trace(playerDistance);
 		
-		if(playerDistance > Global.elementSize) {
+		if(playerDistance > Global.elementSize * 20) {
 			this.removeEventListener(Event.ENTER_FRAME, update);
 			
 			if (Global.weaponIndex == 2 && Global.level.player.arms[1].weapon.phoneHorn==this) {
@@ -112,6 +112,7 @@ class PhoneHorn extends Sprite
 				Global.level.player.arms[1].weapon.phoneHorn = null;
 			}
 			this.parent.removeChild(this);
+			
 			return;
 		}
 		

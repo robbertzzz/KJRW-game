@@ -31,7 +31,7 @@ class Global
 	public static var elementSize:Float;
 	
 	public static var blocks:Array<Dynamic> = new Array();
-	public static var coins:Array<Coin> = new Array();
+	public static var coins:Array<Coffee> = new Array();
 	public static var bullets:Array<Bullet> = new Array();
 	public static var fogMap:Array<Array<Fog>> = new Array();
 }

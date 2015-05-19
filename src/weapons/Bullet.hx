@@ -56,7 +56,7 @@ class Bullet extends Sprite
 	private var i:Int;
 	private var obstacle:Obstacle;
 	private var collision:Int;
-	private function update(e:Event):Void {
+	public function update(e:Event):Void {
 		x += xSpeed;
 		y += ySpeed;
 		collision = checkCollision(xSpeed, ySpeed);
@@ -70,11 +70,14 @@ class Bullet extends Sprite
 					i++;
 				}
 				
+				Global.level.level[Math.floor(Global.blocks[i].y/12)][Math.floor(Global.blocks[i].x/12)] -= 3;
 				Global.blocks[i].remove();
 			}
-			this.removeEventListener(Event.ENTER_FRAME, update);
-			Global.bullets.remove(this);
-			this.parent.removeChild(this);
+			removeEventListener(Event.ENTER_FRAME, update);
+			Global.bullets[Global.bullets.indexOf(this)] = null;
+			try {
+				this.parent.removeChild(this);
+			} catch(e:Dynamic) {}
 		}
 	}
 	
