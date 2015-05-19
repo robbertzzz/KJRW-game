@@ -89,9 +89,9 @@ class Platform extends Sprite
 						addChild(temp);
 						level[i][ii] -= 5;*/
 					case 6, 106:
-						temp = new Stairs();
-						temp.x = ii * Global.elementSize;
-						temp.y = i * Global.elementSize;
+						temp = new Stairs(ii * Global.elementSize, i * Global.elementSize, level);
+						/*temp.x = ii * Global.elementSize;
+						temp.y = i * Global.elementSize;*/
 						blocks.push(temp);
 						addChild(temp);
 					case 7, 107:

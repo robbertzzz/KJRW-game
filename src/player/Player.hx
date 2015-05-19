@@ -80,8 +80,6 @@ class Player extends Sprite
 		draw();
 	}
 	
-	
-	
 	private var moveViewX:Float = 0;
 	private var moveViewY:Float = 0;
 	
@@ -128,6 +126,9 @@ class Player extends Sprite
 	private var groundBlock:Int;		//the index of the colliding ground block
 	private var ceilingBlock:Int;		//the index of the colliding ceiling block
 	
+	private var landOnStairs:Bool = false;  //after a jump or falling from the higher floor, land on the stairs instead of on the ground
+	private var rightIsUp:Bool = false;     //are the stairs angled to the right or to the left?
+	
 	private function move():Void {
 		xSpeed = 0;
 		
@@ -135,6 +136,9 @@ class Player extends Sprite
 		if (Global.jump) {
 			if ( (isStanding || onTheStairs) && !hanging) {
 				startJumping();
+				if (onTheStairs) {
+					landOnStairs = true;
+				}
 				onTheStairs = false;
 			}
 		}
@@ -177,9 +181,16 @@ class Player extends Sprite
 		//y += ySpeed;
 		
 		//walk up or down the stairs
-		if (onTheStairs) {
+		if (rightIsUp && (onTheStairs && (Global.left && (Global.level.level[Math.floor(Global.blocks[groundBlock].y / 12)][Math.floor(Global.blocks[groundBlock].x / 12) - 1] == 0 || Global.level.level[Math.floor(Global.blocks[groundBlock].y / 12)][Math.floor(Global.blocks[groundBlock].x / 12) - 1] == 6 || Global.level.level[Math.floor(Global.blocks[groundBlock].y / 12)][Math.floor(Global.blocks[groundBlock].x / 12) - 1] == 106)) || onTheStairs && Global.right || onTheStairs && !Global.left && ! Global.right) ||
+		   !rightIsUp && (onTheStairs && (Global.right && (Global.level.level[Math.floor(Global.blocks[groundBlock].y / 12)][Math.floor(Global.blocks[groundBlock].x / 12) - 1] == 0 || Global.level.level[Math.floor(Global.blocks[groundBlock].y / 12)][Math.floor(Global.blocks[groundBlock].x / 12) - 1] == 6 || Global.level.level[Math.floor(Global.blocks[groundBlock].y / 12)][Math.floor(Global.blocks[groundBlock].x / 12) - 1] == 106)) || onTheStairs && Global.left || onTheStairs && !Global.left && ! Global.right)
+		   ) {
+			landOnStairs = false;
 			xSpeed *= 0.5;
-			y -= xSpeed;
+			if(rightIsUp) {
+				y -= xSpeed;
+			} else {
+				y += xSpeed;
+			}
 		} else {
 			y += ySpeed;
 		}
@@ -244,10 +255,17 @@ class Player extends Sprite
 				} else if(Global.blocks[i].type == "OpenCeiling" && Global.blocks[i].y >= y + playerHeight && !Global.down) {
 					onTheGround = true;
 					onTheStairs = false;
+					landOnStairs = true;
 					groundBlock = i;
-				} else if (Global.blocks[i].type == "Stairs" && /*Global.blocks[i].y >= y + playerHeight &&*/ Global.up) {
-					onTheGround = false;
-					onTheStairs = true;
+				} else if (Global.blocks[i].type == "Stairs" && /*Global.blocks[i].y >= y + playerHeight &&*/ (Global.up || landOnStairs)) {
+					if(Global.blocks[i].y >= y + playerHeight - 10) {
+						onTheGround = false;
+						onTheStairs = true;
+						rightIsUp = Global.blocks[i].rightIsUp;
+					} else {
+						onTheGround = true;
+						onTheStairs = false;
+					}
 					groundBlock = i;
 				}
 			}
@@ -267,8 +285,8 @@ class Player extends Sprite
 		
 		//if it's on the ground, land, else, fall faster.
 		//if it's against the ceiling, stop moving up.
-		if (onTheGround || againstTheCeiling) {
-			if(onTheGround || onTheStairs) {
+		if (onTheGround || againstTheCeiling || onTheStairs) {
+			if(onTheGround || onTheStairs && landOnStairs) {
 				//LAND
 				ySpeed = 0;
 				y = Global.blocks[groundBlock].y - playerHeight;
