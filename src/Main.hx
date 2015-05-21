@@ -7,6 +7,7 @@ import flash.events.MouseEvent;
 import flash.Lib;
 import flash.system.System;
 import openfl.display.FPS;
+import stats.TraceControls;
 
 /**
  * ...
@@ -51,6 +52,8 @@ class Main extends Sprite
 		menu = new Menu();
 		addChild(menu);
 		
+		
+		
 		Global.main = this;
 		Global.elementSize = 12;
 		
@@ -89,7 +92,7 @@ class Main extends Sprite
 			case 16:
 				Global.shift = true;
 			case 27:
-				System.exit(0);
+				//System.exit(0);
 			case 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59:
 				Global.weaponIndex = e.keyCode - 48;
 		}

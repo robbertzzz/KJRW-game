@@ -33,7 +33,7 @@ class Arm extends Sprite
 		AssetStorage.playerArm.drawTiles (this.graphics, [0, -2, 0]);
 		
 		if (leftRight) {
-			weapon = new ProjectileWeapon();
+			weapon = new Phone();
 			addChild(weapon);
 		}
 		

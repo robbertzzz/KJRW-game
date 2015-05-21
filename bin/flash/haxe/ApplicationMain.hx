@@ -166,6 +166,7 @@ class ApplicationMain {
 			file: "PlatformEngine",
 			fps: Std.int (60),
 			fullscreen: false,
+			hardware: true,
 			height: Std.int (300),
 			orientation: "",
 			packageName: "PlatformEngine",

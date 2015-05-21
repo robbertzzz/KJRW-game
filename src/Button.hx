@@ -24,8 +24,8 @@ class Button extends Sprite
 	
 	public function newGame(e:MouseEvent):Void {
 		//Global.main.level = new Delegation();
-		Global.level = new Tutorial();
-		//Global.level = new Platform2();
+		//Global.level = new Tutorial();
+		Global.level = new Platform2();
 		Global.main.addChild(Global.level);
 		Global.main.removeChild(Global.main.menu);
 		

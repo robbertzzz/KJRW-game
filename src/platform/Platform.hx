@@ -13,6 +13,8 @@ import player.Body;
 import player.Head;
 import player.Leg;
 
+import stats.*;
+
 import blocks.*;
 
 /**
@@ -169,5 +171,7 @@ class Platform extends Sprite
 		
 		hud = new hud.HUD();
 		Global.main.addChild(hud);
+		
+		addChild(new TraceControls());
 	}
 }
