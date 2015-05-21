@@ -20,6 +20,8 @@ class Global
 	public static var shift:Bool;
 	public static var weaponIndex:Int = 1;
 	
+	public static var health:Int;
+	
 	public static var mouseDown:Bool;
 	
 	public static var mouseX:Float;
