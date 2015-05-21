@@ -29,10 +29,10 @@ class HUD extends Sprite
 	function drawHealth()
 	{
 		graphics.beginFill(0x000000);
-        graphics.drawRect(Lib.current.stage.stageWidth-11, 0, 10, 5);
+        graphics.drawRect(Lib.current.stage.stageWidth-70, 0, 50, 20);
 		
 		graphics.beginFill(0xFFDD22);
-		graphics.drawRect(Lib.current.stage.stageWidth-11, 0, Global.health/10, 5);
+		graphics.drawRect(Lib.current.stage.stageWidth-70, 0, Global.health/2, 20);
 	}
 	
 	
