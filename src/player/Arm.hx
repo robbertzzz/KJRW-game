@@ -13,8 +13,8 @@ import weapons.Phone;
  */
 class Arm extends Sprite
 {
-	private var startX:Float;
-	private var startY:Float;
+	public var startX:Float;
+	public var startY:Float;
 	private var leftRight:Bool;
 	private var currentWeaponIndex:Int = 1;
 	public var weapon:Dynamic;
@@ -33,7 +33,7 @@ class Arm extends Sprite
 		AssetStorage.playerArm.drawTiles (this.graphics, [0, -2, 0]);
 		
 		if (leftRight) {
-			weapon = new Phone();
+			weapon = new ProjectileWeapon();
 			addChild(weapon);
 		}
 		

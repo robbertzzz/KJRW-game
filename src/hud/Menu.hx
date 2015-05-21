@@ -32,7 +32,7 @@ class Menu extends Sprite
 	
 	function closeMenu(e:MouseEvent)
 	{
-		graphics.clear;
+		graphics.clear();
 		createButton();
 		removeEventListener(MouseEvent.CLICK, closeMenu);
 	}

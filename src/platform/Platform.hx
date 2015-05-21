@@ -144,7 +144,7 @@ class Platform extends Sprite
 					temp = new Fog();
 					temp.x = ii * Global.elementSize;
 					temp.y = i * Global.elementSize;
-					temp.z = 0/*Global.elementSize*/;
+					//temp.z = 0/*Global.elementSize*/;
 					addChild(temp);
 					fogMap[i][ii] = temp;
 					
@@ -169,8 +169,7 @@ class Platform extends Sprite
 		addChild(player);
 		Global.health = 100;
 		
-		hud = new hud.HUD();
-		Global.main.addChild(hud);
+		
 		
 		addChild(new TraceControls());
 	}

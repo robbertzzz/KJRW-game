@@ -23,7 +23,6 @@ class Player extends Sprite
 	private var maxXSpeed:Float = 4;
 	private var maxYSpeed:Float = 8;
 	private var maxFallSpeed:Float = 15;
-	private var climbSpeed:Float = 4;
 	private var i:Int;
 	private var gravity:Float = 0.75 * (1/16) * Global.elementSize;
 	private var isStanding:Bool = false;
@@ -36,10 +35,11 @@ class Player extends Sprite
 	private var body:Body;
 	private var head:Head;
 	
-	public var hanging:Bool = false;
 	
 	public var frame:Float = 0;
 	
+	public var isHanging:Bool = false;
+	private var climbSpeed:Float = 10;
 
 	public function new() 
 	{
@@ -75,7 +75,11 @@ class Player extends Sprite
 	}
 	
 	private function update(e:Event):Void {
-		move();
+		if (!isHanging) {
+			move();
+		} else {
+			hang();
+		}
 		moveView();
 		draw();
 	}
@@ -134,7 +138,7 @@ class Player extends Sprite
 		
 		//needs to be before of the collision checking, because else the collision checking will be a frame behind and cause bugs
 		if (Global.jump) {
-			if ( (isStanding || onTheStairs) && !hanging) {
+			if ( (isStanding || onTheStairs)) {
 				startJumping();
 				if (onTheStairs) {
 					landOnStairs = true;
@@ -172,11 +176,8 @@ class Player extends Sprite
 			xSpeed = 0;
 		}
 		
-		if (hanging) {
-			hangController();
-		} else {
-			jumpController();
-		}
+		
+		jumpController();
 		
 		//y += ySpeed;
 		
@@ -308,20 +309,33 @@ class Player extends Sprite
 	private var pY:Float;
 	private var pDistance:Float;
 	//Hang from the phone, change controls
-	private function hangController():Void {
+	private function hang():Void {
 		//phoneHorn position
 		pX = arms[1].weapon.phoneHorn.x;
 		pY = arms[1].weapon.phoneHorn.y;
-		pDistance = Math.sqrt((pX - x) * (pX - x) + (pY - y) * (pY - y));
 		
-		//Move up/towards the phoneHorn
-		if (Global.up) {
-			
+		if (pY > y) {
+			trace("hi");
+			arms[1].weapon.phoneHorn.remove();
+			arms[1].weapon.phoneHorn = null;
+			arms[1].weapon.youMayShoot = true;
+			isHanging = false;
+			return;
 		}
 		
-		//Move down/away from the phoneHorn
-		if (Global.down) {
+		pDistance = Math.sqrt((pX - x) * (pX - x) + (pY - y) * (pY - y));
+		
+		if(pDistance > climbSpeed) {
+			xSpeed = climbSpeed * (pX - x) / pDistance;
+			ySpeed = climbSpeed * (pY - y) / pDistance;
 			
+			x += xSpeed;
+			y += ySpeed;
+		} else {
+			arms[1].weapon.phoneHorn.remove();
+			arms[1].weapon.phoneHorn = null;
+			arms[1].weapon.youMayShoot = true;
+			isHanging = false;
 		}
 	}
 	

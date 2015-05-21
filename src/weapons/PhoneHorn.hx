@@ -73,45 +73,24 @@ class PhoneHorn extends Sprite
 	private function update(e:Event):Void {
 		x += xSpeed;
 		y += ySpeed;
-		//collision = checkCollision(xSpeed, ySpeed);
 		
-		/*// perform a collision check, DIE
-		if (collision > 0 && collision != 100 && collision != 2 && collision != 102 && collision != 4 && collision != 104) {
-			if (collision == 3 || collision == 103) {
-				Global.level.level[Math.floor(((y + ySpeed + 0.5 * hornHeight) / Global.elementSize))][Math.floor(((x + xSpeed + 0.5 * hornWidth) / Global.elementSize))] = 0;
-				i = 0;
-				while (Global.blocks[i].x != (Math.floor(((x + xSpeed + 0.5 * hornWidth) / Global.elementSize))) * Global.elementSize || Global.blocks[i].y != (Math.floor(((y + ySpeed + 0.5 * hornHeight) / Global.elementSize))) * Global.elementSize) {
-					i++;
-				}
-				
-				Global.blocks[i].remove();
-			}
-			
-			this.removeEventListener(Event.ENTER_FRAME, update);
-			
-			if (Global.weaponIndex == 2 && Global.level.player.arms[1].weapon.phoneHorn==this) {
-				Global.level.player.arms[1].weapon.youMayShoot = true;
-				Global.level.player.arms[1].weapon.phoneHorn = null;
-			}
-			this.parent.removeChild(this);
-			return;
-		}*/
+		if (checkCollision(xSpeed, ySpeed) == 4 || checkCollision(xSpeed, ySpeed) == 104) {
+			startHanging();
+		}
 		
-		//check the distance, if too far, DIE
+		//check the distance, if too far, or phone is outside the level, DIE
 		playerX = Global.level.player.returnXY()[0];
 		playerY = Global.level.player.returnXY()[1];
 		playerDistance = Math.sqrt((x - playerX) * (x - playerX) + (y - playerY) * (y - playerY));
 		
-		trace(playerDistance);
-		
-		if(playerDistance > Global.elementSize * 20) {
-			this.removeEventListener(Event.ENTER_FRAME, update);
+		if(playerDistance > Global.elementSize * 20 || y > Global.levelHeight - 20) {
 			
-			if (Global.weaponIndex == 2 && Global.level.player.arms[1].weapon.phoneHorn==this) {
+			if (Global.weaponIndex == 2 && Global.level.player.arms[1].weapon.phoneHorn == this) {
 				Global.level.player.arms[1].weapon.youMayShoot = true;
 				Global.level.player.arms[1].weapon.phoneHorn = null;
 			}
-			this.parent.removeChild(this);
+			trace("hi");
+			remove();
 			
 			return;
 		}
@@ -132,5 +111,12 @@ class PhoneHorn extends Sprite
 		y = Math.floor(((y + ySpeed + 0.5 * hornHeight) / Global.elementSize)) * Global.elementSize;
 		xSpeed = 0;
 		ySpeed = 0;
+		
+		Global.level.player.isHanging = true;
+	}
+	
+	public function remove() {
+		removeEventListener(Event.ENTER_FRAME, update);
+		this.parent.removeChild(this);
 	}
 }

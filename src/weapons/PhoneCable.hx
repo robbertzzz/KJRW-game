@@ -29,8 +29,8 @@ class PhoneCable extends Sprite
 	private var ii:Int = 0;
 	
 	public function update(phoneHornX:Float, phoneHornY:Float) {
-		armX = Global.level.player.returnXY()[0] + Global.elementSize;
-		armY = Global.level.player.returnXY()[1] + 2 * Global.elementSize;
+		armX = Global.level.player.returnXY()[0] + Global.level.player.arms[1].startX + Math.cos(Math.PI * ((Global.level.player.arms[1].rotation + 90) / 180)) * 25;
+		armY = Global.level.player.returnXY()[1] + Global.level.player.arms[1].startY + Math.sin(Math.PI * ((Global.level.player.arms[1].rotation + 90) / 180)) * 25;
 		
 		distance = Math.sqrt((phoneHornX - armX) * (phoneHornX - armX) + (phoneHornY - armY) * (phoneHornY - armY));
 		distanceX = Math.abs(phoneHornX - armX);

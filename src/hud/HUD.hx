@@ -21,7 +21,7 @@ class HUD extends Sprite
 	
 	private function update(e:Event) 
 	{
-		graphics.clear;
+		graphics.clear();
 		drawHealth();
 		
 	}
@@ -38,8 +38,7 @@ class HUD extends Sprite
 	
 	function drawMenu()
 	{
-		
-		Global.main.addChild(menu);
+		addChild(menu);
 	}
 	
 
