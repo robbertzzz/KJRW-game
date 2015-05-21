@@ -32,6 +32,7 @@ class Platform extends Sprite
 	public var messages:Array<Dynamic> = new Array();
 	public var messageContents:Array<String> = new Array();
 	
+	public var hud:hud.HUD;
 	private var playerX:Float;
 	private var playerY:Float;
 	
@@ -156,7 +157,7 @@ class Platform extends Sprite
 		Global.fogMap = fogMap;
 		Global.messages = messages;
 		Global.messageContents = messageContents;
-		
+		Global.
 		trace(messageContents[1]);
 		
 		player = new Player();
@@ -164,5 +165,8 @@ class Platform extends Sprite
 		player.y = playerY;
 		//player.z = -0.5 * Global.elementSize;
 		addChild(player);
+		
+		hud = new hud.HUD();
+		Global.main.addChild(hud);
 	}
 }

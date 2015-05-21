@@ -336,6 +336,7 @@ class Player extends Sprite
 					&& y < tempCoin.y + tempCoin.height
 					&& y > tempCoin.y - playerHeight) {
 				trace("You ate a coin!!");
+				Global.
 				Global.level.level[Math.floor(tempCoin.y / Global.elementSize)][Math.floor(tempCoin.x / Global.elementSize)] -= 2;
 				Global.coins.remove(tempCoin);
 				tempCoin.parent.removeChild(tempCoin);
