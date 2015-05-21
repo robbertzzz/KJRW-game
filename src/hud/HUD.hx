@@ -9,12 +9,12 @@ import openfl.Lib;
  */
 class HUD extends Sprite
 {
-	var menuButton:MenuButton = new MenuButton();
+	var menu:Menu = new Menu();
 	public function new() 
 	{
 		super();
 		drawHealth();
-		drawMenuButton();
+		drawMenu();
 		
 		addEventListener(Event.ENTER_FRAME, update);
 	}
@@ -36,10 +36,10 @@ class HUD extends Sprite
 	}
 	
 	
-	function drawMenuButton()
+	function drawMenu()
 	{
 		
-		Global.main.addChild(menuButton);
+		Global.main.addChild(menu);
 	}
 	
 

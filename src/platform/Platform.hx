@@ -157,7 +157,7 @@ class Platform extends Sprite
 		Global.fogMap = fogMap;
 		Global.messages = messages;
 		Global.messageContents = messageContents;
-		Global.
+
 		trace(messageContents[1]);
 		
 		player = new Player();
