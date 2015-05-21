@@ -54,8 +54,6 @@ class Main extends Sprite
 		Global.main = this;
 		Global.elementSize = 12;
 		
-		HttpConnector.sendData("test");
-		
 		Lib.current.stage.addEventListener(KeyboardEvent.KEY_DOWN, keyPressed);
 		Lib.current.stage.addEventListener(KeyboardEvent.KEY_UP, keyReleased);
 		Lib.current.stage.addEventListener(MouseEvent.MOUSE_MOVE, mouseMove);
