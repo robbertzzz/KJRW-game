@@ -24,7 +24,7 @@ class Stairs extends Sprite
 		blockHeight = Global.elementSize;
 		
 		if (Math.floor(y / 12) < level.length - 1) {
-			trace(level[Math.floor(y / 12) - 1][Math.floor(x / 12) + 1] + " " + level[Math.floor(y / 12) + 1][Math.floor(x / 12) - 1]);
+			//trace(level[Math.floor(y / 12) - 1][Math.floor(x / 12) + 1] + " " + level[Math.floor(y / 12) + 1][Math.floor(x / 12) - 1]);
 			if (level[Math.floor(y / 12) - 1][Math.floor(x / 12) + 1] == 6 || level[Math.floor(y / 12) + 1][Math.floor(x / 12) - 1] == 6) {
 				rightIsUp = true;
 			}

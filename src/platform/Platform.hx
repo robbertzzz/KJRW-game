@@ -29,6 +29,11 @@ class Platform extends Sprite
 	public var fogMap:Array<Array<Fog>> = new Array();
 	private var i:Int;
 	private var ii:Int;
+	public var messages:Array<Dynamic> = new Array();
+	public var messageContents:Array<String> = new Array();
+	
+	private var playerX:Float;
+	private var playerY:Float;
 	
 	public function new() 
 	{
@@ -51,6 +56,9 @@ class Platform extends Sprite
 	private function init():Void {
 		Global.levelWidth = level[0].length * Global.elementSize;
 		Global.levelHeight = level.length * Global.elementSize;
+		
+		playerX = Global.elementSize + 30;
+		playerY = Global.levelHeight - Global.elementSize - 60 - 30;
 		
 		for (i in 0...level.length) {
 			for (ii in 0...level[i].length) {
@@ -107,6 +115,19 @@ class Platform extends Sprite
 						temp.y = i * Global.elementSize;
 						blocks.push(temp);
 						addChild(temp);
+					
+					case 9, 109:
+						playerX = ii * Global.elementSize;
+						playerY = i * Global.elementSize;
+					
+					default:
+						if (level[i][ii] >= 200 && level[i][ii] < 300) {
+							temp = new Message(level[i][ii] - 200);
+							temp.x = ii * Global.elementSize;
+							temp.y = i * Global.elementSize;
+							messages.push(temp);
+							addChild(temp);
+						}
 				}
 			}
 		}
@@ -116,7 +137,7 @@ class Platform extends Sprite
 			for (ii in 0...level[i].length) {
 				
 				fogMap[i][ii] = null;
-				if (level[i][ii] >= 100) {
+				if (level[i][ii] >= 100 && level[i][ii] < 200) {
 					temp = new Fog();
 					temp.x = ii * Global.elementSize;
 					temp.y = i * Global.elementSize;
@@ -133,10 +154,14 @@ class Platform extends Sprite
 		Global.blocks = blocks;
 		Global.coins = coins;
 		Global.fogMap = fogMap;
+		Global.messages = messages;
+		Global.messageContents = messageContents;
+		
+		trace(messageContents[1]);
 		
 		player = new Player();
-		player.x = Global.elementSize + 30;
-		player.y = Global.levelHeight - Global.elementSize - player.height - 30;
+		player.x = playerX;
+		player.y = playerY;
 		//player.z = -0.5 * Global.elementSize;
 		addChild(player);
 	}

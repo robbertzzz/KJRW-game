@@ -34,4 +34,7 @@ class Global
 	public static var coins:Array<Coffee> = new Array();
 	public static var bullets:Array<Bullet> = new Array();
 	public static var fogMap:Array<Array<Fog>> = new Array();
+	
+	public static var messages:Array<Dynamic> = new Array();
+	public static var messageContents:Array<String> = new Array();
 }

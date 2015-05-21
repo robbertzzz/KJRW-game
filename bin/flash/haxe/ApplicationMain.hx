@@ -38,12 +38,64 @@ class ApplicationMain {
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
-		urls.push ("img/player.png");
+		urls.push ("img/ghost/ghostfloating.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
-		urls.push ("img/retardoarm.png");
+		urls.push ("img/ghost/ghostscratching.png");
 		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/ghost/ghostyawning.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/ghost/poef.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/player.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/retardoarm.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("Arial");
+		types.push (lime.Assets.AssetType.FONT);
+		
+		
+		urls.push ("Arial Bold");
+		types.push (lime.Assets.AssetType.FONT);
+		
+		
+		urls.push ("Arial Bold Italic");
+		types.push (lime.Assets.AssetType.FONT);
+		
+		
+		urls.push ("Arial Italic");
+		types.push (lime.Assets.AssetType.FONT);
+		
+		
+		urls.push ("Arial Narrow");
+		types.push (lime.Assets.AssetType.FONT);
+		
+		
+		urls.push ("Arial Narrow Bold");
+		types.push (lime.Assets.AssetType.FONT);
+		
+		
+		urls.push ("Arial Narrow Bold Italic");
+		types.push (lime.Assets.AssetType.FONT);
+		
+		
+		urls.push ("Arial Narrow Italic");
+		types.push (lime.Assets.AssetType.FONT);
+		
+		
+		urls.push ("Arial Black");
+		types.push (lime.Assets.AssetType.FONT);
 		
 		
 		

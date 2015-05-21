@@ -12,13 +12,11 @@ import openfl.Lib;
 class Darkling extends Sprite
 {
 	private var health:Int = 100;
+	private var frame:Int = 0;
 	
 	public function new() 
 	{
 		super();
-		
-		graphics.beginFill(0x000000);
-        graphics.drawRect(0, 0, 50, 50);
 		
 		addEventListener(MouseEvent.CLICK, hit);
 		addEventListener(Event.ENTER_FRAME, update);
@@ -27,17 +25,33 @@ class Darkling extends Sprite
 	public function hit(e:MouseEvent) {
 		health -= 20;
 		if (health <= 0) {
-			death();
+			die();
 		}
 	}
 	
-	private function death() {
-		this.removeEventListener(MouseEvent.CLICK, hit);
-		this.removeEventListener(Event.ENTER_FRAME, update);
-		this.parent.removeChild(this);
+	private function update(e:Event):Void {
+		draw();
 	}
 	
-	private function update(e:Event):Void {
-		
+	private function draw():Void {
+		graphics.clear();
+		AssetStorage.ghostYawning.drawTiles(this.graphics, [0, 0, frame % 130]);
+		frame++;
+	}
+	
+	private function die() {
+		removeEventListener(MouseEvent.CLICK, hit);
+		removeEventListener(Event.ENTER_FRAME, update);
+		addEventListener(Event.ENTER_FRAME, updatePoef);
+	}
+	
+	private function death() {
+		removeEventListener(Event.ENTER_FRAME, updatePoef);
+		Global.level.removeChild(this);
+	}
+	
+	private function updatePoef(e:Event) {
+		trace("Poef");
+		death();
 	}
 }

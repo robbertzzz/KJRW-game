@@ -16,8 +16,12 @@ class LoadAssets extends Sprite
 	{
 		super();
 		AssetStorage.blocks = createFrames("img/blocks.png", 12, 12, 3, 15);
-		AssetStorage.playerWalk = createFrames("img/player.png", 42, 61, 4, 8);
-		AssetStorage.playerArm = createFrames("img/retardoarm.png", 7, 25, 1, 1);
+		AssetStorage.playerWalk = createFrames("img/player/player.png", 42, 61, 4, 8);
+		AssetStorage.playerArm = createFrames("img/player/retardoarm.png", 7, 25, 1, 1);
+		
+		AssetStorage.ghostFloating = createFrames("img/ghost/ghostfloating.png", 66, 78, 14, 122);
+		AssetStorage.ghostYawning = createFrames("img/ghost/ghostyawning.png", 72, 78, 14, 130);
+		AssetStorage.ghostScratching = createFrames("img/ghost/ghostscratching.png", 66, 78, 15, 130);
 		
 	}
 	

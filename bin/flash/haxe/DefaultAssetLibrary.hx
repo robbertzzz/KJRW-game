@@ -47,10 +47,36 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		className.set ("img/blocks.png", __ASSET__img_blocks_png);
 		type.set ("img/blocks.png", AssetType.IMAGE);
-		className.set ("img/player.png", __ASSET__img_player_png);
-		type.set ("img/player.png", AssetType.IMAGE);
-		className.set ("img/retardoarm.png", __ASSET__img_retardoarm_png);
-		type.set ("img/retardoarm.png", AssetType.IMAGE);
+		className.set ("img/ghost/ghostfloating.png", __ASSET__img_ghost_ghostfloating_png);
+		type.set ("img/ghost/ghostfloating.png", AssetType.IMAGE);
+		className.set ("img/ghost/ghostscratching.png", __ASSET__img_ghost_ghostscratching_png);
+		type.set ("img/ghost/ghostscratching.png", AssetType.IMAGE);
+		className.set ("img/ghost/ghostyawning.png", __ASSET__img_ghost_ghostyawning_png);
+		type.set ("img/ghost/ghostyawning.png", AssetType.IMAGE);
+		className.set ("img/ghost/poef.png", __ASSET__img_ghost_poef_png);
+		type.set ("img/ghost/poef.png", AssetType.IMAGE);
+		className.set ("img/player/player.png", __ASSET__img_player_player_png);
+		type.set ("img/player/player.png", AssetType.IMAGE);
+		className.set ("img/player/retardoarm.png", __ASSET__img_player_retardoarm_png);
+		type.set ("img/player/retardoarm.png", AssetType.IMAGE);
+		className.set ("fonts/ARIAL.TTF", __ASSET__fonts_arial_ttf);
+		type.set ("fonts/ARIAL.TTF", AssetType.FONT);
+		className.set ("fonts/ARIALBD.TTF", __ASSET__fonts_arialbd_ttf);
+		type.set ("fonts/ARIALBD.TTF", AssetType.FONT);
+		className.set ("fonts/ARIALBI.TTF", __ASSET__fonts_arialbi_ttf);
+		type.set ("fonts/ARIALBI.TTF", AssetType.FONT);
+		className.set ("fonts/ARIALI.TTF", __ASSET__fonts_ariali_ttf);
+		type.set ("fonts/ARIALI.TTF", AssetType.FONT);
+		className.set ("fonts/ARIALN.TTF", __ASSET__fonts_arialn_ttf);
+		type.set ("fonts/ARIALN.TTF", AssetType.FONT);
+		className.set ("fonts/ARIALNB.TTF", __ASSET__fonts_arialnb_ttf);
+		type.set ("fonts/ARIALNB.TTF", AssetType.FONT);
+		className.set ("fonts/ARIALNBI.TTF", __ASSET__fonts_arialnbi_ttf);
+		type.set ("fonts/ARIALNBI.TTF", AssetType.FONT);
+		className.set ("fonts/ARIALNI.TTF", __ASSET__fonts_arialni_ttf);
+		type.set ("fonts/ARIALNI.TTF", AssetType.FONT);
+		className.set ("fonts/ARIBLK.TTF", __ASSET__fonts_ariblk_ttf);
+		type.set ("fonts/ARIBLK.TTF", AssetType.FONT);
 		
 		
 		#elseif html5
@@ -60,14 +86,66 @@ class DefaultAssetLibrary extends AssetLibrary {
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
-		id = "img/player.png";
+		id = "img/ghost/ghostfloating.png";
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
-		id = "img/retardoarm.png";
+		id = "img/ghost/ghostscratching.png";
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
+		id = "img/ghost/ghostyawning.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/ghost/poef.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/player.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/retardoarm.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "fonts/ARIAL.TTF";
+		className.set (id, __ASSET__fonts_arial_ttf);
+		
+		type.set (id, AssetType.FONT);
+		id = "fonts/ARIALBD.TTF";
+		className.set (id, __ASSET__fonts_arialbd_ttf);
+		
+		type.set (id, AssetType.FONT);
+		id = "fonts/ARIALBI.TTF";
+		className.set (id, __ASSET__fonts_arialbi_ttf);
+		
+		type.set (id, AssetType.FONT);
+		id = "fonts/ARIALI.TTF";
+		className.set (id, __ASSET__fonts_ariali_ttf);
+		
+		type.set (id, AssetType.FONT);
+		id = "fonts/ARIALN.TTF";
+		className.set (id, __ASSET__fonts_arialn_ttf);
+		
+		type.set (id, AssetType.FONT);
+		id = "fonts/ARIALNB.TTF";
+		className.set (id, __ASSET__fonts_arialnb_ttf);
+		
+		type.set (id, AssetType.FONT);
+		id = "fonts/ARIALNBI.TTF";
+		className.set (id, __ASSET__fonts_arialnbi_ttf);
+		
+		type.set (id, AssetType.FONT);
+		id = "fonts/ARIALNI.TTF";
+		className.set (id, __ASSET__fonts_arialni_ttf);
+		
+		type.set (id, AssetType.FONT);
+		id = "fonts/ARIBLK.TTF";
+		className.set (id, __ASSET__fonts_ariblk_ttf);
+		
+		type.set (id, AssetType.FONT);
 		
 		
 		var assetsPrefix = ApplicationMain.config.assetsPrefix;
@@ -85,6 +163,19 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		
 		
+		
+		
+		
+		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arial_ttf);
+		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbd_ttf);
+		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbi_ttf);
+		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_ariali_ttf);
+		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialn_ttf);
+		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialnb_ttf);
+		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialnbi_ttf);
+		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialni_ttf);
+		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_ariblk_ttf);
+		
 		#end
 		
 		#if (windows || mac || linux)
@@ -94,11 +185,50 @@ class DefaultAssetLibrary extends AssetLibrary {
 		className.set ("img/blocks.png", __ASSET__img_blocks_png);
 		type.set ("img/blocks.png", AssetType.IMAGE);
 		
-		className.set ("img/player.png", __ASSET__img_player_png);
-		type.set ("img/player.png", AssetType.IMAGE);
+		className.set ("img/ghost/ghostfloating.png", __ASSET__img_ghost_ghostfloating_png);
+		type.set ("img/ghost/ghostfloating.png", AssetType.IMAGE);
 		
-		className.set ("img/retardoarm.png", __ASSET__img_retardoarm_png);
-		type.set ("img/retardoarm.png", AssetType.IMAGE);
+		className.set ("img/ghost/ghostscratching.png", __ASSET__img_ghost_ghostscratching_png);
+		type.set ("img/ghost/ghostscratching.png", AssetType.IMAGE);
+		
+		className.set ("img/ghost/ghostyawning.png", __ASSET__img_ghost_ghostyawning_png);
+		type.set ("img/ghost/ghostyawning.png", AssetType.IMAGE);
+		
+		className.set ("img/ghost/poef.png", __ASSET__img_ghost_poef_png);
+		type.set ("img/ghost/poef.png", AssetType.IMAGE);
+		
+		className.set ("img/player/player.png", __ASSET__img_player_player_png);
+		type.set ("img/player/player.png", AssetType.IMAGE);
+		
+		className.set ("img/player/retardoarm.png", __ASSET__img_player_retardoarm_png);
+		type.set ("img/player/retardoarm.png", AssetType.IMAGE);
+		
+		className.set ("fonts/ARIAL.TTF", __ASSET__fonts_arial_ttf);
+		type.set ("fonts/ARIAL.TTF", AssetType.FONT);
+		
+		className.set ("fonts/ARIALBD.TTF", __ASSET__fonts_arialbd_ttf);
+		type.set ("fonts/ARIALBD.TTF", AssetType.FONT);
+		
+		className.set ("fonts/ARIALBI.TTF", __ASSET__fonts_arialbi_ttf);
+		type.set ("fonts/ARIALBI.TTF", AssetType.FONT);
+		
+		className.set ("fonts/ARIALI.TTF", __ASSET__fonts_ariali_ttf);
+		type.set ("fonts/ARIALI.TTF", AssetType.FONT);
+		
+		className.set ("fonts/ARIALN.TTF", __ASSET__fonts_arialn_ttf);
+		type.set ("fonts/ARIALN.TTF", AssetType.FONT);
+		
+		className.set ("fonts/ARIALNB.TTF", __ASSET__fonts_arialnb_ttf);
+		type.set ("fonts/ARIALNB.TTF", AssetType.FONT);
+		
+		className.set ("fonts/ARIALNBI.TTF", __ASSET__fonts_arialnbi_ttf);
+		type.set ("fonts/ARIALNBI.TTF", AssetType.FONT);
+		
+		className.set ("fonts/ARIALNI.TTF", __ASSET__fonts_arialni_ttf);
+		type.set ("fonts/ARIALNI.TTF", AssetType.FONT);
+		
+		className.set ("fonts/ARIBLK.TTF", __ASSET__fonts_ariblk_ttf);
+		type.set ("fonts/ARIBLK.TTF", AssetType.FONT);
 		
 		
 		if (useManifest) {
@@ -701,8 +831,21 @@ class DefaultAssetLibrary extends AssetLibrary {
 #if flash
 
 @:keep @:bind #if display private #end class __ASSET__img_blocks_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
-@:keep @:bind #if display private #end class __ASSET__img_player_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
-@:keep @:bind #if display private #end class __ASSET__img_retardoarm_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_ghost_ghostfloating_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_ghost_ghostscratching_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_ghost_ghostyawning_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_ghost_poef_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_player_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_retardoarm_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__fonts_arial_ttf extends flash.text.Font { }
+@:keep @:bind #if display private #end class __ASSET__fonts_arialbd_ttf extends flash.text.Font { }
+@:keep @:bind #if display private #end class __ASSET__fonts_arialbi_ttf extends flash.text.Font { }
+@:keep @:bind #if display private #end class __ASSET__fonts_ariali_ttf extends flash.text.Font { }
+@:keep @:bind #if display private #end class __ASSET__fonts_arialn_ttf extends flash.text.Font { }
+@:keep @:bind #if display private #end class __ASSET__fonts_arialnb_ttf extends flash.text.Font { }
+@:keep @:bind #if display private #end class __ASSET__fonts_arialnbi_ttf extends flash.text.Font { }
+@:keep @:bind #if display private #end class __ASSET__fonts_arialni_ttf extends flash.text.Font { }
+@:keep @:bind #if display private #end class __ASSET__fonts_ariblk_ttf extends flash.text.Font { }
 
 
 #elseif html5
@@ -710,6 +853,19 @@ class DefaultAssetLibrary extends AssetLibrary {
 
 
 
+
+
+
+
+@:keep #if display private #end class __ASSET__fonts_arial_ttf extends lime.text.Font { public function new () { super (); name = "Arial"; } } 
+@:keep #if display private #end class __ASSET__fonts_arialbd_ttf extends lime.text.Font { public function new () { super (); name = "Arial Bold"; } } 
+@:keep #if display private #end class __ASSET__fonts_arialbi_ttf extends lime.text.Font { public function new () { super (); name = "Arial Bold Italic"; } } 
+@:keep #if display private #end class __ASSET__fonts_ariali_ttf extends lime.text.Font { public function new () { super (); name = "Arial Italic"; } } 
+@:keep #if display private #end class __ASSET__fonts_arialn_ttf extends lime.text.Font { public function new () { super (); name = "Arial Narrow"; } } 
+@:keep #if display private #end class __ASSET__fonts_arialnb_ttf extends lime.text.Font { public function new () { super (); name = "Arial Narrow Bold"; } } 
+@:keep #if display private #end class __ASSET__fonts_arialnbi_ttf extends lime.text.Font { public function new () { super (); name = "Arial Narrow Bold Italic"; } } 
+@:keep #if display private #end class __ASSET__fonts_arialni_ttf extends lime.text.Font { public function new () { super (); name = "Arial Narrow Italic"; } } 
+@:keep #if display private #end class __ASSET__fonts_ariblk_ttf extends lime.text.Font { public function new () { super (); name = "Arial Black"; } } 
 
 
 #else
@@ -720,14 +876,36 @@ class DefaultAssetLibrary extends AssetLibrary {
 
 
 @:image("assets/img/blocks.png") #if display private #end class __ASSET__img_blocks_png extends lime.graphics.Image {}
-@:image("assets/img/player.png") #if display private #end class __ASSET__img_player_png extends lime.graphics.Image {}
-@:image("assets/img/retardoarm.png") #if display private #end class __ASSET__img_retardoarm_png extends lime.graphics.Image {}
+@:image("assets/img/ghost/ghostfloating.png") #if display private #end class __ASSET__img_ghost_ghostfloating_png extends lime.graphics.Image {}
+@:image("assets/img/ghost/ghostscratching.png") #if display private #end class __ASSET__img_ghost_ghostscratching_png extends lime.graphics.Image {}
+@:image("assets/img/ghost/ghostyawning.png") #if display private #end class __ASSET__img_ghost_ghostyawning_png extends lime.graphics.Image {}
+@:image("assets/img/ghost/poef.png") #if display private #end class __ASSET__img_ghost_poef_png extends lime.graphics.Image {}
+@:image("assets/img/player/player.png") #if display private #end class __ASSET__img_player_player_png extends lime.graphics.Image {}
+@:image("assets/img/player/retardoarm.png") #if display private #end class __ASSET__img_player_retardoarm_png extends lime.graphics.Image {}
+@:font("assets/fonts/ARIAL.TTF") #if display private #end class __ASSET__fonts_arial_ttf extends lime.text.Font {}
+@:font("assets/fonts/ARIALBD.TTF") #if display private #end class __ASSET__fonts_arialbd_ttf extends lime.text.Font {}
+@:font("assets/fonts/ARIALBI.TTF") #if display private #end class __ASSET__fonts_arialbi_ttf extends lime.text.Font {}
+@:font("assets/fonts/ARIALI.TTF") #if display private #end class __ASSET__fonts_ariali_ttf extends lime.text.Font {}
+@:font("assets/fonts/ARIALN.TTF") #if display private #end class __ASSET__fonts_arialn_ttf extends lime.text.Font {}
+@:font("assets/fonts/ARIALNB.TTF") #if display private #end class __ASSET__fonts_arialnb_ttf extends lime.text.Font {}
+@:font("assets/fonts/ARIALNBI.TTF") #if display private #end class __ASSET__fonts_arialnbi_ttf extends lime.text.Font {}
+@:font("assets/fonts/ARIALNI.TTF") #if display private #end class __ASSET__fonts_arialni_ttf extends lime.text.Font {}
+@:font("assets/fonts/ARIBLK.TTF") #if display private #end class __ASSET__fonts_ariblk_ttf extends lime.text.Font {}
 
 
 
 #end
 
 #if openfl
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arial_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIAL.TTF"; name = "Arial"; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialbd_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALBD.TTF"; name = "Arial Bold"; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialbi_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALBI.TTF"; name = "Arial Bold Italic"; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_ariali_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALI.TTF"; name = "Arial Italic"; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialn_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALN.TTF"; name = "Arial Narrow"; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialnb_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALNB.TTF"; name = "Arial Narrow Bold"; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialnbi_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALNBI.TTF"; name = "Arial Narrow Bold Italic"; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialni_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALNI.TTF"; name = "Arial Narrow Italic"; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_ariblk_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIBLK.TTF"; name = "Arial Black"; super (); }}
 
 #end
 
