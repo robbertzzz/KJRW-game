@@ -165,6 +165,7 @@ class Platform extends Sprite
 		player.y = playerY;
 		//player.z = -0.5 * Global.elementSize;
 		addChild(player);
+		Global.health = 100;
 		
 		hud = new hud.HUD();
 		Global.main.addChild(hud);
