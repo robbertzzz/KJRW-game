@@ -1,4 +1,5 @@
 package ;
+import openfl.display.Sprite;
 import weapons.Bullet;
 import weapons.PhoneHorn;
 
@@ -18,7 +19,8 @@ class Global
 	public static var down:Bool;
 	public static var jump:Bool;
 	public static var shift:Bool;
-	public static var weaponIndex:Int = 1;
+	public static var weaponIndex:Int = 0;
+	public static var canChangeWeapon:Bool = true;
 	public static var health:Int;
 	
 	public static var mouseDown:Bool;
@@ -35,6 +37,7 @@ class Global
 	public static var coins:Array<Coffee> = new Array();
 	public static var bullets:Array<Bullet> = new Array();
 	public static var fogMap:Array<Array<Fog>> = new Array();
+	public static var npcs:Array<Dynamic> = new Array();
 	
 	public static var messages:Array<Dynamic> = new Array();
 	public static var messageContents:Array<String> = new Array();

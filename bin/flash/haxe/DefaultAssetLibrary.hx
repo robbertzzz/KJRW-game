@@ -45,6 +45,14 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		#if flash
 		
+		className.set ("img/blocks/paperfloating.png", __ASSET__img_blocks_paperfloating_png);
+		type.set ("img/blocks/paperfloating.png", AssetType.IMAGE);
+		className.set ("img/blocks/stack1.png", __ASSET__img_blocks_stack1_png);
+		type.set ("img/blocks/stack1.png", AssetType.IMAGE);
+		className.set ("img/blocks/stack2.png", __ASSET__img_blocks_stack2_png);
+		type.set ("img/blocks/stack2.png", AssetType.IMAGE);
+		className.set ("img/blocks/stack3.png", __ASSET__img_blocks_stack3_png);
+		type.set ("img/blocks/stack3.png", AssetType.IMAGE);
 		className.set ("img/blocks.png", __ASSET__img_blocks_png);
 		type.set ("img/blocks.png", AssetType.IMAGE);
 		className.set ("img/ghost/ghostfloating.png", __ASSET__img_ghost_ghostfloating_png);
@@ -55,10 +63,38 @@ class DefaultAssetLibrary extends AssetLibrary {
 		type.set ("img/ghost/ghostyawning.png", AssetType.IMAGE);
 		className.set ("img/ghost/poef.png", __ASSET__img_ghost_poef_png);
 		type.set ("img/ghost/poef.png", AssetType.IMAGE);
+		className.set ("img/guru/guruappearing.png", __ASSET__img_guru_guruappearing_png);
+		type.set ("img/guru/guruappearing.png", AssetType.IMAGE);
+		className.set ("img/guru/gurufloating.png", __ASSET__img_guru_gurufloating_png);
+		type.set ("img/guru/gurufloating.png", AssetType.IMAGE);
+		className.set ("img/guru/guruglow.png", __ASSET__img_guru_guruglow_png);
+		type.set ("img/guru/guruglow.png", AssetType.IMAGE);
+		className.set ("img/player/cord.png", __ASSET__img_player_cord_png);
+		type.set ("img/player/cord.png", AssetType.IMAGE);
+		className.set ("img/player/jump.png", __ASSET__img_player_jump_png);
+		type.set ("img/player/jump.png", AssetType.IMAGE);
+		className.set ("img/player/newphonethrow.png", __ASSET__img_player_newphonethrow_png);
+		type.set ("img/player/newphonethrow.png", AssetType.IMAGE);
+		className.set ("img/player/phonearmback.png", __ASSET__img_player_phonearmback_png);
+		type.set ("img/player/phonearmback.png", AssetType.IMAGE);
+		className.set ("img/player/phonerotating.png", __ASSET__img_player_phonerotating_png);
+		type.set ("img/player/phonerotating.png", AssetType.IMAGE);
+		className.set ("img/player/phonethrow.png", __ASSET__img_player_phonethrow_png);
+		type.set ("img/player/phonethrow.png", AssetType.IMAGE);
+		className.set ("img/player/phonethrowold.png", __ASSET__img_player_phonethrowold_png);
+		type.set ("img/player/phonethrowold.png", AssetType.IMAGE);
 		className.set ("img/player/player.png", __ASSET__img_player_player_png);
 		type.set ("img/player/player.png", AssetType.IMAGE);
 		className.set ("img/player/retardoarm.png", __ASSET__img_player_retardoarm_png);
 		type.set ("img/player/retardoarm.png", AssetType.IMAGE);
+		className.set ("img/player/scrollhit.png", __ASSET__img_player_scrollhit_png);
+		type.set ("img/player/scrollhit.png", AssetType.IMAGE);
+		className.set ("img/player/walkright.png", __ASSET__img_player_walkright_png);
+		type.set ("img/player/walkright.png", AssetType.IMAGE);
+		className.set ("img/static/coffee.png", __ASSET__img_static_coffee_png);
+		type.set ("img/static/coffee.png", AssetType.IMAGE);
+		className.set ("img/static/lamp.png", __ASSET__img_static_lamp_png);
+		type.set ("img/static/lamp.png", AssetType.IMAGE);
 		className.set ("fonts/ARIAL.TTF", __ASSET__fonts_arial_ttf);
 		type.set ("fonts/ARIAL.TTF", AssetType.FONT);
 		className.set ("fonts/ARIALBD.TTF", __ASSET__fonts_arialbd_ttf);
@@ -82,6 +118,22 @@ class DefaultAssetLibrary extends AssetLibrary {
 		#elseif html5
 		
 		var id;
+		id = "img/blocks/paperfloating.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/blocks/stack1.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/blocks/stack2.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/blocks/stack3.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
 		id = "img/blocks.png";
 		path.set (id, id);
 		
@@ -102,11 +154,67 @@ class DefaultAssetLibrary extends AssetLibrary {
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
+		id = "img/guru/guruappearing.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/guru/gurufloating.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/guru/guruglow.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/cord.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/jump.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/newphonethrow.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/phonearmback.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/phonerotating.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/phonethrow.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/phonethrowold.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
 		id = "img/player/player.png";
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
 		id = "img/player/retardoarm.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/scrollhit.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/walkright.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/static/coffee.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/static/lamp.png";
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
@@ -166,6 +274,24 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		
 		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arial_ttf);
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbd_ttf);
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbi_ttf);
@@ -182,6 +308,18 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		var useManifest = false;
 		
+		className.set ("img/blocks/paperfloating.png", __ASSET__img_blocks_paperfloating_png);
+		type.set ("img/blocks/paperfloating.png", AssetType.IMAGE);
+		
+		className.set ("img/blocks/stack1.png", __ASSET__img_blocks_stack1_png);
+		type.set ("img/blocks/stack1.png", AssetType.IMAGE);
+		
+		className.set ("img/blocks/stack2.png", __ASSET__img_blocks_stack2_png);
+		type.set ("img/blocks/stack2.png", AssetType.IMAGE);
+		
+		className.set ("img/blocks/stack3.png", __ASSET__img_blocks_stack3_png);
+		type.set ("img/blocks/stack3.png", AssetType.IMAGE);
+		
 		className.set ("img/blocks.png", __ASSET__img_blocks_png);
 		type.set ("img/blocks.png", AssetType.IMAGE);
 		
@@ -197,11 +335,53 @@ class DefaultAssetLibrary extends AssetLibrary {
 		className.set ("img/ghost/poef.png", __ASSET__img_ghost_poef_png);
 		type.set ("img/ghost/poef.png", AssetType.IMAGE);
 		
+		className.set ("img/guru/guruappearing.png", __ASSET__img_guru_guruappearing_png);
+		type.set ("img/guru/guruappearing.png", AssetType.IMAGE);
+		
+		className.set ("img/guru/gurufloating.png", __ASSET__img_guru_gurufloating_png);
+		type.set ("img/guru/gurufloating.png", AssetType.IMAGE);
+		
+		className.set ("img/guru/guruglow.png", __ASSET__img_guru_guruglow_png);
+		type.set ("img/guru/guruglow.png", AssetType.IMAGE);
+		
+		className.set ("img/player/cord.png", __ASSET__img_player_cord_png);
+		type.set ("img/player/cord.png", AssetType.IMAGE);
+		
+		className.set ("img/player/jump.png", __ASSET__img_player_jump_png);
+		type.set ("img/player/jump.png", AssetType.IMAGE);
+		
+		className.set ("img/player/newphonethrow.png", __ASSET__img_player_newphonethrow_png);
+		type.set ("img/player/newphonethrow.png", AssetType.IMAGE);
+		
+		className.set ("img/player/phonearmback.png", __ASSET__img_player_phonearmback_png);
+		type.set ("img/player/phonearmback.png", AssetType.IMAGE);
+		
+		className.set ("img/player/phonerotating.png", __ASSET__img_player_phonerotating_png);
+		type.set ("img/player/phonerotating.png", AssetType.IMAGE);
+		
+		className.set ("img/player/phonethrow.png", __ASSET__img_player_phonethrow_png);
+		type.set ("img/player/phonethrow.png", AssetType.IMAGE);
+		
+		className.set ("img/player/phonethrowold.png", __ASSET__img_player_phonethrowold_png);
+		type.set ("img/player/phonethrowold.png", AssetType.IMAGE);
+		
 		className.set ("img/player/player.png", __ASSET__img_player_player_png);
 		type.set ("img/player/player.png", AssetType.IMAGE);
 		
 		className.set ("img/player/retardoarm.png", __ASSET__img_player_retardoarm_png);
 		type.set ("img/player/retardoarm.png", AssetType.IMAGE);
+		
+		className.set ("img/player/scrollhit.png", __ASSET__img_player_scrollhit_png);
+		type.set ("img/player/scrollhit.png", AssetType.IMAGE);
+		
+		className.set ("img/player/walkright.png", __ASSET__img_player_walkright_png);
+		type.set ("img/player/walkright.png", AssetType.IMAGE);
+		
+		className.set ("img/static/coffee.png", __ASSET__img_static_coffee_png);
+		type.set ("img/static/coffee.png", AssetType.IMAGE);
+		
+		className.set ("img/static/lamp.png", __ASSET__img_static_lamp_png);
+		type.set ("img/static/lamp.png", AssetType.IMAGE);
 		
 		className.set ("fonts/ARIAL.TTF", __ASSET__fonts_arial_ttf);
 		type.set ("fonts/ARIAL.TTF", AssetType.FONT);
@@ -830,13 +1010,31 @@ class DefaultAssetLibrary extends AssetLibrary {
 #if !display
 #if flash
 
+@:keep @:bind #if display private #end class __ASSET__img_blocks_paperfloating_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_blocks_stack1_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_blocks_stack2_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_blocks_stack3_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_blocks_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_ghost_ghostfloating_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_ghost_ghostscratching_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_ghost_ghostyawning_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_ghost_poef_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_guru_guruappearing_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_guru_gurufloating_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_guru_guruglow_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_cord_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_jump_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_newphonethrow_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_phonearmback_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_phonerotating_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_phonethrow_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_phonethrowold_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_player_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_retardoarm_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_scrollhit_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_walkright_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_static_coffee_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_static_lamp_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__fonts_arial_ttf extends flash.text.Font { }
 @:keep @:bind #if display private #end class __ASSET__fonts_arialbd_ttf extends flash.text.Font { }
 @:keep @:bind #if display private #end class __ASSET__fonts_arialbi_ttf extends flash.text.Font { }
@@ -849,6 +1047,24 @@ class DefaultAssetLibrary extends AssetLibrary {
 
 
 #elseif html5
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -875,13 +1091,31 @@ class DefaultAssetLibrary extends AssetLibrary {
 #if (windows || mac || linux)
 
 
+@:image("assets/img/blocks/paperfloating.png") #if display private #end class __ASSET__img_blocks_paperfloating_png extends lime.graphics.Image {}
+@:image("assets/img/blocks/stack1.png") #if display private #end class __ASSET__img_blocks_stack1_png extends lime.graphics.Image {}
+@:image("assets/img/blocks/stack2.png") #if display private #end class __ASSET__img_blocks_stack2_png extends lime.graphics.Image {}
+@:image("assets/img/blocks/stack3.png") #if display private #end class __ASSET__img_blocks_stack3_png extends lime.graphics.Image {}
 @:image("assets/img/blocks.png") #if display private #end class __ASSET__img_blocks_png extends lime.graphics.Image {}
 @:image("assets/img/ghost/ghostfloating.png") #if display private #end class __ASSET__img_ghost_ghostfloating_png extends lime.graphics.Image {}
 @:image("assets/img/ghost/ghostscratching.png") #if display private #end class __ASSET__img_ghost_ghostscratching_png extends lime.graphics.Image {}
 @:image("assets/img/ghost/ghostyawning.png") #if display private #end class __ASSET__img_ghost_ghostyawning_png extends lime.graphics.Image {}
 @:image("assets/img/ghost/poef.png") #if display private #end class __ASSET__img_ghost_poef_png extends lime.graphics.Image {}
+@:image("assets/img/guru/guruappearing.png") #if display private #end class __ASSET__img_guru_guruappearing_png extends lime.graphics.Image {}
+@:image("assets/img/guru/gurufloating.png") #if display private #end class __ASSET__img_guru_gurufloating_png extends lime.graphics.Image {}
+@:image("assets/img/guru/guruglow.png") #if display private #end class __ASSET__img_guru_guruglow_png extends lime.graphics.Image {}
+@:image("assets/img/player/cord.png") #if display private #end class __ASSET__img_player_cord_png extends lime.graphics.Image {}
+@:image("assets/img/player/jump.png") #if display private #end class __ASSET__img_player_jump_png extends lime.graphics.Image {}
+@:image("assets/img/player/newphonethrow.png") #if display private #end class __ASSET__img_player_newphonethrow_png extends lime.graphics.Image {}
+@:image("assets/img/player/phonearmback.png") #if display private #end class __ASSET__img_player_phonearmback_png extends lime.graphics.Image {}
+@:image("assets/img/player/phonerotating.png") #if display private #end class __ASSET__img_player_phonerotating_png extends lime.graphics.Image {}
+@:image("assets/img/player/phonethrow.png") #if display private #end class __ASSET__img_player_phonethrow_png extends lime.graphics.Image {}
+@:image("assets/img/player/phonethrowold.png") #if display private #end class __ASSET__img_player_phonethrowold_png extends lime.graphics.Image {}
 @:image("assets/img/player/player.png") #if display private #end class __ASSET__img_player_player_png extends lime.graphics.Image {}
 @:image("assets/img/player/retardoarm.png") #if display private #end class __ASSET__img_player_retardoarm_png extends lime.graphics.Image {}
+@:image("assets/img/player/scrollhit.png") #if display private #end class __ASSET__img_player_scrollhit_png extends lime.graphics.Image {}
+@:image("assets/img/player/walkright.png") #if display private #end class __ASSET__img_player_walkright_png extends lime.graphics.Image {}
+@:image("assets/img/static/coffee.png") #if display private #end class __ASSET__img_static_coffee_png extends lime.graphics.Image {}
+@:image("assets/img/static/lamp.png") #if display private #end class __ASSET__img_static_lamp_png extends lime.graphics.Image {}
 @:font("assets/fonts/ARIAL.TTF") #if display private #end class __ASSET__fonts_arial_ttf extends lime.text.Font {}
 @:font("assets/fonts/ARIALBD.TTF") #if display private #end class __ASSET__fonts_arialbd_ttf extends lime.text.Font {}
 @:font("assets/fonts/ARIALBI.TTF") #if display private #end class __ASSET__fonts_arialbi_ttf extends lime.text.Font {}

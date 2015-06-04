@@ -14,9 +14,9 @@ class Body extends Sprite
 		super();
 		
 		x = 0;
-		y = Global.elementSize;
-		graphics.beginFill(0x00FF00);
-        graphics.drawRect(0, 0, 2 * Global.elementSize, 2 * Global.elementSize);
+		y = 0;
+		/*graphics.beginFill(0x00FF00);
+        graphics.drawRect(0, 0, 2 * Global.elementSize, 2 * Global.elementSize);*/
 	}
 	
 }

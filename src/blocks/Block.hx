@@ -101,4 +101,8 @@ class Block extends Sprite
 		blockWidth = Global.elementSize;
 		blockHeight = Global.elementSize;
 	}
+	
+	public function remove() {
+		trace("wrong block!");
+	}
 }

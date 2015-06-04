@@ -93,8 +93,14 @@ class Main extends Sprite
 				Global.shift = true;
 			case 27:
 				//System.exit(0);
-			case 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59:
-				Global.weaponIndex = e.keyCode - 48;
+			/*case 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59:
+				Global.weaponIndex = e.keyCode - 48;*/
+			case 81:
+				if(Global.canChangeWeapon) {
+					Global.weaponIndex = (Global.weaponIndex + 1) % 2;
+					Global.canChangeWeapon = false;
+					//trace(Global.weaponIndex);
+				}
 		}
 		//trace(e.keyCode);
 	}
@@ -113,6 +119,8 @@ class Main extends Sprite
 				Global.jump = false;
 			case 16:
 				Global.shift = false;
+			case 81:
+				Global.canChangeWeapon = true;
 		}
 	}
 

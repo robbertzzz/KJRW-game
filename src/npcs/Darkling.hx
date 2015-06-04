@@ -18,11 +18,10 @@ class Darkling extends Sprite
 	{
 		super();
 		
-		addEventListener(MouseEvent.CLICK, hit);
 		addEventListener(Event.ENTER_FRAME, update);
 	}
 	
-	public function hit(e:MouseEvent) {
+	public function hit() {
 		health -= 20;
 		if (health <= 0) {
 			die();
@@ -40,7 +39,6 @@ class Darkling extends Sprite
 	}
 	
 	private function die() {
-		removeEventListener(MouseEvent.CLICK, hit);
 		removeEventListener(Event.ENTER_FRAME, update);
 		addEventListener(Event.ENTER_FRAME, updatePoef);
 	}

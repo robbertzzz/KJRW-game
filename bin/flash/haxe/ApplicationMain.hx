@@ -34,6 +34,22 @@ class ApplicationMain {
 		var types = [];
 		
 		
+		urls.push ("img/blocks/paperfloating.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/blocks/stack1.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/blocks/stack2.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/blocks/stack3.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
 		urls.push ("img/blocks.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
@@ -54,11 +70,67 @@ class ApplicationMain {
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
+		urls.push ("img/guru/guruappearing.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/guru/gurufloating.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/guru/guruglow.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/cord.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/jump.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/newphonethrow.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/phonearmback.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/phonerotating.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/phonethrow.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/phonethrowold.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
 		urls.push ("img/player/player.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
 		urls.push ("img/player/retardoarm.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/scrollhit.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/player/walkright.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/static/coffee.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/static/lamp.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
@@ -158,9 +230,9 @@ class ApplicationMain {
 		
 		config = {
 			
-			antialiasing: Std.int (0),
+			antialiasing: Std.int (1),
 			background: Std.int (16777215),
-			borderless: false,
+			borderless: true,
 			company: "Robert-Jan Zandvoort",
 			depthBuffer: false,
 			file: "PlatformEngine",
@@ -168,13 +240,13 @@ class ApplicationMain {
 			fullscreen: false,
 			hardware: true,
 			height: Std.int (300),
-			orientation: "",
+			orientation: "landscape",
 			packageName: "PlatformEngine",
 			resizable: true,
 			stencilBuffer: true,
 			title: "Platform Engine",
 			version: "1.0.0",
-			vsync: false,
+			vsync: true,
 			width: Std.int (500),
 			
 		}

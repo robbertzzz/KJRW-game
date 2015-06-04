@@ -44,6 +44,7 @@ class Message extends Sprite
 				textMessage.y = 100;
 				textMessage.width = Lib.current.stage.stageWidth;
 				textMessage.text = Global.messageContents[index];
+				textMessage.selectable = false;
 				Global.main.addChild(textMessage);
 				
 				showingMessage = true;

@@ -70,7 +70,7 @@ class Bullet extends Sprite
 					i++;
 				}
 				
-				Global.level.level[Math.floor(Global.blocks[i].y/12)][Math.floor(Global.blocks[i].x/12)] -= 3;
+				Global.level.level[Math.floor(Global.blocks[i].y / 12)][Math.floor(Global.blocks[i].x / 12)] -= 3;
 				Global.blocks[i].remove();
 			}
 			removeEventListener(Event.ENTER_FRAME, update);

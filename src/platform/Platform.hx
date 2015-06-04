@@ -1,8 +1,10 @@
 package platform ;
 
 import npcs.Darkling;
+import npcs.Guru;
 import openfl.display.Sprite;
 import openfl.Lib;
+import weapons.PhoneCable;
 
 import weapons.Bullet;
 import weapons.PhoneHorn;
@@ -29,6 +31,7 @@ class Platform extends Sprite
 	public var coins:Array<Coffee> = new Array();
 	public var obstacles:Array<Obstacle> = new Array();
 	public var fogMap:Array<Array<Fog>> = new Array();
+	public var npcs:Array<Dynamic> = new Array();
 	private var i:Int;
 	private var ii:Int;
 	public var messages:Array<Dynamic> = new Array();
@@ -97,6 +100,7 @@ class Platform extends Sprite
 						temp = new Darkling();
 						temp.x = ii * Global.elementSize;
 						temp.y = i * Global.elementSize;
+						npcs.push(temp);
 						addChild(temp);
 						level[i][ii] -= 5;
 					case 6, 106:
@@ -123,6 +127,12 @@ class Platform extends Sprite
 						playerX = ii * Global.elementSize;
 						playerY = i * Global.elementSize;
 					
+					case 10, 110:
+						temp = new Guru();
+						temp.x = ii * Global.elementSize;
+						temp.y = i * Global.elementSize;
+						addChild(temp);
+					
 					default:
 						if (level[i][ii] >= 200 && level[i][ii] < 300) {
 							temp = new Message(level[i][ii] - 200);
@@ -144,7 +154,6 @@ class Platform extends Sprite
 					temp = new Fog();
 					temp.x = ii * Global.elementSize;
 					temp.y = i * Global.elementSize;
-					//temp.z = 0/*Global.elementSize*/;
 					addChild(temp);
 					fogMap[i][ii] = temp;
 					
@@ -159,6 +168,7 @@ class Platform extends Sprite
 		Global.fogMap = fogMap;
 		Global.messages = messages;
 		Global.messageContents = messageContents;
+		Global.npcs = npcs;
 
 		trace(messageContents[1]);
 		
@@ -171,6 +181,6 @@ class Platform extends Sprite
 		
 		
 		
-		addChild(new TraceControls());
+		//addChild(new RetraceControls());
 	}
 }

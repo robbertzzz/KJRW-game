@@ -27,6 +27,8 @@ class PhoneHorn extends Sprite
 	
 	private var cable:PhoneCable;
 	
+	private var isHanging:Bool = false;
+	
 	public function new(x:Float, y:Float) 
 	{
 		super();
@@ -83,7 +85,7 @@ class PhoneHorn extends Sprite
 		playerY = Global.level.player.returnXY()[1];
 		playerDistance = Math.sqrt((x - playerX) * (x - playerX) + (y - playerY) * (y - playerY));
 		
-		if(playerDistance > Global.elementSize * 20 || y > Global.levelHeight - 20) {
+		if(!isHanging && (playerDistance > Global.elementSize * 20 || y > Global.levelHeight - 20)) {
 			
 			if (Global.weaponIndex == 2 && Global.level.player.arms[1].weapon.phoneHorn == this) {
 				Global.level.player.arms[1].weapon.youMayShoot = true;
@@ -95,11 +97,11 @@ class PhoneHorn extends Sprite
 			return;
 		}
 		
-		if (collision == 4 || collision == 104) {
+		/*if (collision == 4 || collision == 104) {
 			startHanging();
-		}
+		}*/
 		
-		cable.update(x + 0.5 * hornWidth, y + 0.5 * hornHeight);
+		//cable.update(x + 0.5 * hornWidth, y + 0.5 * hornHeight);
 	}
 	
 	public function checkCollision(xSpeed:Float, ySpeed:Float):Int {
@@ -112,6 +114,7 @@ class PhoneHorn extends Sprite
 		xSpeed = 0;
 		ySpeed = 0;
 		
+		isHanging = true;
 		Global.level.player.isHanging = true;
 	}
 	

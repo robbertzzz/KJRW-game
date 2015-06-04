@@ -4,11 +4,16 @@ import openfl.display.Sprite;
 import openfl.events.Event;
 import openfl.geom.Matrix;
 import openfl.Lib;
+import platform.Platform;
+import weapons.Phone;
+import weapons.PhoneCable;
 
 import player.Arm;
 import player.Body;
 import player.Head;
 import player.Leg;
+
+import player.PhoneArmBack;
 
 import blocks.*;
 
@@ -26,26 +31,30 @@ class Player extends Sprite
 	private var i:Int;
 	private var gravity:Float = 0.75 * (1/16) * Global.elementSize;
 	private var isStanding:Bool = false;
+	private var isJumping:Bool = false;
 	
-	public var playerWidth:Float = 2 * Global.elementSize;
-	public var playerHeight:Float = 5 * Global.elementSize;
+	public var playerWidth:Float = 60;
+	public var playerHeight:Float = 81;
 	
 	private var legs:Array<Leg> = new Array();
-	public var arms:Array<Arm> = new Array();
+	public var arms:Array<Dynamic> = new Array();
 	private var body:Body;
 	private var head:Head;
 	
+	private var weaponIndex:Int = 0;
 	
 	public var frame:Float = 0;
 	
 	public var isHanging:Bool = false;
 	private var climbSpeed:Float = 10;
+	
+	private var init:Bool = false;
 
 	public function new() 
 	{
 		super();
 		
-		frankenstein();
+		//frankenstein();
 		
 		addEventListener(Event.ENTER_FRAME, update);
 	}
@@ -55,26 +64,34 @@ class Player extends Sprite
 	}
 	
 	private function frankenstein():Void {
-		/*arms[0] = new Arm(false);
-		addChild(arms[0]);
-		
-		/*legs[0] = new Leg(false);
-		addChild(legs[0]);
-		
-		body = new Body();
-		addChild(body);
-		
-		head = new Head();
+		/*head = new Head();
 		addChild(head);
 		
 		legs[1] = new Leg(true);
 		addChild(legs[1]);*/
 		
-		arms[1] = new Arm(true);
+		/*legs[0] = new Leg(false);
+		addChild(legs[0]);*/
+		
+		/*arms[0] = new PhoneArmBack();
+		addChild(arms[0]);*/
+		
+		body = new Body();
+		addChild(body);
+		
+		/*arms[1] = new PhoneArm(true);
+		addChild(arms[1]);*/
+		
+		arms[1] = new ScrollArm(true);
 		addChild(arms[1]);
 	}
 	
 	private function update(e:Event):Void {
+		if (!init) {
+			frankenstein();
+			init = true;
+		}
+		weaponController();
 		if (!isHanging) {
 			move();
 		} else {
@@ -82,6 +99,34 @@ class Player extends Sprite
 		}
 		moveView();
 		draw();
+	}
+	
+	private function weaponController():Void {
+		if (weaponIndex == Global.weaponIndex) {
+			return;
+		}
+		
+		if (Global.weaponIndex == 0) {
+			arms[0].remove();
+			arms[1].remove();
+			arms[0] = null;
+			//arms[1] = null;
+			
+			arms[1] = new ScrollArm(true);
+			addChild(arms[1]);
+		} else {
+			arms[1].remove();
+			//arms[1] = null;
+			
+			arms[0] = new PhoneArmBack();
+			addChild(arms[0]);
+			
+			swapChildren(arms[0], body);
+			
+			arms[1] = new PhoneArm(true);
+			addChild(arms[1]);
+		}
+		weaponIndex = Global.weaponIndex;
 	}
 	
 	private var moveViewX:Float = 0;
@@ -103,12 +148,12 @@ class Player extends Sprite
 				moveViewY = Lib.current.stage.stageHeight * 0.5 - y - playerHeight * 0.5;
 			} else if (y - playerHeight * 0.5 > Lib.current.stage.stageHeight * 0.5) {
 				moveViewY = Lib.current.stage.stageHeight - Global.levelHeight;
-			} else if (y - playerHeight * 0.5 < Global.levelHeight - Lib.current.stage.stageHeight * 0.5) {
+			} else if (y - playerHeight * 0.5 < Global.levelHeight - Lib.current.stage.stageHeight * 0.8) {
 				moveViewY = 0;
 			}
 		}
 		
-		Global.level.move(moveViewX, moveViewY);
+		Global.level.move(Math.floor(moveViewX), Math.floor(moveViewY));
 	}
 	
 	
@@ -212,7 +257,7 @@ class Player extends Sprite
 			//trace("width: " + Global.blocks[i].blockWidth + ", height: " + Global.blocks[i].blockHeight);
 			//collision on the left side
 			if (	   Global.blocks[i].y < y + playerHeight
-					&& Global.blocks[i].y > y - Global.elementSize
+					&& Global.blocks[i].y > y + 10 - Global.elementSize
 					&& (Global.blocks[i].x + Global.elementSize) >= x - maxXSpeed
 					&& Global.blocks[i].x < x - maxXSpeed) {
 				if(Global.blocks[i].type != "OpenCeiling" && (Global.blocks[i].type != "Stairs" || onTheStairs) ) {
@@ -223,7 +268,7 @@ class Player extends Sprite
 			
 			//collision on the right side
 			if (	   Global.blocks[i].y < y + playerHeight
-					&& Global.blocks[i].y > y - Global.elementSize
+					&& Global.blocks[i].y > y + 10 - Global.elementSize
 					&& (Global.blocks[i].x + Global.elementSize) > x + maxXSpeed
 					&& Global.blocks[i].x <= x + playerWidth + maxXSpeed) {
 				if(Global.blocks[i].type != "OpenCeiling" && (Global.blocks[i].type != "Stairs" || onTheStairs) ) {
@@ -233,8 +278,8 @@ class Player extends Sprite
 			}
 			
 			//collision on the top side
-			if (	   Global.blocks[i].y + Global.elementSize >= y + ySpeed + gravity
-					&& Global.blocks[i].y < y
+			if (	   Global.blocks[i].y + Global.elementSize >= y + ySpeed + gravity + 10
+					&& Global.blocks[i].y < y + 10
 					&& Global.blocks[i].x + Global.elementSize > x
 					&& Global.blocks[i].x < x + playerWidth) {
 				if(Global.blocks[i].type != "OpenCeiling" && Global.blocks[i].type != "Stairs") {
@@ -277,6 +322,8 @@ class Player extends Sprite
 	private function startJumping():Void {
 		ySpeed = -maxYSpeed;
 		isStanding = false;
+		isJumping = true;
+		frame = 0;
 	}
 	
 	private function jumpController():Void {
@@ -290,12 +337,12 @@ class Player extends Sprite
 			if(onTheGround || onTheStairs && landOnStairs) {
 				//LAND
 				ySpeed = 0;
-				y = Global.blocks[groundBlock].y - playerHeight;
+				y = Math.floor(Global.blocks[groundBlock].y - playerHeight);
 				isStanding = true;
 			}
 			if(againstTheCeiling) {
 				ySpeed = 0;
-				y = Global.blocks[ceilingBlock].y + Global.elementSize;
+				y = Math.floor(Global.blocks[ceilingBlock].y + Global.elementSize);
 			}
 		} else { 
 			ySpeed += gravity;
@@ -308,6 +355,7 @@ class Player extends Sprite
 	private var pX:Float;
 	private var pY:Float;
 	private var pDistance:Float;
+	
 	//Hang from the phone, change controls
 	private function hang():Void {
 		//phoneHorn position
@@ -336,6 +384,7 @@ class Player extends Sprite
 			arms[1].weapon.phoneHorn = null;
 			arms[1].weapon.youMayShoot = true;
 			isHanging = false;
+			x = Math.floor(x);
 		}
 	}
 	
@@ -361,18 +410,27 @@ class Player extends Sprite
 	}
 	
 	private function draw() {
-		this.graphics.clear();
-		AssetStorage.playerWalk.drawTiles(this.graphics, [ -10, 0, Math.floor(frame) % 8]);
-		if(Global.right && !Global.left) {
-			frame += 0.25;
-			if (frame >= 8) {
-				frame -= 8;
+		if(!isJumping) {
+			body.graphics.clear();
+			AssetStorage.playerWalk.drawTiles(body.graphics, [0, 0, Math.floor(frame) % 8]);
+			if(Global.right && !Global.left) {
+				frame += 0.25;
+				if (frame >= 8) {
+					frame -= 8;
+				}
 			}
-		}
-		if (Global.left && !Global.right) {
-			frame -= 0.25;
-			if (frame <= 0) {
-				frame += 8;
+			if (Global.left && !Global.right) {
+				frame -= 0.25;
+				if (frame <= 0) {
+					frame += 8;
+				}
+			}
+		} else {
+			body.graphics.clear();
+			AssetStorage.playerJump.drawTiles(body.graphics, [15, 0, Math.floor(frame) % 16]);
+			frame ++;
+			if (frame > 16) {
+				isJumping = false;
 			}
 		}
 	}

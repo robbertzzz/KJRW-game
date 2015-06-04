@@ -14,25 +14,27 @@ import platform.*;
 class Delegation extends Sprite
 {
 	public var currentCase:Case;
-	public var categories:Array<Dynamic> = new Array();
+	public var categories:Array<Dynamic> = new Array<Dynamic>();
 	public var delegated:Int = 0;
 	
 	public function new() 
 	{
 		super();
 		
-		categories[0] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 - 80, 170);
+		
+		
+		categories[0] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 - 80, 140);
 		addChild(categories[0]);
-		categories[1] = new CaseTarget(Lib.current.stage.stageWidth * 0.5, 140);
+		categories[1] = new CaseTarget(Lib.current.stage.stageWidth * 0.5, 110);
 		addChild(categories[1]);
-		categories[2] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 + 80, 170);
+		categories[2] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 + 80, 140);
 		addChild(categories[2]);
-		categories[3] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 - 100, Lib.current.stage.stageHeight - 120);
+		categories[3] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 - 100, Lib.current.stage.stageHeight - 100);
 		addChild(categories[3]);
-		categories[4] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 + 100, Lib.current.stage.stageHeight - 120);
+		categories[4] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 + 100, Lib.current.stage.stageHeight - 100);
 		addChild(categories[4]);
 		
-		categories[5] = new ChooseCase(Lib.current.stage.stageWidth * 0.5, Lib.current.stage.stageHeight - 120 - Global.elementSize);
+		categories[5] = new ChooseCase(Lib.current.stage.stageWidth * 0.5, Lib.current.stage.stageHeight - 100 - Global.elementSize);
 		addChild(categories[5]);
 		
 		addChild(new Case(Lib.current.stage.stageWidth - 50, 80));
