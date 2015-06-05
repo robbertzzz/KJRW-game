@@ -79,8 +79,11 @@ class Case extends Sprite
 	{
 		graphics.clear();
 		Global.level.categories[item].done = true;
-		Global.level.categories[item].type2 ++;
-
+		//Global.level.categories[item].type2 ++;
+		if (Global.level.categories[item].type2 == 1)
+		{
+			Global.level.update();
+		}
 	}
 	private function newDrag():Void {
 		addEventListener(MouseEvent.MOUSE_DOWN, startMove);

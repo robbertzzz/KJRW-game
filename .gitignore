@@ -49,3 +49,4 @@ bin/flash/haxe/DefaultAssetLibrary.hx
 *.hxml
 *.swf
 KJRW game.hxproj
+*.swf

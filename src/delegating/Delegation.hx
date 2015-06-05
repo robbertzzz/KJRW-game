@@ -26,20 +26,20 @@ class Delegation extends Sprite
 		categories[0] = new CaseTarget(105+26.5, 105+26.5, 0, 0);
 		addChild(categories[0]);
 
-		categories[1] = new CaseTarget(119+26.5, 45+26.5, 1, 2);
+		categories[1] = new CaseTarget(119+26.5, 45+26.5, 1, 0);
 		addChild(categories[1]);
 	
-		categories[2] = new CaseTarget(190+26.5, 30+26.5, 2, 4);
+		categories[2] = new CaseTarget(190+26.5, 30+26.5, 2, 0);
 		addChild(categories[2]);
 
-		categories[3] = new CaseTarget(255+26.5, 45+26.5, 3, 6);
+		categories[3] = new CaseTarget(255+26.5, 45+26.5, 3, 0);
 		addChild(categories[3]);
 
-		categories[4] = new CaseTarget(270+26.5, 105+26.5, 4, 8);
+		categories[4] = new CaseTarget(270+26.5, 105+26.5, 4, 0);
 		addChild(categories[4]);
 		
 
-		categories[5] = new ChooseCase(180+37.5, 90+37.5, 0, 0);
+		categories[5] = new ChooseCase(180+37.5, 90+37.5, 0, 1);
 		addChild(categories[5]);
 		
 
@@ -50,20 +50,21 @@ class Delegation extends Sprite
 		addChild(new Case(Lib.current.stage.stageWidth - 50, 230, 3, 3));
 		addChild(new Case(Lib.current.stage.stageWidth - 50, 280, 4, 4));
 		
-		addEventListener(Event.ENTER_FRAME, update);
+		//addEventListener(Event.ENTER_FRAME, update);
 		
 		drawScreen();
 	}
 	
-	private function update(e:Event):Void {
-		if (delegated == 5) {
-			Global.main.level = new Platform2();
-			Global.main.addChild(Global.main.level);
-			Global.level = Global.main.level;
-			removeEventListener(Event.ENTER_FRAME, update);
-			this.parent.removeChild(this);
-		}
+	public function update():Void 
+	{
+		Global.main.level = new Platform2();
+		Global.main.addChild(Global.main.level);
+		Global.level = Global.main.level;
+		//removeEventListener(Event.ENTER_FRAME, update);
+		this.parent.removeChild(this);
+	
 	}
+	
 	private function drawScreen()
 	{
 		AssetStorage.startscreen.drawTiles(this.graphics, [0, 0, 0, ]);

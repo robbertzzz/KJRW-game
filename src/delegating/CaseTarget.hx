@@ -50,11 +50,16 @@ class CaseTarget extends Sprite
 
 		if (highlight==true || done==true)
 		{
-		AssetStorage.caseTargets.drawTiles(this.graphics, [ -26.5, -26.5, type2, ]);
+			if (done) {
+				AssetStorage.caseTargets.drawTiles(this.graphics, [ -26.5, -26.5, type1 * 2 + 1]);
+			} else {
+				AssetStorage.caseTargets.drawTiles(this.graphics, [ -26.5, -26.5, type1 * 2]);
+			}
+		
 		}
 		else
 		{
-		AssetStorage.basicCaseTargets.drawTiles(this.graphics, [ -26.5, -26.5, type1, ]);
+		AssetStorage.basicCaseTargets.drawTiles(this.graphics, [ -26.5, -26.5, type1]);
 		}
 	}
 }
