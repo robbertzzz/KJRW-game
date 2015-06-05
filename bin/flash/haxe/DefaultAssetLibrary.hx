@@ -55,8 +55,14 @@ class DefaultAssetLibrary extends AssetLibrary {
 		type.set ("img/blocks/stack3.png", AssetType.IMAGE);
 		className.set ("img/blocks.png", __ASSET__img_blocks_png);
 		type.set ("img/blocks.png", AssetType.IMAGE);
+		className.set ("img/delegation/basicblah.png", __ASSET__img_delegation_basicblah_png);
+		type.set ("img/delegation/basicblah.png", AssetType.IMAGE);
 		className.set ("img/delegation/caseTargets.png", __ASSET__img_delegation_casetargets_png);
 		type.set ("img/delegation/caseTargets.png", AssetType.IMAGE);
+		className.set ("img/delegation/houden2.png", __ASSET__img_delegation_houden2_png);
+		type.set ("img/delegation/houden2.png", AssetType.IMAGE);
+		className.set ("img/delegation/houdenBase.png", __ASSET__img_delegation_houdenbase_png);
+		type.set ("img/delegation/houdenBase.png", AssetType.IMAGE);
 		className.set ("img/delegation/incomingMessages.png", __ASSET__img_delegation_incomingmessages_png);
 		type.set ("img/delegation/incomingMessages.png", AssetType.IMAGE);
 		className.set ("img/delegation/newMessage.png", __ASSET__img_delegation_newmessage_png);
@@ -154,7 +160,19 @@ class DefaultAssetLibrary extends AssetLibrary {
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
+		id = "img/delegation/basicblah.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
 		id = "img/delegation/caseTargets.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/delegation/houden2.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/delegation/houdenBase.png";
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
@@ -348,6 +366,9 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		
 		
+		
+		
+		
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arial_ttf);
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbd_ttf);
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbi_ttf);
@@ -379,8 +400,17 @@ class DefaultAssetLibrary extends AssetLibrary {
 		className.set ("img/blocks.png", __ASSET__img_blocks_png);
 		type.set ("img/blocks.png", AssetType.IMAGE);
 		
+		className.set ("img/delegation/basicblah.png", __ASSET__img_delegation_basicblah_png);
+		type.set ("img/delegation/basicblah.png", AssetType.IMAGE);
+		
 		className.set ("img/delegation/caseTargets.png", __ASSET__img_delegation_casetargets_png);
 		type.set ("img/delegation/caseTargets.png", AssetType.IMAGE);
+		
+		className.set ("img/delegation/houden2.png", __ASSET__img_delegation_houden2_png);
+		type.set ("img/delegation/houden2.png", AssetType.IMAGE);
+		
+		className.set ("img/delegation/houdenBase.png", __ASSET__img_delegation_houdenbase_png);
+		type.set ("img/delegation/houdenBase.png", AssetType.IMAGE);
 		
 		className.set ("img/delegation/incomingMessages.png", __ASSET__img_delegation_incomingmessages_png);
 		type.set ("img/delegation/incomingMessages.png", AssetType.IMAGE);
@@ -1095,7 +1125,10 @@ class DefaultAssetLibrary extends AssetLibrary {
 @:keep @:bind #if display private #end class __ASSET__img_blocks_stack2_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_blocks_stack3_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_blocks_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_delegation_basicblah_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_delegation_casetargets_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_delegation_houden2_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_delegation_houdenbase_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_delegation_incomingmessages_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_delegation_newmessage_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_delegation_startscreen_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
@@ -1169,6 +1202,9 @@ class DefaultAssetLibrary extends AssetLibrary {
 
 
 
+
+
+
 @:keep #if display private #end class __ASSET__fonts_arial_ttf extends lime.text.Font { public function new () { super (); name = "Arial"; } } 
 @:keep #if display private #end class __ASSET__fonts_arialbd_ttf extends lime.text.Font { public function new () { super (); name = "Arial Bold"; } } 
 @:keep #if display private #end class __ASSET__fonts_arialbi_ttf extends lime.text.Font { public function new () { super (); name = "Arial Bold Italic"; } } 
@@ -1192,7 +1228,10 @@ class DefaultAssetLibrary extends AssetLibrary {
 @:image("assets/img/blocks/stack2.png") #if display private #end class __ASSET__img_blocks_stack2_png extends lime.graphics.Image {}
 @:image("assets/img/blocks/stack3.png") #if display private #end class __ASSET__img_blocks_stack3_png extends lime.graphics.Image {}
 @:image("assets/img/blocks.png") #if display private #end class __ASSET__img_blocks_png extends lime.graphics.Image {}
+@:image("assets/img/delegation/basicblah.png") #if display private #end class __ASSET__img_delegation_basicblah_png extends lime.graphics.Image {}
 @:image("assets/img/delegation/caseTargets.png") #if display private #end class __ASSET__img_delegation_casetargets_png extends lime.graphics.Image {}
+@:image("assets/img/delegation/houden2.png") #if display private #end class __ASSET__img_delegation_houden2_png extends lime.graphics.Image {}
+@:image("assets/img/delegation/houdenBase.png") #if display private #end class __ASSET__img_delegation_houdenbase_png extends lime.graphics.Image {}
 @:image("assets/img/delegation/incomingMessages.png") #if display private #end class __ASSET__img_delegation_incomingmessages_png extends lime.graphics.Image {}
 @:image("assets/img/delegation/newMessage.png") #if display private #end class __ASSET__img_delegation_newmessage_png extends lime.graphics.Image {}
 @:image("assets/img/delegation/startscreen.png") #if display private #end class __ASSET__img_delegation_startscreen_png extends lime.graphics.Image {}

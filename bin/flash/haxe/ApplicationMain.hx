@@ -54,7 +54,19 @@ class ApplicationMain {
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
+		urls.push ("img/delegation/basicblah.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
 		urls.push ("img/delegation/caseTargets.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/delegation/houden2.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/delegation/houdenBase.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
@@ -270,7 +282,6 @@ class ApplicationMain {
 			file: "PlatformEngine",
 			fps: Std.int (60),
 			fullscreen: false,
-			hardware: true,
 			height: Std.int (300),
 			orientation: "landscape",
 			packageName: "PlatformEngine",

@@ -45,6 +45,10 @@ class LoadAssets extends Sprite
 		AssetStorage.startscreen = createFrames ("img/delegation/startscreen.png", 500, 300, 1, 1);
 		AssetStorage.incomingMessages = createFrames("img/delegation/incomingMessages.png", 42, 42, 1, 5);
 		AssetStorage.newMessage = createFrames("img/delegation/newMessage.png", 18, 24, 6, 6);
+		AssetStorage.basicCaseTargets = createFrames("img/delegation/basicblah.png", 55, 55, 1, 5);
+		AssetStorage.houden1 = createFrames("img/delegation/houdenBase.png", 75, 75, 1, 1);
+		AssetStorage.houden2 = createFrames("img/delegation/houden2.png", 75, 75, 2, 2);
+		
 	}
 	
 	private function createFrames(asset:String, imgWidth:Int, imgHeight:Int, xNum:Int, imgNum:Int, spacing:Int = 0):Tilesheet {
