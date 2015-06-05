@@ -77,6 +77,8 @@ class DefaultAssetLibrary extends AssetLibrary {
 		type.set ("img/player/newphonethrow.png", AssetType.IMAGE);
 		className.set ("img/player/phonearmback.png", __ASSET__img_player_phonearmback_png);
 		type.set ("img/player/phonearmback.png", AssetType.IMAGE);
+		className.set ("img/player/phonehorn.png", __ASSET__img_player_phonehorn_png);
+		type.set ("img/player/phonehorn.png", AssetType.IMAGE);
 		className.set ("img/player/phonerotating.png", __ASSET__img_player_phonerotating_png);
 		type.set ("img/player/phonerotating.png", AssetType.IMAGE);
 		className.set ("img/player/phonethrow.png", __ASSET__img_player_phonethrow_png);
@@ -179,6 +181,10 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		type.set (id, AssetType.IMAGE);
 		id = "img/player/phonearmback.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/player/phonehorn.png";
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
@@ -292,6 +298,7 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		
 		
+		
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arial_ttf);
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbd_ttf);
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbi_ttf);
@@ -355,6 +362,9 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		className.set ("img/player/phonearmback.png", __ASSET__img_player_phonearmback_png);
 		type.set ("img/player/phonearmback.png", AssetType.IMAGE);
+		
+		className.set ("img/player/phonehorn.png", __ASSET__img_player_phonehorn_png);
+		type.set ("img/player/phonehorn.png", AssetType.IMAGE);
 		
 		className.set ("img/player/phonerotating.png", __ASSET__img_player_phonerotating_png);
 		type.set ("img/player/phonerotating.png", AssetType.IMAGE);
@@ -1026,6 +1036,7 @@ class DefaultAssetLibrary extends AssetLibrary {
 @:keep @:bind #if display private #end class __ASSET__img_player_jump_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_newphonethrow_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_phonearmback_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_player_phonehorn_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_phonerotating_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_phonethrow_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_phonethrowold_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
@@ -1047,6 +1058,7 @@ class DefaultAssetLibrary extends AssetLibrary {
 
 
 #elseif html5
+
 
 
 
@@ -1107,6 +1119,7 @@ class DefaultAssetLibrary extends AssetLibrary {
 @:image("assets/img/player/jump.png") #if display private #end class __ASSET__img_player_jump_png extends lime.graphics.Image {}
 @:image("assets/img/player/newphonethrow.png") #if display private #end class __ASSET__img_player_newphonethrow_png extends lime.graphics.Image {}
 @:image("assets/img/player/phonearmback.png") #if display private #end class __ASSET__img_player_phonearmback_png extends lime.graphics.Image {}
+@:image("assets/img/player/phonehorn.png") #if display private #end class __ASSET__img_player_phonehorn_png extends lime.graphics.Image {}
 @:image("assets/img/player/phonerotating.png") #if display private #end class __ASSET__img_player_phonerotating_png extends lime.graphics.Image {}
 @:image("assets/img/player/phonethrow.png") #if display private #end class __ASSET__img_player_phonethrow_png extends lime.graphics.Image {}
 @:image("assets/img/player/phonethrowold.png") #if display private #end class __ASSET__img_player_phonethrowold_png extends lime.graphics.Image {}

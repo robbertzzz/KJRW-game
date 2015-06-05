@@ -359,15 +359,16 @@ class Player extends Sprite
 	//Hang from the phone, change controls
 	private function hang():Void {
 		//phoneHorn position
-		pX = arms[1].weapon.phoneHorn.x;
-		pY = arms[1].weapon.phoneHorn.y;
+		pX = arms[1].phoneHorn.x;
+		pY = arms[1].phoneHorn.y;
 		
 		if (pY > y) {
 			trace("hi");
-			arms[1].weapon.phoneHorn.remove();
-			arms[1].weapon.phoneHorn = null;
+			arms[1].weapon.remove();
+			arms[1].weapon = null;
 			arms[1].weapon.youMayShoot = true;
 			isHanging = false;
+			Global.weaponIndex = 0;
 			return;
 		}
 		
@@ -380,10 +381,11 @@ class Player extends Sprite
 			x += xSpeed;
 			y += ySpeed;
 		} else {
-			arms[1].weapon.phoneHorn.remove();
-			arms[1].weapon.phoneHorn = null;
-			arms[1].weapon.youMayShoot = true;
+			arms[1].phoneHorn.remove();
+			arms[1].phoneHorn = null;
+			//arms[1].weapon.youMayShoot = true;
 			isHanging = false;
+			Global.weaponIndex = 0;
 			x = Math.floor(x);
 		}
 	}

@@ -3,6 +3,7 @@ import openfl.display.*;
 import openfl.geom.Rectangle;
 import openfl.Assets;
 import Math;
+import weapons.PhoneHorn;
 
 /**
  * ...
@@ -19,6 +20,7 @@ class AssetStorage
 	public static var playerJump:Tilesheet;
 	
 	public static var phoneCable:Tilesheet;
+	public static var phoneHorn:Tilesheet;
 	
 	public static var ghostFloating:Tilesheet;
 	public static var ghostYawning:Tilesheet;

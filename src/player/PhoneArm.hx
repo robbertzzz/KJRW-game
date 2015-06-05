@@ -1,6 +1,7 @@
 package player;
 import openfl.events.Event;
 import weapons.PhoneCable;
+import weapons.PhoneHorn;
 
 /**
  * ...
@@ -9,9 +10,11 @@ import weapons.PhoneCable;
 class PhoneArm extends Arm
 {
 	private var throwing:Bool = false;
-	private var frame:Float = 0;
+	public var frame:Float = 0;
 	private var init:Bool = false;
 	private var phoneCable:PhoneCable;
+	public var phoneHorn:PhoneHorn;
+	public var firstThrow:Bool = false;
 	
 	public function new(leftRight:Bool) 
 	{
@@ -30,7 +33,7 @@ class PhoneArm extends Arm
 		}
 	}
 	
-	private var firstThrow:Bool = false;
+	
 	override private function update(e:Event) {
 		if (!init) {
 			phoneCable = new PhoneCable();
@@ -46,8 +49,13 @@ class PhoneArm extends Arm
 			firstThrow = true;
 		}
 		
-		if (!Global.mouseDown && throwing == false) {
+		/*if (!Global.mouseDown && throwing == false) {
 			firstThrow = false;
+		}*/
+		
+		if (frame == 8) {
+			phoneHorn = new PhoneHorn(Global.level.player.returnXY()[0] + 20, Global.level.player.returnXY()[1] + 20);
+			Global.level.addChild(phoneHorn);
 		}
 		
 		draw();
@@ -69,10 +77,13 @@ class PhoneArm extends Arm
 		if (frame > 1 && frame < 9) {
 			yFrameCorrect = 5;
 		}
+		if (frame == 11) {
+			yFrameCorrect = -2;
+		}
 		AssetStorage.phoneArm.drawTiles(this.graphics, [-15, -30 - yFrameCorrect, Math.floor(frame)]);
 		
 		if (frame >= 11) {
-			frame = 0;
+			//frame = 0;
 			throwing = false;
 		}
 	}

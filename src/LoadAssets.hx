@@ -24,6 +24,7 @@ class LoadAssets extends Sprite
 		AssetStorage.playerJump = createFrames("img/player/jump.png", 35, 90, 7, 16);
 		
 		AssetStorage.phoneCable = createFrames("img/player/cord.png", 6, 5, 6, 1);
+		AssetStorage.phoneHorn = createFrames("img/player/phonehorn.png", 9, 22, 1, 1);
 		
 		AssetStorage.ghostFloating = createFrames("img/ghost/ghostfloating.png", 66, 78, 14, 122);
 		AssetStorage.ghostYawning = createFrames("img/ghost/ghostyawning.png", 72, 78, 14, 130);

@@ -31,8 +31,17 @@ class PhoneCable extends Sprite
 	private var ii:Int = 0;
 	
 	public function update(e:Event) {
-		x = Global.level.player.returnXY()[0] + Global.level.player.arms[1].x + Math.cos(Math.PI * ((Global.level.player.arms[1].rotation) / 180)) * 25;
-		y = Global.level.player.returnXY()[1] + Global.level.player.arms[1].y + Math.sin(Math.PI * ((Global.level.player.arms[1].rotation) / 180)) * 25;
+		if (Global.level.player.arms[0] == null) {
+			remove();
+			return;
+		}
+		if(Global.level.player.arms[1].phoneHorn == null) {
+			x = Global.level.player.returnXY()[0] + Global.level.player.arms[1].x + Math.cos(Math.PI * ((Global.level.player.arms[1].rotation) / 180)) * 25;
+			y = Global.level.player.returnXY()[1] + Global.level.player.arms[1].y + Math.sin(Math.PI * ((Global.level.player.arms[1].rotation) / 180)) * 25;
+		} else {
+			x = Global.level.player.arms[1].phoneHorn.x;
+			y = Global.level.player.arms[1].phoneHorn.y;
+		}
 		
 		armX = Global.level.player.returnXY()[0] + Global.level.player.arms[0].x + 26;
 		armY = Global.level.player.returnXY()[1] + Global.level.player.arms[0].y + 8;

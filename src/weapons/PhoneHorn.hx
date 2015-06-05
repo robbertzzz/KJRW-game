@@ -36,18 +36,19 @@ class PhoneHorn extends Sprite
 		hornWidth = Global.elementSize;
 		hornHeight = Global.elementSize;
 		
-		graphics.beginFill(0x000000);
-        graphics.drawRect(0, 0, hornWidth, hornHeight);
+		/*graphics.beginFill(0x000000);
+        graphics.drawRect(0, 0, hornWidth, hornHeight);*/
+		AssetStorage.phoneHorn.drawTiles(this.graphics, [0, 0, 0]);
 		
 		this.x = x - 0.5 * hornWidth;
 		this.y = y - 0.5 * hornHeight;
 		
 		startMoving();
 		
-		cable = new PhoneCable();
+		/*cable = new PhoneCable();
 		cable.x = 0.5 * hornWidth - 0.15 * Global.elementSize;
 		cable.y = 0.5 * hornHeight - 0.15 * Global.elementSize;
-		addChild(cable);
+		addChild(cable);*/
 		
 		addEventListener(Event.ENTER_FRAME, update);
 	}
@@ -61,6 +62,9 @@ class PhoneHorn extends Sprite
 		mouseDistanceY = Global.mouseY - 0.5 * hornHeight - absY;
 		xSpeed = (mouseDistanceX / mouseDistance) * speed;
 		ySpeed = (mouseDistanceY / mouseDistance) * speed;
+		
+		var rotationRad = Math.acos(mouseDistanceX / mouseDistance);
+		rotation = 180 * (rotationRad / Math.PI);
 		
 		x += 2.5 * Global.elementSize * xSpeed / speed;
 		y += 2.5 * Global.elementSize * ySpeed / speed;
@@ -120,6 +124,9 @@ class PhoneHorn extends Sprite
 	
 	public function remove() {
 		removeEventListener(Event.ENTER_FRAME, update);
+		Global.level.player.arms[1].phoneHorn = null;
+		Global.level.player.arms[1].frame = 0;
+		Global.level.player.arms[1].firstThrow = false;
 		this.parent.removeChild(this);
 	}
 }

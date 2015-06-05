@@ -98,6 +98,10 @@ class ApplicationMain {
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
+		urls.push ("img/player/phonehorn.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
 		urls.push ("img/player/phonerotating.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		

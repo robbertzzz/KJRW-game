@@ -2,6 +2,7 @@ package player;
 import openfl.events.Event;
 import openfl.events.MouseEvent;
 import openfl.Lib;
+import weapons.PhoneHorn;
 
 /**
  * ...
@@ -11,6 +12,7 @@ class ScrollArm extends Arm
 {
 	private var frame:Int = 0;
 	private var hitting:Bool = false;
+	public var phoneHorn:PhoneHorn = null;
 	
 	public function new(leftRight:Bool)
 	{
