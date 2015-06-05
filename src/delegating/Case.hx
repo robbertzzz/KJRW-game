@@ -16,14 +16,15 @@ class Case extends Sprite
 	private var startX:Float;
 	private var startY:Float;
 	private var type:Int;
+	private var caseNumber:Int;
 	
-	public function new(x, y, type) 
+	public function new(x, y, type, caseNumber) 
 	{
 		super();
 		this.type = type;
 		this.x = startX = x;
 		this.y = startY = y;
-		
+		this.
 		addEventListener(MouseEvent.MOUSE_DOWN, startMove);
 		addEventListener(Event.ENTER_FRAME, update);
 	}
@@ -68,7 +69,7 @@ class Case extends Sprite
 			draw();
 			removeEventListener(Event.ENTER_FRAME, update);
 			Actuate.tween(this, 0.5, { x: Global.level.categories[item].x, y:Global.level.categories[item].y } );
-
+			
 		}
 	}
 	

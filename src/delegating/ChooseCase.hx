@@ -8,9 +8,9 @@ import openfl.display.Sprite;
  */
 class ChooseCase extends CaseTarget
 {
-	public function new(x, y) 
+	public function new(x, y, type) 
 	{
-		super(x, y);
+		super(x, y, type);
 		
 		/*this.x = x;
 		this.y = y;*/

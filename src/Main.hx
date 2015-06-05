@@ -46,7 +46,7 @@ class Main extends Sprite
 		addChild(level);*/
 		
 		addChild(new LoadAssets());
-		
+		addChild(new TextSaver());
 		addChild(new FPS(stage.stageWidth - 100, 10, 0x000000));
 		
 		menu = new Menu();
