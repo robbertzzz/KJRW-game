@@ -16,7 +16,7 @@ class Delegation extends Sprite
 	public var currentCase:Case;
 	public var categories:Array<Dynamic> = new Array<Dynamic>();
 	public var delegated:Int = 0;
-	
+
 	public function new() 
 	{
 		super();
