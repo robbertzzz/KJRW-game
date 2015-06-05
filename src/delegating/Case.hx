@@ -40,6 +40,7 @@ class Case extends Sprite
 	private var distance:Float;
 	private var onItem:Bool;
 	private var item:Int;
+	
 	private function stopMove(e:MouseEvent):Void {
 		stopDrag();
 		//zoom = 1;
@@ -67,7 +68,7 @@ class Case extends Sprite
 			draw();
 			removeEventListener(Event.ENTER_FRAME, update);
 			Actuate.tween(this, 0.5, { x: Global.level.categories[item].x, y:Global.level.categories[item].y } );
-			graphics.
+
 		}
 	}
 	

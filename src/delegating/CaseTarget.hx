@@ -42,6 +42,6 @@ class CaseTarget extends Sprite
 		graphics.clear();
 		
 		graphics.beginFill(0xFF0000);
-        graphics.drawCircle(0, 0, size * zoom * Global.elementSize);
+        //graphics.drawCircle(0, 0, size * zoom * Global.elementSize);
 	}
 }
