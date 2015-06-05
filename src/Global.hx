@@ -44,4 +44,6 @@ class Global
 	public static var messageContents:Array<String> = new Array();
 	
 	public static var guruScreen:GuruScreen;
+	
+	public static var pause:Bool = false;
 }

@@ -87,6 +87,9 @@ class Player extends Sprite
 	}
 	
 	private function update(e:Event):Void {
+		if (Global.pause) {
+			return;
+		}
 		if (!init) {
 			frankenstein();
 			init = true;

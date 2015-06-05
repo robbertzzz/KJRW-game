@@ -81,6 +81,9 @@ class PhoneHorn extends Sprite
 	private var playerY:Float;
 	private var playerDistance:Float;
 	private function update(e:Event):Void {
+		if (Global.pause) {
+			return;
+		}
 		x += xSpeed;
 		y += ySpeed;
 		

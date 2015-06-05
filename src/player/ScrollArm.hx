@@ -71,6 +71,9 @@ class ScrollArm extends Arm
 	}
 	
 	override private function update(e:Event):Void {
+		if (Global.pause) {
+			return;
+		}
 		followMouse();
 		
 		if (Global.mouseDown) {
