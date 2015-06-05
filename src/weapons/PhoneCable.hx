@@ -15,20 +15,10 @@ class PhoneCable extends Sprite
 	{
 		super();
 		
-		partSize = 0.3 * Global.elementSize;
+		partSize = 4;
 		
 		addEventListener(Event.ENTER_FRAME, update);
 	}
-	
-	/*private var distance:Float;
-	private var distanceX:Float;
-	private var distanceY:Float;*/
-	
-	private var armX:Float;
-	private var armY:Float;
-	
-	private var forLoopMax:Int;
-	private var ii:Int = 0;
 	
 	public function update(e:Event) {
 		if (Global.level.player.arms[0] == null) {
@@ -43,8 +33,8 @@ class PhoneCable extends Sprite
 			y = Global.level.player.arms[1].phoneHorn.y;
 		}
 		
-		armX = Global.level.player.returnXY()[0] + Global.level.player.arms[0].x + 26;
-		armY = Global.level.player.returnXY()[1] + Global.level.player.arms[0].y + 8;
+		var armX:Float = Global.level.player.returnXY()[0] + Global.level.player.arms[0].x + 26;
+		var armY:Float = Global.level.player.returnXY()[1] + Global.level.player.arms[0].y + 8;
 		
 		var distance:Float = Math.sqrt((x - armX) * (x - armX) + (y - armY) * (y - armY));
 		var distanceX:Float = Math.abs(x - armX);
@@ -63,14 +53,10 @@ class PhoneCable extends Sprite
 			rotation = Math.asin(distanceX / distance) * 180 / Math.PI + 180;
 		}
 		
-		
-		//trace(Math.floor(distance / partSize));
 		graphics.clear();
-		forLoopMax = Math.floor(distance / partSize);
+		var forLoopMax:Int = Math.floor(distance / partSize);
 		for (i in 0...forLoopMax) {
 			AssetStorage.phoneCable.drawTiles(this.graphics, [0, i * 4, 0]);
-			/*graphics.beginFill(0x000000);
-			graphics.drawRect(0, i * partSize, partSize, partSize);*/
 		}
 	}
 	

@@ -31,6 +31,11 @@ class LoadAssets extends Sprite
 		AssetStorage.ghostScratching = createFrames("img/ghost/ghostscratching.png", 66, 78, 15, 130);
 		
 		AssetStorage.guruGlow = createFrames("img/guru/guruglow.png", 112, 112, 9, 40);
+		AssetStorage.guruBackground = createFrames("img/guru/gurubackground.png", 500, 300, 1, 1);
+		AssetStorage.guruAppearing = createFrames("img/guru/guruappearing.png", 286, 294, 28, 65);
+		AssetStorage.guruFloating = createFrames("img/guru/gurufloating.png", 285, 294, 13, 105);
+		AssetStorage.dialogueBubble = createFrames("img/guru/dialoguebubble.png", 260, 100, 1, 1);
+		AssetStorage.hintBubble = createFrames("img/guru/hintbubble.png", 190, 200, 1, 1);
 		
 		AssetStorage.guruFloating = createFrames("img/guru/gurufloating.png", 296, 307, 13, 105);
 		

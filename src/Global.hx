@@ -2,6 +2,7 @@ package ;
 import openfl.display.Sprite;
 import weapons.Bullet;
 import weapons.PhoneHorn;
+import guruScreen.*;
 
 import blocks.*;
 
@@ -42,5 +43,9 @@ class Global
 	public static var messages:Array<Dynamic> = new Array();
 	public static var messageContents:Array<String> = new Array();
 	
+<<<<<<< HEAD
 	public static var cases:Array<Array<String>> = new Array<Array<String>>();
+=======
+	public static var guruScreen:GuruScreen;
+>>>>>>> origin/master
 }

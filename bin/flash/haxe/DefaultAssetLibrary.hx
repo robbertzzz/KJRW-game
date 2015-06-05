@@ -71,12 +71,18 @@ class DefaultAssetLibrary extends AssetLibrary {
 		type.set ("img/ghost/ghostyawning.png", AssetType.IMAGE);
 		className.set ("img/ghost/poef.png", __ASSET__img_ghost_poef_png);
 		type.set ("img/ghost/poef.png", AssetType.IMAGE);
+		className.set ("img/guru/dialoguebubble.png", __ASSET__img_guru_dialoguebubble_png);
+		type.set ("img/guru/dialoguebubble.png", AssetType.IMAGE);
 		className.set ("img/guru/guruappearing.png", __ASSET__img_guru_guruappearing_png);
 		type.set ("img/guru/guruappearing.png", AssetType.IMAGE);
+		className.set ("img/guru/gurubackground.png", __ASSET__img_guru_gurubackground_png);
+		type.set ("img/guru/gurubackground.png", AssetType.IMAGE);
 		className.set ("img/guru/gurufloating.png", __ASSET__img_guru_gurufloating_png);
 		type.set ("img/guru/gurufloating.png", AssetType.IMAGE);
 		className.set ("img/guru/guruglow.png", __ASSET__img_guru_guruglow_png);
 		type.set ("img/guru/guruglow.png", AssetType.IMAGE);
+		className.set ("img/guru/hintbubble.png", __ASSET__img_guru_hintbubble_png);
+		type.set ("img/guru/hintbubble.png", AssetType.IMAGE);
 		className.set ("img/player/cord.png", __ASSET__img_player_cord_png);
 		type.set ("img/player/cord.png", AssetType.IMAGE);
 		className.set ("img/player/jump.png", __ASSET__img_player_jump_png);
@@ -180,7 +186,15 @@ class DefaultAssetLibrary extends AssetLibrary {
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
+		id = "img/guru/dialoguebubble.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
 		id = "img/guru/guruappearing.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/guru/gurubackground.png";
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
@@ -189,6 +203,10 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		type.set (id, AssetType.IMAGE);
 		id = "img/guru/guruglow.png";
+		path.set (id, id);
+		
+		type.set (id, AssetType.IMAGE);
+		id = "img/guru/hintbubble.png";
 		path.set (id, id);
 		
 		type.set (id, AssetType.IMAGE);
@@ -327,6 +345,9 @@ class DefaultAssetLibrary extends AssetLibrary {
 		
 		
 		
+		
+		
+		
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arial_ttf);
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbd_ttf);
 		openfl.text.Font.registerFont (__ASSET__OPENFL__fonts_arialbi_ttf);
@@ -382,14 +403,23 @@ class DefaultAssetLibrary extends AssetLibrary {
 		className.set ("img/ghost/poef.png", __ASSET__img_ghost_poef_png);
 		type.set ("img/ghost/poef.png", AssetType.IMAGE);
 		
+		className.set ("img/guru/dialoguebubble.png", __ASSET__img_guru_dialoguebubble_png);
+		type.set ("img/guru/dialoguebubble.png", AssetType.IMAGE);
+		
 		className.set ("img/guru/guruappearing.png", __ASSET__img_guru_guruappearing_png);
 		type.set ("img/guru/guruappearing.png", AssetType.IMAGE);
+		
+		className.set ("img/guru/gurubackground.png", __ASSET__img_guru_gurubackground_png);
+		type.set ("img/guru/gurubackground.png", AssetType.IMAGE);
 		
 		className.set ("img/guru/gurufloating.png", __ASSET__img_guru_gurufloating_png);
 		type.set ("img/guru/gurufloating.png", AssetType.IMAGE);
 		
 		className.set ("img/guru/guruglow.png", __ASSET__img_guru_guruglow_png);
 		type.set ("img/guru/guruglow.png", AssetType.IMAGE);
+		
+		className.set ("img/guru/hintbubble.png", __ASSET__img_guru_hintbubble_png);
+		type.set ("img/guru/hintbubble.png", AssetType.IMAGE);
 		
 		className.set ("img/player/cord.png", __ASSET__img_player_cord_png);
 		type.set ("img/player/cord.png", AssetType.IMAGE);
@@ -1073,9 +1103,12 @@ class DefaultAssetLibrary extends AssetLibrary {
 @:keep @:bind #if display private #end class __ASSET__img_ghost_ghostscratching_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_ghost_ghostyawning_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_ghost_poef_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_guru_dialoguebubble_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_guru_guruappearing_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_guru_gurubackground_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_guru_gurufloating_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_guru_guruglow_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
+@:keep @:bind #if display private #end class __ASSET__img_guru_hintbubble_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_cord_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_jump_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
 @:keep @:bind #if display private #end class __ASSET__img_player_newphonethrow_png extends flash.display.BitmapData { public function new () { super (0, 0, true, 0); } }
@@ -1102,6 +1135,9 @@ class DefaultAssetLibrary extends AssetLibrary {
 
 
 #elseif html5
+
+
+
 
 
 
@@ -1164,9 +1200,12 @@ class DefaultAssetLibrary extends AssetLibrary {
 @:image("assets/img/ghost/ghostscratching.png") #if display private #end class __ASSET__img_ghost_ghostscratching_png extends lime.graphics.Image {}
 @:image("assets/img/ghost/ghostyawning.png") #if display private #end class __ASSET__img_ghost_ghostyawning_png extends lime.graphics.Image {}
 @:image("assets/img/ghost/poef.png") #if display private #end class __ASSET__img_ghost_poef_png extends lime.graphics.Image {}
+@:image("assets/img/guru/dialoguebubble.png") #if display private #end class __ASSET__img_guru_dialoguebubble_png extends lime.graphics.Image {}
 @:image("assets/img/guru/guruappearing.png") #if display private #end class __ASSET__img_guru_guruappearing_png extends lime.graphics.Image {}
+@:image("assets/img/guru/gurubackground.png") #if display private #end class __ASSET__img_guru_gurubackground_png extends lime.graphics.Image {}
 @:image("assets/img/guru/gurufloating.png") #if display private #end class __ASSET__img_guru_gurufloating_png extends lime.graphics.Image {}
 @:image("assets/img/guru/guruglow.png") #if display private #end class __ASSET__img_guru_guruglow_png extends lime.graphics.Image {}
+@:image("assets/img/guru/hintbubble.png") #if display private #end class __ASSET__img_guru_hintbubble_png extends lime.graphics.Image {}
 @:image("assets/img/player/cord.png") #if display private #end class __ASSET__img_player_cord_png extends lime.graphics.Image {}
 @:image("assets/img/player/jump.png") #if display private #end class __ASSET__img_player_jump_png extends lime.graphics.Image {}
 @:image("assets/img/player/newphonethrow.png") #if display private #end class __ASSET__img_player_newphonethrow_png extends lime.graphics.Image {}

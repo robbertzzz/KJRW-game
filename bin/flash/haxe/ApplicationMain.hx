@@ -86,7 +86,15 @@ class ApplicationMain {
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
+		urls.push ("img/guru/dialoguebubble.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
 		urls.push ("img/guru/guruappearing.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/guru/gurubackground.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
@@ -95,6 +103,10 @@ class ApplicationMain {
 		
 		
 		urls.push ("img/guru/guruglow.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/guru/hintbubble.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
@@ -258,6 +270,7 @@ class ApplicationMain {
 			file: "PlatformEngine",
 			fps: Std.int (60),
 			fullscreen: false,
+			hardware: true,
 			height: Std.int (300),
 			orientation: "landscape",
 			packageName: "PlatformEngine",

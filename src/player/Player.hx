@@ -110,13 +110,11 @@ class Player extends Sprite
 			arms[0].remove();
 			arms[1].remove();
 			arms[0] = null;
-			//arms[1] = null;
 			
 			arms[1] = new ScrollArm(true);
 			addChild(arms[1]);
 		} else {
 			arms[1].remove();
-			//arms[1] = null;
 			
 			arms[0] = new PhoneArmBack();
 			addChild(arms[0]);
@@ -364,11 +362,9 @@ class Player extends Sprite
 		
 		if (pY > y) {
 			trace("hi");
-			arms[1].weapon.remove();
-			arms[1].weapon = null;
-			arms[1].weapon.youMayShoot = true;
+			arms[1].phoneHorn.remove();
 			isHanging = false;
-			Global.weaponIndex = 0;
+			Global.weaponIndex = 1;
 			return;
 		}
 		

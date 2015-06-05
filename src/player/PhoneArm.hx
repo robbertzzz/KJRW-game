@@ -90,6 +90,9 @@ class PhoneArm extends Arm
 	
 	public function remove():Void {
 		phoneCable.remove();
+		if (phoneHorn != null) {
+			phoneHorn.remove();
+		}
 		removeEventListener(Event.ENTER_FRAME, update);
 		this.parent.removeChild(this);
 	}
