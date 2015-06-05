@@ -80,6 +80,7 @@ class Case extends Sprite
 		graphics.clear();
 		Global.level.categories[item].done = true;
 		//Global.level.categories[item].type2 ++;
+		Global.level.donecases++;
 		if (Global.level.categories[item].type2 == 1)
 		{
 			Global.level.update();
