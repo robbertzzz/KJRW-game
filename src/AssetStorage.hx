@@ -37,6 +37,9 @@ class AssetStorage
 	public static var startscreen:Tilesheet;
 	public static var incomingMessages:Tilesheet;
 	public static var newMessage:Tilesheet;
+	public static var basicCaseTargets:Tilesheet;
+	public static var houden1:Tilesheet;
+	public static var houden2:Tilesheet;
 	
 	public static var coffee:Tilesheet;
 }

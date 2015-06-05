@@ -43,7 +43,14 @@ class Global
 	public static var messages:Array<Dynamic> = new Array();
 	public static var messageContents:Array<String> = new Array();
 	
+
+	public static var cases:Array<Array<String>> = new Array<Array<String>>();
+
 	public static var guruScreen:GuruScreen;
+<<<<<<< HEAD
 	
 	public static var pause:Bool = false;
+=======
+
+>>>>>>> origin/master
 }
