@@ -23,25 +23,32 @@ class Delegation extends Sprite
 		
 		
 		
-		categories[0] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 - 80, 140);
+		categories[0] = new CaseTarget(105+26.5, 105+26.5, 0, 0);
 		addChild(categories[0]);
-		categories[1] = new CaseTarget(Lib.current.stage.stageWidth * 0.5, 110);
+
+		categories[1] = new CaseTarget(119+26.5, 45+26.5, 1, 2);
 		addChild(categories[1]);
-		categories[2] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 + 80, 140);
+	
+		categories[2] = new CaseTarget(190+26.5, 30+26.5, 2, 4);
 		addChild(categories[2]);
-		categories[3] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 - 100, Lib.current.stage.stageHeight - 100);
+
+		categories[3] = new CaseTarget(255+26.5, 45+26.5, 3, 6);
 		addChild(categories[3]);
-		categories[4] = new CaseTarget(Lib.current.stage.stageWidth * 0.5 + 100, Lib.current.stage.stageHeight - 100);
+
+		categories[4] = new CaseTarget(270+26.5, 105+26.5, 4, 8);
 		addChild(categories[4]);
 		
-		categories[5] = new ChooseCase(Lib.current.stage.stageWidth * 0.5, Lib.current.stage.stageHeight - 100 - Global.elementSize);
+
+		categories[5] = new ChooseCase(180+37.5, 90+37.5, 0, 0);
 		addChild(categories[5]);
 		
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 80, 0));
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 130, 1));
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 180, 2));
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 230, 3));
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 280, 4));
+
+		
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 80, 0, 0));
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 130, 1, 1));
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 180, 2, 2));
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 230, 3, 3));
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 280, 4, 4));
 		
 		addEventListener(Event.ENTER_FRAME, update);
 		

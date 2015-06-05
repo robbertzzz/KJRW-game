@@ -12,21 +12,20 @@ class CaseTarget extends Sprite
 	private var zoom:Float = 1;
 	private var size:Float = 1;
 	public var taken:Bool = false;
-<<<<<<< HEAD
+
 	private var type1:Int;
 	private var type2:Int;
 	private var highlight:Bool = false;
 	public var done:Bool = false;
-	public function new(x, y, type1, type2) 
-=======
 	
-	public function new(x, y) 
->>>>>>> origin/master
+	public function new(x, y, type1, type2) 
 	{
 		super();
 		
 		this.x = x;
 		this.y = y;
+		this.type1 = type1;
+		this.type2 = type2;
 		
 		addEventListener(Event.ENTER_FRAME, update);
 	}
@@ -37,9 +36,9 @@ class CaseTarget extends Sprite
 		if(Global.level.currentCase != null && !taken) {
 			distance = Math.sqrt((Global.level.currentCase.x - x) * (Global.level.currentCase.x - x) + (Global.level.currentCase.y - y) * (Global.level.currentCase.y - y)) - Global.elementSize;
 			if (distance <= size * Global.elementSize) {
-				zoom = 1.5;
+				highlight = true;
 			} else {
-				zoom = 1;
+				highlight = false;
 			}
 		}
 		
@@ -48,15 +47,14 @@ class CaseTarget extends Sprite
 	
 	private function draw() {
 		graphics.clear();
-<<<<<<< HEAD
+
 		if (highlight==true || done==true)
 		{
 		AssetStorage.caseTargets.drawTiles(this.graphics, [ -26.5, -26.5, type2, ]);
 		}
-=======
->>>>>>> origin/master
-		
-		graphics.beginFill(0xFF0000);
-        //graphics.drawCircle(0, 0, size * zoom * Global.elementSize);
+		else
+		{
+		AssetStorage.basicCaseTargets.drawTiles(this.graphics, [ -26.5, -26.5, type1, ]);
+		}
 	}
 }
