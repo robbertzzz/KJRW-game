@@ -16,9 +16,12 @@ class Case extends Sprite
 	private var startX:Float;
 	private var startY:Float;
 	private var type:Int;
-	private var caseNumber:Int;
 	
+<<<<<<< HEAD
 	public function new(x, y, type, caseNumber ) 
+=======
+	public function new(x, y, type) 
+>>>>>>> origin/master
 	{
 		super();
 		this.type = type;
@@ -68,8 +71,12 @@ class Case extends Sprite
 			opacity = 1;
 			draw();
 			removeEventListener(Event.ENTER_FRAME, update);
+<<<<<<< HEAD
 			Actuate.tween(this, 0.5, { x: Global.level.categories[item].x, y:Global.level.categories[item].y } ).onComplete(onDone);
 
+=======
+			Actuate.tween(this, 0.5, { x: Global.level.categories[item].x, y:Global.level.categories[item].y } );
+>>>>>>> origin/master
 
 		}
 	}

@@ -35,6 +35,9 @@ class PhoneArm extends Arm
 	
 	
 	override private function update(e:Event) {
+		if (Global.pause) {
+			return;
+		}
 		if (!init) {
 			phoneCable = new PhoneCable();
 			Global.level.addChild(phoneCable);

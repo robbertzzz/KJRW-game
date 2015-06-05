@@ -1,4 +1,5 @@
 -main ApplicationMain 
+<<<<<<< HEAD
 -cp C:/HaxeToolkit/haxe/lib/openfl/3,0,8
 -D openfl=3.0.8
 -cp C:/HaxeToolkit/haxe/lib/lime/2,4,3
@@ -8,6 +9,17 @@
 -cp src
 -D openfl-next
 -D tools=2.4.3
+=======
+-cp C:/HaxeToolkit/haxe/lib/openfl/3,0,6
+-D openfl=3.0.6
+-cp C:/HaxeToolkit/haxe/lib/lime/2,4,1
+-D lime=2.4.1
+-cp C:/HaxeToolkit/haxe/lib/actuate/1,8,5
+-D actuate=1.8.5
+-cp src
+-D openfl-next
+-D tools=2.4.1
+>>>>>>> origin/master
 -D flash-use-stage
 -D no-compilation
 -D openfl-flash

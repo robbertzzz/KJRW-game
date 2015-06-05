@@ -42,3 +42,10 @@ Network Trash Folder
 Temporary Items
 .apdisk
 bin/flash/haxe/final.hxml
+*.build
+bin/flash/haxe/ApplicationMain.hx
+bin/flash/haxe/debug.hxml
+bin/flash/haxe/DefaultAssetLibrary.hx
+*.hxml
+*.swf
+KJRW game.hxproj

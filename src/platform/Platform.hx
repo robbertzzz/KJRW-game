@@ -87,14 +87,12 @@ class Platform extends Sprite
 						temp = new Obstacle();
 						temp.x = ii * Global.elementSize;
 						temp.y = i * Global.elementSize;
-						//temp.z = 0/*Global.elementSize*/;
 						blocks.push(temp);
 						addChild(temp);
 					case 4, 104:
 						temp = new Lamp();
 						temp.x = ii * Global.elementSize;
 						temp.y = i * Global.elementSize;
-						//blocks.push(temp);
 						addChild(temp); 
 					case 5, 105:
 						temp = new Darkling();
@@ -105,8 +103,6 @@ class Platform extends Sprite
 						level[i][ii] -= 5;
 					case 6, 106:
 						temp = new Stairs(ii * Global.elementSize, i * Global.elementSize, level);
-						/*temp.x = ii * Global.elementSize;
-						temp.y = i * Global.elementSize;*/
 						blocks.push(temp);
 						addChild(temp);
 					case 7, 107:
@@ -175,7 +171,6 @@ class Platform extends Sprite
 		player = new Player();
 		player.x = playerX;
 		player.y = playerY;
-		//player.z = -0.5 * Global.elementSize;
 		addChild(player);
 		Global.health = 100;
 		

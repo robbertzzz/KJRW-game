@@ -29,6 +29,9 @@ class Darkling extends Sprite
 	}
 	
 	private function update(e:Event):Void {
+		if (Global.pause) {
+			return;
+		}
 		draw();
 	}
 	

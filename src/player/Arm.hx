@@ -43,6 +43,9 @@ class Arm extends Sprite
 	}
 	
 	private function update(e:Event) {
+		if (Global.pause) {
+			return;
+		}
 		followMouse();
 		/*if (leftRight) {
 			controlWeapons();

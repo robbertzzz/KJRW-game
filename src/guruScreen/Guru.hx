@@ -2,6 +2,7 @@ package guruScreen;
 
 import openfl.display.Sprite;
 import openfl.events.Event;
+import openfl.Lib;
 
 /**
  * ...
@@ -15,7 +16,7 @@ class Guru extends Sprite
 	public function new() 
 	{
 		super();
-		x = 0;
+		x = Lib.current.stage.stageWidth * 0.5 - 148;
 		y = 0;
 		
 		addEventListener(Event.ENTER_FRAME, update);
@@ -23,6 +24,10 @@ class Guru extends Sprite
 	
 	private function update(e:Event):Void {
 		draw();
+	}
+	
+	private function showHint():Void {
+		
 	}
 	
 	private function draw():Void {
@@ -33,10 +38,16 @@ class Guru extends Sprite
 			if (frame == 65) {
 				appearing = false;
 				frame = 0;
+				showHint();
 			}
 		} else {
-			AssetStorage.guruFloating.drawTiles(this.graphics, [0, 0, frame % 105]);
+			AssetStorage.guruFloating.drawTiles(this.graphics, [-5, 0, frame % 105]);
 			frame++;
 		}
+	}
+	
+	public function remove():Void {
+		removeEventListener(Event.ENTER_FRAME, update);
+		this.parent.removeChild(this);
 	}
 }

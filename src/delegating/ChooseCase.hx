@@ -8,9 +8,9 @@ import openfl.display.Sprite;
  */
 class ChooseCase extends CaseTarget
 {
-	public function new(x, y, type1, type2) 
+	public function new(x, y) 
 	{
-		super(x, y, type1, type2);
+		super(x, y);
 		
 		/*this.x = x;
 		this.y = y;*/
@@ -18,6 +18,7 @@ class ChooseCase extends CaseTarget
 		size = 3;
 	}
 	
+<<<<<<< HEAD
 	private override function draw()
 	{
 		graphics.clear();
@@ -29,4 +30,6 @@ class ChooseCase extends CaseTarget
 			AssetStorage.houden1.drawTiles(this.graphics, [-37.5, -37.5, type1, ]);
 		}
 	}
+=======
+>>>>>>> origin/master
 }

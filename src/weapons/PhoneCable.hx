@@ -21,6 +21,9 @@ class PhoneCable extends Sprite
 	}
 	
 	public function update(e:Event) {
+		if (Global.pause) {
+			return;
+		}
 		if (Global.level.player.arms[0] == null) {
 			remove();
 			return;

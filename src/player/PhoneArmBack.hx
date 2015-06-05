@@ -27,6 +27,9 @@ class PhoneArmBack extends Sprite
 	private var xFix:Float;
 	private var yFix:Float;
 	private function update(e:Event) {
+		if (Global.pause) {
+			return;
+		}
 		switch(Math.floor(Global.level.player.frame % 8)) {
 			case 0:
 				yFix = 0;

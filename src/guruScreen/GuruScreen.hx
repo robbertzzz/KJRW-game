@@ -9,6 +9,7 @@ import openfl.display.Sprite;
 class GuruScreen extends Sprite
 {
 	var guru:Guru;
+	var button:Button;
 	
 	public function new() 
 	{
@@ -17,6 +18,17 @@ class GuruScreen extends Sprite
 		AssetStorage.guruBackground.drawTiles(this.graphics, [0, 0, 0]);
 		guru = new Guru();
 		addChild(guru);
+		button = new Button();
+		addChild(button);
 	}
 	
+	public function remove():Void {
+		button.remove();
+		button = null;
+		guru.remove();
+		guru = null;
+		Global.guruScreen = null;
+		Global.pause = false;
+		this.parent.removeChild(this);
+	}
 }

@@ -22,7 +22,11 @@ class Guru extends Sprite
 	}
 	
 	private function update(e:Event):Void {
-		if (Math.abs((Global.level.player.returnXY()[0] + 0.5 * Global.level.player.width) - (x + 0.5 * width)) < 10 && Math.abs((Global.level.player.returnXY()[0] + 0.5 * Global.level.player.width) - (x + 0.5 * width)) < 30) {
+		if (Global.pause) {
+			return;
+		}
+		
+		if (Math.abs((Global.level.player.returnXY()[0] + 0.5 * Global.level.player.playerWidth) - (x + 0.5 * width)) < 30 && Math.abs((Global.level.player.returnXY()[1] + 0.5 * Global.level.player.playerHeight) - (y + 0.5 * height)) < 50) {
 			showGuruScreen();
 		}
 		
@@ -40,6 +44,7 @@ class Guru extends Sprite
 			Global.guruScreen = new GuruScreen();
 			Global.main.addChild(Global.guruScreen);
 			showingGuru = true;
+			Global.pause = true;
 		}
 	}
 }
