@@ -27,15 +27,16 @@ class AssetStorage
 	public static var ghostScratching:Tilesheet;
 	
 	public static var guruGlow:Tilesheet;
+	public static var guruBackground:Tilesheet;
+	public static var guruAppearing:Tilesheet;
+	public static var guruFloating:Tilesheet;
+	public static var dialogueBubble:Tilesheet;
+	public static var hintBubble:Tilesheet;
 	
 	public static var caseTargets:Tilesheet;
 	public static var startscreen:Tilesheet;
 	public static var incomingMessages:Tilesheet;
 	public static var newMessage:Tilesheet;
-	
-	
-	//guru screen
-	public static var guruFloating:Tilesheet;
 	
 	public static var coffee:Tilesheet;
 }

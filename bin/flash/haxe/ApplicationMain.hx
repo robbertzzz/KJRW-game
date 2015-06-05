@@ -54,6 +54,22 @@ class ApplicationMain {
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
+		urls.push ("img/delegation/caseTargets.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/delegation/incomingMessages.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/delegation/newMessage.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/delegation/startscreen.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
 		urls.push ("img/ghost/ghostfloating.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
@@ -70,7 +86,15 @@ class ApplicationMain {
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
+		urls.push ("img/guru/dialoguebubble.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
 		urls.push ("img/guru/guruappearing.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/guru/gurubackground.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
@@ -79,6 +103,10 @@ class ApplicationMain {
 		
 		
 		urls.push ("img/guru/guruglow.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/guru/hintbubble.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
