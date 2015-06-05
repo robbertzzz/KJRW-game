@@ -44,6 +44,7 @@ class Darkling extends Sprite
 	}
 	
 	private function death() {
+		Global.npcs.remove(this);
 		removeEventListener(Event.ENTER_FRAME, updatePoef);
 		Global.level.removeChild(this);
 	}
