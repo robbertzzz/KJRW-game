@@ -54,6 +54,22 @@ class ApplicationMain {
 		types.push (lime.Assets.AssetType.IMAGE);
 		
 		
+		urls.push ("img/delegation/caseTargets.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/delegation/incomingMessages.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/delegation/newMessage.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
+		urls.push ("img/delegation/startscreen.png");
+		types.push (lime.Assets.AssetType.IMAGE);
+		
+		
 		urls.push ("img/ghost/ghostfloating.png");
 		types.push (lime.Assets.AssetType.IMAGE);
 		
@@ -242,7 +258,6 @@ class ApplicationMain {
 			file: "PlatformEngine",
 			fps: Std.int (60),
 			fullscreen: false,
-			hardware: true,
 			height: Std.int (300),
 			orientation: "landscape",
 			packageName: "PlatformEngine",

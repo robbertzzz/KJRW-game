@@ -15,10 +15,12 @@ class Case extends Sprite
 	private var opacity:Float = 1;
 	private var startX:Float;
 	private var startY:Float;
-	public function new(x, y) 
+	private var type:Int;
+	
+	public function new(x, y, type) 
 	{
 		super();
-		
+		this.type = type;
 		this.x = startX = x;
 		this.y = startY = y;
 		
@@ -65,6 +67,7 @@ class Case extends Sprite
 			draw();
 			removeEventListener(Event.ENTER_FRAME, update);
 			Actuate.tween(this, 0.5, { x: Global.level.categories[item].x, y:Global.level.categories[item].y } );
+			graphics.
 		}
 	}
 	
@@ -79,7 +82,6 @@ class Case extends Sprite
 	
 	private function draw():Void {
 		graphics.clear();
-		graphics.beginFill(0x000000, opacity);
-        graphics.drawCircle(0, 0, zoom * Global.elementSize);
+		AssetStorage.incomingMessages.drawTiles(this.graphics, [-21, -21, type, ]);
 	}
 }

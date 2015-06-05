@@ -28,6 +28,11 @@ class AssetStorage
 	
 	public static var guruGlow:Tilesheet;
 	
+	public static var caseTargets:Tilesheet;
+	public static var startscreen:Tilesheet;
+	public static var incomingMessages:Tilesheet;
+	public static var newMessage:Tilesheet;
+	
 	
 	//guru screen
 	public static var guruFloating:Tilesheet;
