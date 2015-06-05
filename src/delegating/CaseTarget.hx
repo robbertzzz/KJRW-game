@@ -12,6 +12,7 @@ class CaseTarget extends Sprite
 	private var zoom:Float = 1;
 	private var size:Float = 1;
 	public var taken:Bool = false;
+	
 	public function new(x, y) 
 	{
 		super();
@@ -23,6 +24,7 @@ class CaseTarget extends Sprite
 	}
 	
 	private var distance:Float;
+	
 	private function update(e:Event):Void {
 		if(Global.level.currentCase != null && !taken) {
 			distance = Math.sqrt((Global.level.currentCase.x - x) * (Global.level.currentCase.x - x) + (Global.level.currentCase.y - y) * (Global.level.currentCase.y - y)) - Global.elementSize;

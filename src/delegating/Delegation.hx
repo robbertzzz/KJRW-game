@@ -37,13 +37,15 @@ class Delegation extends Sprite
 		categories[5] = new ChooseCase(Lib.current.stage.stageWidth * 0.5, Lib.current.stage.stageHeight - 100 - Global.elementSize);
 		addChild(categories[5]);
 		
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 80));
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 130));
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 180));
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 230));
-		addChild(new Case(Lib.current.stage.stageWidth - 50, 280));
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 80, 0));
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 130, 1));
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 180, 2));
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 230, 3));
+		addChild(new Case(Lib.current.stage.stageWidth - 50, 280, 4));
 		
 		addEventListener(Event.ENTER_FRAME, update);
+		
+		drawScreen();
 	}
 	
 	private function update(e:Event):Void {
@@ -54,5 +56,9 @@ class Delegation extends Sprite
 			removeEventListener(Event.ENTER_FRAME, update);
 			this.parent.removeChild(this);
 		}
+	}
+	private function drawScreen()
+	{
+		AssetStorage.startscreen.drawTiles(this.graphics, [0, 0, 0, ]);
 	}
 }
