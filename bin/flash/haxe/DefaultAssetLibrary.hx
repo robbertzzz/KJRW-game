@@ -1274,15 +1274,15 @@ class DefaultAssetLibrary extends AssetLibrary {
 #end
 
 #if openfl
-@:keep #if display private #end class __ASSET__OPENFL__fonts_arial_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIAL.TTF"; name = "Arial"; super (); }}
-@:keep #if display private #end class __ASSET__OPENFL__fonts_arialbd_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALBD.TTF"; name = "Arial Bold"; super (); }}
-@:keep #if display private #end class __ASSET__OPENFL__fonts_arialbi_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALBI.TTF"; name = "Arial Bold Italic"; super (); }}
-@:keep #if display private #end class __ASSET__OPENFL__fonts_ariali_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALI.TTF"; name = "Arial Italic"; super (); }}
-@:keep #if display private #end class __ASSET__OPENFL__fonts_arialn_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALN.TTF"; name = "Arial Narrow"; super (); }}
-@:keep #if display private #end class __ASSET__OPENFL__fonts_arialnb_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALNB.TTF"; name = "Arial Narrow Bold"; super (); }}
-@:keep #if display private #end class __ASSET__OPENFL__fonts_arialnbi_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALNBI.TTF"; name = "Arial Narrow Bold Italic"; super (); }}
-@:keep #if display private #end class __ASSET__OPENFL__fonts_arialni_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIALNI.TTF"; name = "Arial Narrow Italic"; super (); }}
-@:keep #if display private #end class __ASSET__OPENFL__fonts_ariblk_ttf extends openfl.text.Font { public function new () { __fontPath = "fonts/ARIBLK.TTF"; name = "Arial Black"; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arial_ttf extends openfl.text.Font { public function new () { var font = new __ASSET__fonts_arial_ttf (); src = font.src; name = font.name; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialbd_ttf extends openfl.text.Font { public function new () { var font = new __ASSET__fonts_arialbd_ttf (); src = font.src; name = font.name; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialbi_ttf extends openfl.text.Font { public function new () { var font = new __ASSET__fonts_arialbi_ttf (); src = font.src; name = font.name; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_ariali_ttf extends openfl.text.Font { public function new () { var font = new __ASSET__fonts_ariali_ttf (); src = font.src; name = font.name; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialn_ttf extends openfl.text.Font { public function new () { var font = new __ASSET__fonts_arialn_ttf (); src = font.src; name = font.name; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialnb_ttf extends openfl.text.Font { public function new () { var font = new __ASSET__fonts_arialnb_ttf (); src = font.src; name = font.name; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialnbi_ttf extends openfl.text.Font { public function new () { var font = new __ASSET__fonts_arialnbi_ttf (); src = font.src; name = font.name; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_arialni_ttf extends openfl.text.Font { public function new () { var font = new __ASSET__fonts_arialni_ttf (); src = font.src; name = font.name; super (); }}
+@:keep #if display private #end class __ASSET__OPENFL__fonts_ariblk_ttf extends openfl.text.Font { public function new () { var font = new __ASSET__fonts_ariblk_ttf (); src = font.src; name = font.name; super (); }}
 
 #end
 

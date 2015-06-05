@@ -47,7 +47,7 @@ class LoadAssets extends Sprite
 		AssetStorage.newMessage = createFrames("img/delegation/newMessage.png", 18, 24, 6, 6);
 		AssetStorage.basicCaseTargets = createFrames("img/delegation/basicblah.png", 55, 55, 1, 5);
 		AssetStorage.houden1 = createFrames("img/delegation/houdenBase.png", 75, 75, 1, 1);
-		AssetStorage.houden2 = createFrames("img/delegation/houden2.png", 75, 75, 2, 2);
+		AssetStorage.houden2 = createFrames("img/delegation/houden2.png", 77, 77, 2, 2);
 		
 	}
 	

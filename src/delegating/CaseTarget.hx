@@ -15,7 +15,7 @@ class CaseTarget extends Sprite
 	private var type1:Int;
 	private var type2:Int;
 	private var highlight:Bool = false;
-	
+	public var done:Bool = false;
 	public function new(x, y, type1, type2) 
 	{
 		super();
@@ -43,7 +43,7 @@ class CaseTarget extends Sprite
 	
 	private function draw() {
 		graphics.clear();
-		if (highlight==true)
+		if (highlight==true || done==true)
 		{
 		AssetStorage.caseTargets.drawTiles(this.graphics, [ -26.5, -26.5, type2, ]);
 		}

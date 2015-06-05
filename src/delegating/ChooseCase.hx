@@ -23,7 +23,7 @@ class ChooseCase extends CaseTarget
 		graphics.clear();
 		if (highlight == true)
 		{
-			AssetStorage.houden2.drawTiles(this.graphics, [-37.5, -37.5, type1, ]);
+			AssetStorage.houden2.drawTiles(this.graphics, [-37.5, -37.5, type2, ]);
 		}
 		else{
 			AssetStorage.houden1.drawTiles(this.graphics, [-37.5, -37.5, type1, ]);

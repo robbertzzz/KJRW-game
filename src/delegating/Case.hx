@@ -18,13 +18,13 @@ class Case extends Sprite
 	private var type:Int;
 	private var caseNumber:Int;
 	
-	public function new(x, y, type ) 
+	public function new(x, y, type, caseNumber ) 
 	{
 		super();
 		this.type = type;
 		this.x = startX = x;
 		this.y = startY = y;
-		
+		this.
 		addEventListener(MouseEvent.MOUSE_DOWN, startMove);
 		addEventListener(Event.ENTER_FRAME, update);
 	}
@@ -68,12 +68,18 @@ class Case extends Sprite
 			opacity = 1;
 			draw();
 			removeEventListener(Event.ENTER_FRAME, update);
-			Actuate.tween(this, 0.5, { x: Global.level.categories[item].x, y:Global.level.categories[item].y } );
-			graphics.clear();
-			Global.level.categories[item].type2 + 1;
+			Actuate.tween(this, 0.5, { x: Global.level.categories[item].x, y:Global.level.categories[item].y } ).onComplete(onDone);
+
+
 		}
 	}
 	
+	private function onDone()
+	{
+		graphics.clear();
+		Global.level.categories[item].type2 ++;
+		Global.level.categories[item].done = true;
+	}
 	private function newDrag():Void {
 		addEventListener(MouseEvent.MOUSE_DOWN, startMove);
 	}

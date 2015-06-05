@@ -60,5 +60,6 @@ class Delegation extends Sprite
 	private function drawScreen()
 	{
 		AssetStorage.startscreen.drawTiles(this.graphics, [0, 0, 0, ]);
+		
 	}
 }
